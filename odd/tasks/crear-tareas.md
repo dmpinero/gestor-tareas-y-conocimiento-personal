@@ -20,10 +20,10 @@ Rama: `feature/crear-tareas` · Entrega: `ask-on-risk` → cadena `stacked-to-ma
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S3–S7 (backend: dominio, casos de uso crear/listar, puerto, adaptador, modelo, migración, esquemas, enrutador, tests unitarios, integración y BDD) | delegada (writer A, paralelo con T2) | pendiente | — |
-| T2 | S1–S6 (frontend: componentes `input`/`label`/`textarea`, `api/tipos.ts`, store `tareas`, `VistaTareas` con panel y tabla, specs Vitest) | delegada (writer B, paralelo con T1) | pendiente | — |
-| T3 | S1–S7 (seam: e2e Playwright `e2e/tareas.spec.ts`, suite completa, docker compose) | inline | pendiente | — |
-| T4 | S1–S7 (verificador independiente por la migración, item 1) | delegada (verificador) | pendiente | — |
+| T1 | S3–S7 (backend: dominio, casos de uso crear/listar, puerto, adaptador, modelo, migración, esquemas, enrutador, tests unitarios, integración y BDD) | delegada (writer A, paralelo con T2) | hecha | `2f406fa` |
+| T2 | S1–S6 (frontend: componentes `input`/`label`/`textarea`, `api/tipos.ts`, store `tareas`, `VistaTareas` con panel y tabla, specs Vitest) | delegada (writer B, paralelo con T1) | hecha | `d33662e` |
+| T3 | S1–S7 (seam: e2e Playwright `e2e/tareas.spec.ts`, suite completa, docker compose) | inline | hecha | `d33662e` |
+| T4 | S1–S7 (verificador independiente por la migración, item 1) | delegada (verificador) | hecha (1 blocker corregido) | `d33662e` |
 
 Evidencia de ruta: T1 y T2 son unidades independientes con superficies disjuntas (`backend/` y `frontend/src`), cada una de varios cientos de líneas, lanzadas juntas → disparador de escritura (a) paralelismo. El contrato S7 las desacopla. T1 incluye una migración → riesgo item 1 → commit propio y verificador (T4).
 
@@ -38,3 +38,11 @@ Previsión: ~1 100 líneas escritas (backend ~650, frontend ~450) → por encima
   >     - Descripción: Obligatorio: Máximo 500 caracteres. Campo tipo textarea.
 - **L2** (2026-11-09) Mapeo: la ruta `/tareas`, la entrada de la barra lateral, `ui/sheet`, las variantes `success`/`destructive` de `Button`, Pinia y `clienteApi.crear` ya existen. Faltan `Input`, `Label`, `Textarea`, `src/stores`, `src/api/tipos.ts` y todo el dominio backend. La referencia no usa librería de formularios ni toasts.
 - **L3** (2026-11-09) Pregunta: ¿listado o solo creación? Usuario: "incluye listado simple de tareas".
+- **L4** (2026-11-09) T1 entregada por el writer A. Verificación reportada: ruff, lint-imports y bandit OK; 65 tests con 96,28 % de cobertura sobre MySQL 8.4 temporal; `alembic upgrade`/`downgrade`/`upgrade` OK. El padre actualizó `test_aplicacion.py`, que fijaba como única ruta `/api/v1/salud`.
+  - RED observado en casos de uso, esquemas y BDD. En MySQL una violación del CHECK llega como `OperationalError` (3819), no como `IntegrityError`.
+- **L5** (2026-11-09) T2 entregada por el writer B: 38 tests unitarios, type-check, lint y build OK. RED observado en el store y la vista. Aviso de reka-ui por la falta de `SheetDescription`, igual que en la referencia.
+- **L6** (2026-11-09) T3 inline: `e2e/tareas.spec.ts` (crear con y sin prioridad). Pila `docker compose` reconstruida: la migración `3f1c2a9d7b10` se aplica al arrancar; Playwright 16/16.
+- **L7** (2026-11-09) T4, verificador independiente: S1–S7 y supuestos en verde; `alembic check` sin deriva; `/api/v1/salud` idéntico a la base.
+  - Blocker B1: con un nombre válido de 130 o más caracteres la tabla desbordaba en horizontal y axe marcaba `scrollable-region-focusable` en `/tareas`. Corregido con `whitespace-normal [overflow-wrap:anywhere]` en las celdas de nombre y descripción, con un test de regresión e2e de longitud máxima (RED observado, después 17/17). Se integró en el commit del frontend.
+  - Advisories, sin cambios: Pydantic en modo laxo acepta `true`, `"2"` y `2.0` como prioridad; los fixtures de integración y BDD vacían `tareas` en la base de `URL_BASE_DATOS`; el e2e deja filas en la base local; si falla la carga inicial se ven a la vez la alerta y "Todavía no hay tareas.".
+- **L8** (2026-11-09) Rama rebasada sobre `main` (`5204a0d`). Entrega `stacked-to-main`: PR1 = `2f406fa` (T1), PR2 = `d33662e` y este cierre (T2–T4).
