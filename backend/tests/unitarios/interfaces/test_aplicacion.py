@@ -5,10 +5,16 @@ from gestor_tareas.main import crear_aplicacion
 cliente = TestClient(crear_aplicacion())
 
 
-def test_la_api_expone_salud_y_tareas_bajo_api_v1() -> None:
+def test_la_api_expone_salud_tareas_y_catalogos_bajo_api_v1() -> None:
     rutas = set(cliente.get("/openapi.json").json()["paths"])
 
-    assert rutas == {"/api/v1/salud", "/api/v1/tareas", "/api/v1/tareas/{id_tarea}"}
+    assert rutas == {
+        "/api/v1/salud",
+        "/api/v1/tareas",
+        "/api/v1/tareas/{id_tarea}",
+        "/api/v1/etiquetas",
+        "/api/v1/personas",
+    }
 
 
 def test_ninguna_ruta_exige_autenticacion() -> None:
