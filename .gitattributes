@@ -1,0 +1,4 @@
+# Los scripts de shell se ejecutan dentro de contenedores Linux: deben
+# mantener siempre saltos de línea LF, aunque se hagan checkout en Windows
+# (donde core.autocrlf podría convertirlos a CRLF y romper el shebang).
+*.sh text eol=lf

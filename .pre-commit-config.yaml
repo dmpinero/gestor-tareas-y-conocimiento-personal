@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  - repo: local
+    hooks:
+      - id: eslint-frontend
+        name: ESLint (frontend)
+        # Se analiza el proyecto completo (no los ficheros pasados por pre-commit)
+        # porque sus rutas son relativas a la raíz del repo, no a frontend/.
+        entry: pnpm --dir frontend exec eslint .
+        language: system
+        files: ^frontend/.*\.(ts|vue)$
+        pass_filenames: false
+
+      - id: prettier-frontend
+        name: Prettier (frontend)
+        entry: pnpm --dir frontend exec prettier --write src/ e2e/
+        language: system
+        files: ^frontend/.*\.(ts|vue|css)$
+        pass_filenames: false
