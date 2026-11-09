@@ -66,3 +66,38 @@ test('el listado sigue siendo accesible con nombres y descripciones de longitud 
     .analyze()
   expect(resultado.violations).toEqual([])
 })
+
+test('la fecha y hora se rellena con la actual y se puede editar una tarea', async ({ page }) => {
+  const nombre = `Tarea a editar ${Date.now()}`
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Crear tarea' }).click()
+  const panel = page.getByRole('dialog')
+  await expect(panel.getByPlaceholder('dd/mm/aaaa hh:mm:ss')).toHaveValue(
+    /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/,
+  )
+  await panel.getByPlaceholder('Nombre').fill(nombre)
+  await panel.getByPlaceholder('Descripción').fill('Antes de editar')
+  await panel.getByPlaceholder('dd/mm/aaaa hh:mm:ss').fill('09/11/2026 08:30:15')
+  await panel.getByRole('button', { name: 'Guardar' }).click()
+  await expect(panel).toBeHidden()
+  await expect(page.locator('tr', { hasText: nombre })).toContainText('09/11/2026 08:30:15')
+
+  await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
+  await expect(panel.getByRole('heading', { name: 'Editar tarea' })).toBeVisible()
+  await expect(panel.getByPlaceholder('Nombre')).toHaveValue(nombre)
+  await expect(panel.getByPlaceholder('dd/mm/aaaa hh:mm:ss')).toHaveValue('09/11/2026 08:30:15')
+  await page.screenshot({ path: 'e2e/capturas/tareas-03-panel-editar.png' })
+
+  await panel.getByPlaceholder('Descripción').fill('Después de editar')
+  await panel.getByPlaceholder('Prioridad').fill('1')
+  await panel.getByPlaceholder('dd/mm/aaaa hh:mm:ss').fill('31/12/2026 23:59:59')
+  await panel.getByRole('button', { name: 'Guardar' }).click()
+  await expect(panel).toBeHidden()
+
+  const fila = page.locator('tr', { hasText: nombre })
+  await expect(fila).toContainText('Después de editar')
+  await expect(fila).toContainText('31/12/2026 23:59:59')
+  await page.reload()
+  await expect(page.locator('tr', { hasText: nombre })).toContainText('Después de editar')
+})
