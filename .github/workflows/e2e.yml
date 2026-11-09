@@ -1,0 +1,64 @@
+name: E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Preparar variables de entorno del backend
+        run: cp backend/.env.example backend/.env
+
+      - name: Levantar la pila con docker compose
+        run: docker compose up -d --build
+
+      - name: Esperar a que el backend responda
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/api/v1/salud && exit 0
+            sleep 2
+          done
+          echo "El backend no respondió a tiempo" >&2
+          docker compose logs
+          exit 1
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Instalar dependencias del frontend
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Instalar navegadores de Playwright
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Ejecutar tests E2E
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:5173
+        run: pnpm exec playwright test --project=chromium
+
+      - name: Publicar informe de Playwright
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: informe-playwright
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Apagar la pila
+        if: always()
+        run: docker compose down
