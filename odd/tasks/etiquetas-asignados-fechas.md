@@ -35,12 +35,12 @@ Rama: `feature/etiquetas-asignados-fechas` (desde `main` v1.6.0) · Entrega: `st
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S5 (dependencia `@internationalized/date`) | inline | hecha (sin commit) | — |
-| T2 | S1–S4, S7 (backend: catálogos, relaciones, renombrado, vencimiento, migración, endpoints, tests) | delegada (writer A, paralelo) | pendiente | — |
-| T3 | S5 (componentes `ui/popover`, `ui/calendar`, `SelectorFechaHora` y specs) | delegada (writer B, paralelo) | pendiente | — |
-| T4 | S1–S2 (componente `SelectorEtiquetas` reutilizable: chips + sugerencias + alta al vuelo, specs) | delegada (writer C, paralelo) | pendiente | — |
-| T5 | S1–S7 (integración en `VistaTareas`, store, tipos, tabla, ordenación, exportación, e2e) | inline | pendiente | — |
-| T6 | S1–S7 (verificador independiente: migración y cambio de contrato, items 1 y 3) | delegada (verificador) | pendiente | — |
+| T1 | S5 (dependencia `@internationalized/date`) | inline | hecha | `3b0178e` |
+| T2 | S1–S4, S7 (backend: catálogos, relaciones, renombrado, vencimiento, migración, endpoints, tests) | delegada (writer A, paralelo) | hecha (+ corrección de concurrencia) | `3ff85a3` + corrección |
+| T3 | S5 (componentes `ui/popover`, `ui/calendar`, `SelectorFechaHora` y specs) | delegada (writer B, paralelo) | hecha | `34f3d80` |
+| T4 | S1–S2 (componente `SelectorEtiquetas` reutilizable: chips + sugerencias + alta al vuelo, specs) | delegada (writer C, paralelo) | hecha | `34f3d80` |
+| T5 | S1–S7 (integración en `VistaTareas`, store, tipos, tabla, ordenación, exportación, e2e) | delegada (writer D, por el límite de contexto) + e2e inline | hecha | `34f3d80` |
+| T6 | S1–S7 (verificador independiente: migración y cambio de contrato, items 1 y 3) | delegada (verificador) | hecha (1 blocker corregido) | — |
 
 Evidencia de ruta: T2, T3 y T4 son unidades independientes con superficies disjuntas (`backend/`, `componentes/ui/{popover,calendar}` + `SelectorFechaHora`, `SelectorEtiquetas`), cada una de varios cientos de líneas; `VistaTareas.vue` es compartido y lo integra el padre (T5). Riesgo: migración que renombra una columna con datos (item 1) y cambio del contrato público `fecha_hora` → `fecha_creacion` (item 3, pedido) → verificador.
 
@@ -57,3 +57,8 @@ Evidencia de ruta: T2, T3 y T4 son unidades independientes con superficies disju
 - **L2** (2026-11-09) Preguntas y respuestas: fecha de creación automática o editable → "2." (editable); vencimiento obligatorio u opcional → "opcional"; etiquetas catálogo compartido o texto libre → "1." (catálogo); una o varias personas asignadas → "varias".
 - **L3** (2026-11-09) T1: `pnpm add @internationalized/date@^3.12.4` (la misma que ya trae `reka-ui`); `pnpm audit --prod` sin novedades (solo el aviso conocido de `uuid`).
 - **L4** (2026-11-09) La base local tiene datos del usuario: los e2e se ejecutan contra una pila aislada.
+- **L5** (2026-11-09) T2 (backend): 188 tests, 97,72 %; migración `c4e2a7d9f1b3` ida y vuelta con datos y `alembic check` sin deriva. Nombres de catálogo con `utf8mb4_0900_as_ci` (sin distinguir mayúsculas, sí acentos). El test de contrato corrige solo las fechas generadas fuera de orden porque JSON Schema no puede comparar dos campos.
+- **L6** (2026-11-09) T3 (`SelectorFechaHora`, 16 tests), T4 (`SelectorEtiquetas`, 18 tests), T5 (integración, 150 tests unitarios). e2e contra una pila aislada: 20/20; el primer fallo era del test (el primer "28" de la cuadrícula era del mes anterior y la app rechazó bien ese vencimiento).
+- **L7** (2026-11-10) T6, verificador: S3–S7 en verde. Blocker en S1/S2: dos altas simultáneas de la misma etiqueta nueva → 500 (relectura por nombre con la instantánea antigua de REPEATABLE READ y deadlocks 1213 con nombres en orden cruzado).
+- **L8** (2026-11-10) Corrección: se enlazan las filas que devuelve `obtener_o_crear` (guardadas en `Session.info`) sin volver a buscarlas por nombre, los nombres nuevos se insertan ordenados por `casefold` y los deadlocks (1213/1205) se reintentan hasta 3 veces en el caso de uso (`ConflictoDeConcurrenciaError`). RED observado con 8 hilos y nombres cruzados. Recomprobación del blocker con las sondas del verificador: `conc.py` 30×201 en todas las rondas, `conc2.py` 200×201; 213 tests, contrato 5/5. Advisories: dos `PUT` simultáneos sobre la misma tarea no se probaron; contraste del botón "Cancelar" en modo oscuro (2,88), ya presente en la base.
+- **L9** (2026-11-10) Usuario: "sí, pushea y abre los PRs". PR1 #17 (backend), PR2 (frontend).

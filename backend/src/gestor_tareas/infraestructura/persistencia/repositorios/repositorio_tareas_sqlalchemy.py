@@ -8,6 +8,10 @@ from gestor_tareas.infraestructura.persistencia.modelos import (
     PersonaModelo,
     TareaModelo,
 )
+from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import traducir_conflictos
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
+    filas_obtenidas,
+)
 
 
 def _a_entidad(modelo: TareaModelo) -> Tarea:
@@ -30,10 +34,18 @@ class RepositorioTareasSqlAlchemy:
     def _filas_catalogo[M: (EtiquetaModelo, PersonaModelo)](
         self, modelo: type[M], nombres: list[str]
     ) -> list[M]:
-        """Filas del catálogo con esos nombres, que ya deben existir."""
+        """Filas del catálogo con esos nombres, que ya deben existir.
+
+        Se usan las filas que ``obtener_o_crear`` ya devolvió en esta sesión. Solo
+        los nombres que no pasaron por él se buscan, con una lectura con bloqueo
+        (FOR SHARE) para ver también lo confirmado después de la instantánea.
+        """
         if not nombres:
             return []
-        filas = list(self._sesion.scalars(select(modelo).where(modelo.nombre.in_(nombres))))
+        filas, faltan = filas_obtenidas(self._sesion, modelo, nombres)
+        if faltan:
+            consulta = select(modelo).where(modelo.nombre.in_(faltan)).with_for_update(read=True)
+            filas.extend(self._sesion.scalars(consulta))
         if len(filas) != len(nombres):
             raise ValueError(f"Faltan nombres en el catálogo {modelo.__tablename__}: {nombres}")
         return filas
@@ -49,10 +61,11 @@ class RepositorioTareasSqlAlchemy:
         modelo.asignados = self._filas_catalogo(PersonaModelo, tarea.asignados)
 
     def crear(self, tarea: Tarea) -> Tarea:
-        modelo = TareaModelo()
-        self._asignar_datos(modelo, tarea)
-        self._sesion.add(modelo)
-        self._sesion.commit()
+        with traducir_conflictos(self._sesion):
+            modelo = TareaModelo()
+            self._asignar_datos(modelo, tarea)
+            self._sesion.add(modelo)
+            self._sesion.commit()
         return _a_entidad(modelo)
 
     def listar(self) -> list[Tarea]:
@@ -64,7 +77,8 @@ class RepositorioTareasSqlAlchemy:
         return _a_entidad(modelo) if modelo is not None else None
 
     def actualizar(self, tarea: Tarea) -> Tarea:
-        modelo = self._sesion.get(TareaModelo, tarea.id)
-        self._asignar_datos(modelo, tarea)
-        self._sesion.commit()
+        with traducir_conflictos(self._sesion):
+            modelo = self._sesion.get(TareaModelo, tarea.id)
+            self._asignar_datos(modelo, tarea)
+            self._sesion.commit()
         return _a_entidad(modelo)

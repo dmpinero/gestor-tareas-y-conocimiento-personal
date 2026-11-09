@@ -30,8 +30,10 @@ def test_obtener_o_crear_da_de_alta_los_nombres_nuevos(
     sesion_bd.commit()
 
     filas = _filas(sesion_bd, modelo)
-    assert [f[1] for f in filas] == ["Urgente", "Casa"]
-    assert resultado == [entidad(id=i, nombre=n) for i, n in filas]
+    # Las altas se hacen en orden alfabético, para que las peticiones simultáneas
+    # bloqueen los nombres en el mismo orden; el resultado sigue el orden pedido.
+    assert [f[1] for f in filas] == ["Casa", "Urgente"]
+    assert resultado == [entidad(id=i, nombre=n) for i, n in reversed(filas)]
 
 
 @pytest.mark.parametrize(("repositorio", "modelo", "entidad"), _CATALOGOS)

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.resolver_catalogos import resolver_nombres
 from gestor_tareas.dominio.etiqueta.repositorio import RepositorioEtiquetas
 from gestor_tareas.dominio.persona.repositorio import RepositorioPersonas
@@ -28,13 +29,18 @@ class CrearTarea:
         etiquetas: list[str] | None = None,
         asignados: list[str] | None = None,
     ) -> Tarea:
-        tarea = Tarea(
-            nombre=nombre,
-            prioridad=prioridad,
-            descripcion=descripcion,
-            fecha_creacion=fecha_creacion,
-            fecha_vencimiento=fecha_vencimiento,
-            etiquetas=resolver_nombres(self._repositorio_etiquetas, etiquetas or []),
-            asignados=resolver_nombres(self._repositorio_personas, asignados or []),
-        )
-        return self._repositorio.crear(tarea)
+        def guardar() -> Tarea:
+            tarea = Tarea(
+                nombre=nombre,
+                prioridad=prioridad,
+                descripcion=descripcion,
+                fecha_creacion=fecha_creacion,
+                fecha_vencimiento=fecha_vencimiento,
+                etiquetas=resolver_nombres(self._repositorio_etiquetas, etiquetas or []),
+                asignados=resolver_nombres(self._repositorio_personas, asignados or []),
+            )
+            return self._repositorio.crear(tarea)
+
+        # Dar de alta en los catálogos y guardar la tarea es una sola transacción:
+        # si choca con otra petición simultánea, se repite entera.
+        return reintentar_si_hay_conflicto(guardar)
