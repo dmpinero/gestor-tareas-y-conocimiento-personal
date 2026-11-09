@@ -3,7 +3,7 @@ import { activarModoOscuro, SECCIONES } from './utilidades'
 
 test('el panel de navegación colapsa y expande, y resalta la sección activa', async ({ page }) => {
   await page.goto('/')
-  await page.screenshot({ path: 'e2e/capturas/layout-01-sidebar-expandido.png' })
+  await page.screenshot({ path: 'e2e/capturas/layout-01-inicio.png' })
 
   await expect(page.getByRole('link', { name: 'Tareas' })).toBeVisible()
 
@@ -20,10 +20,15 @@ test('el panel de navegación colapsa y expande, y resalta la sección activa', 
   const botonColapsar = page.getByRole('button', { name: 'Contraer panel de navegación' })
   const botonExpandir = page.getByRole('button', { name: 'Expandir panel de navegación' })
 
-  await botonColapsar.click()
+  // Sin preferencia guardada el panel arranca colapsado.
   await expect(botonExpandir).toBeVisible()
   await page.screenshot({ path: 'e2e/capturas/layout-02-sidebar-colapsado.png' })
 
+  await botonExpandir.click()
+  await expect(botonColapsar).toBeVisible()
+
+  await botonColapsar.click()
+  await expect(botonExpandir).toBeVisible()
   await botonExpandir.click()
   await expect(botonColapsar).toBeVisible()
   await expect(page.getByRole('link', { name: 'Conocimiento' })).toContainText('Conocimiento')
