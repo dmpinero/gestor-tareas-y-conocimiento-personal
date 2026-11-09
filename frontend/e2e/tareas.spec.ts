@@ -67,18 +67,20 @@ test('el listado sigue siendo accesible con nombres y descripciones de longitud 
   expect(resultado.violations).toEqual([])
 })
 
-test('la fecha y hora se rellena con la actual y se puede editar una tarea', async ({ page }) => {
+test('la fecha de creación se rellena con la actual y se puede editar una tarea', async ({
+  page,
+}) => {
   const nombre = `Tarea a editar ${Date.now()}`
 
   await page.goto('/tareas')
   await page.getByRole('button', { name: 'Crear tarea' }).click()
   const panel = page.getByRole('dialog')
-  await expect(panel.getByPlaceholder('dd/mm/aaaa hh:mm:ss')).toHaveValue(
+  await expect(panel.locator('#fecha-creacion')).toHaveValue(
     /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/,
   )
   await panel.getByPlaceholder('Nombre').fill(nombre)
   await panel.getByPlaceholder('Descripción').fill('Antes de editar')
-  await panel.getByPlaceholder('dd/mm/aaaa hh:mm:ss').fill('09/11/2026 08:30:15')
+  await panel.locator('#fecha-creacion').fill('09/11/2026 08:30:15')
   await panel.getByRole('button', { name: 'Guardar' }).click()
   await expect(panel).toBeHidden()
   await expect(page.locator('tr', { hasText: nombre })).toContainText('09/11/2026 08:30:15')
@@ -86,12 +88,12 @@ test('la fecha y hora se rellena con la actual y se puede editar una tarea', asy
   await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
   await expect(panel.getByRole('heading', { name: 'Editar tarea' })).toBeVisible()
   await expect(panel.getByPlaceholder('Nombre')).toHaveValue(nombre)
-  await expect(panel.getByPlaceholder('dd/mm/aaaa hh:mm:ss')).toHaveValue('09/11/2026 08:30:15')
+  await expect(panel.locator('#fecha-creacion')).toHaveValue('09/11/2026 08:30:15')
   await page.screenshot({ path: 'e2e/capturas/tareas-03-panel-editar.png' })
 
   await panel.getByPlaceholder('Descripción').fill('Después de editar')
   await panel.getByPlaceholder('Prioridad').fill('1')
-  await panel.getByPlaceholder('dd/mm/aaaa hh:mm:ss').fill('31/12/2026 23:59:59')
+  await panel.locator('#fecha-creacion').fill('31/12/2026 23:59:59')
   await panel.getByRole('button', { name: 'Guardar' }).click()
   await expect(panel).toBeHidden()
 
@@ -139,4 +141,64 @@ test('ordena la tabla por una columna y exporta el listado a Excel y PDF', async
     page.getByRole('button', { name: 'Exportar a PDF' }).click(),
   ])
   expect(descargaPdf.suggestedFilename()).toMatch(/^Tareas_\d{8}_\d{6}\.pdf$/)
+})
+
+test('asigna etiquetas y personas creadas al vuelo y una fecha de vencimiento con el calendario', async ({
+  page,
+}) => {
+  const marca = `${Date.now()}`
+  const nombre = `Tarea con etiquetas ${marca}`
+  const etiqueta = `etiqueta-${marca}`
+  const persona = `Persona ${marca}`
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Crear tarea' }).click()
+  // Por nombre: el calendario también es un `dialog` (popover).
+  const panel = page.getByRole('dialog', { name: /^(Crear|Editar) tarea$/ })
+  await panel.getByPlaceholder('Nombre').fill(nombre)
+  await panel.getByPlaceholder('Descripción').fill('Con etiquetas, personas y vencimiento')
+  await panel.locator('#fecha-creacion').fill('09/11/2026 08:00:00')
+
+  const campoEtiquetas = panel.getByRole('combobox', { name: 'Etiquetas' })
+  await campoEtiquetas.fill(etiqueta)
+  await panel.getByRole('option', { name: `Crear etiqueta "${etiqueta}"` }).click()
+  const campoAsignados = panel.getByRole('combobox', { name: 'Asignado a' })
+  await campoAsignados.fill(persona)
+  await campoAsignados.press('Enter')
+  await expect(panel.getByRole('button', { name: `Quitar ${etiqueta}` })).toBeVisible()
+  await expect(panel.getByRole('button', { name: `Quitar ${persona}` })).toBeVisible()
+
+  // El vencimiento se elige con el calendario, en el mes siguiente. El día 15
+  // aparece una sola vez en la cuadrícula (los días de otros meses quedan en los
+  // extremos), así que no hay ambigüedad.
+  await panel.getByRole('button', { name: 'Abrir calendario de Fecha de vencimiento' }).click()
+  await page.getByRole('button', { name: 'Mes siguiente' }).click()
+  await page.screenshot({ path: 'e2e/capturas/tareas-05-calendario.png' })
+  await page.getByRole('gridcell').getByText('15', { exact: true }).click()
+  await page.getByRole('button', { name: 'Aceptar' }).click()
+  await expect(panel.locator('#fecha-vencimiento')).toHaveValue(
+    /^15\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/,
+  )
+
+  await panel.getByRole('button', { name: 'Guardar' }).click()
+  await expect(panel).toBeHidden()
+
+  const fila = page.locator('tr', { hasText: nombre })
+  await expect(fila).toContainText(etiqueta)
+  await expect(fila).toContainText(persona)
+  await expect(fila).toContainText('09/11/2026 08:00:00')
+  await expect(fila).toContainText(/15\/\d{2}\/\d{4}/)
+
+  // La etiqueta creada queda en el catálogo y se sugiere en otra tarea.
+  await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
+  await expect(panel.getByRole('button', { name: `Quitar ${etiqueta}` })).toBeVisible()
+  await panel.getByRole('button', { name: `Quitar ${persona}` }).click()
+  await panel.getByRole('button', { name: 'Borrar fecha' }).click()
+  await panel.getByRole('button', { name: 'Guardar' }).click()
+  await expect(panel).toBeHidden()
+  await expect(fila).not.toContainText(persona)
+
+  await page.getByRole('button', { name: 'Crear tarea' }).click()
+  await panel.getByRole('combobox', { name: 'Etiquetas' }).fill(etiqueta.toUpperCase())
+  await expect(panel.getByRole('option', { name: etiqueta, exact: true })).toBeVisible()
 })

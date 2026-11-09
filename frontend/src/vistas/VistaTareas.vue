@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, toRef } from 'vue'
 
 import type { DatosTarea, Tarea } from '@/api/tipos'
-import { aFechaHoraIso, formatearFechaHora, PATRON_FECHA_HORA } from '@/lib/fechas'
+import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
 import { useTiendaTareas } from '@/stores/tareas'
 import {
   compararConNulosAlFinal,
@@ -13,6 +13,8 @@ import {
 } from '@/composables/useOrdenacionTabla'
 import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
+import SelectorEtiquetas from '@/componentes/compartido/SelectorEtiquetas.vue'
+import SelectorFechaHora from '@/componentes/compartido/SelectorFechaHora.vue'
 import type { CeldaExportada } from '@/lib/exportarTabla'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
@@ -35,6 +37,10 @@ const errorFormulario = ref<string | null>(null)
 const idEnEdicion = ref<number | null>(null)
 
 const ERROR_FECHA_HORA = 'La fecha y hora debe tener el formato dd/mm/aaaa hh:mm:ss y ser válida.'
+const ERROR_FECHA_VENCIMIENTO =
+  'La fecha de vencimiento debe tener el formato dd/mm/aaaa hh:mm:ss y ser válida.'
+const ERROR_VENCIMIENTO_ANTERIOR =
+  'La fecha de vencimiento no puede ser anterior a la fecha de creación.'
 
 // La prioridad llega como número desde un `<input type="number">`, o como
 // cadena vacía cuando el campo se deja en blanco.
@@ -42,23 +48,56 @@ const formulario = reactive<{
   nombre: string
   prioridad: string | number | null
   descripcion: string
-  fechaHora: string
-}>({ nombre: '', prioridad: '', descripcion: '', fechaHora: '' })
+  fechaCreacion: string
+  fechaVencimiento: string
+  etiquetas: string[]
+  asignados: string[]
+}>({
+  nombre: '',
+  prioridad: '',
+  descripcion: '',
+  fechaCreacion: '',
+  fechaVencimiento: '',
+  etiquetas: [],
+  asignados: [],
+})
 
 onMounted(() => {
   void tienda.cargar()
+  void tienda.cargarCatalogos()
 })
 
-type CampoOrdenable = 'nombre' | 'prioridad' | 'descripcion' | 'fechaHora'
+/** Nombres en orden alfabético unidos por ", ", o `null` si no hay ninguno. */
+function unirNombres(nombres: string[]): string | null {
+  if (nombres.length === 0) return null
+  return [...nombres].sort(compararTexto).join(', ')
+}
+
+function compararIso(a: string, b: string): number {
+  return a.localeCompare(b)
+}
+
+type CampoOrdenable =
+  | 'nombre'
+  | 'prioridad'
+  | 'descripcion'
+  | 'etiquetas'
+  | 'asignados'
+  | 'fechaCreacion'
+  | 'fechaVencimiento'
 
 // Las fechas llegan en ISO (`YYYY-MM-DDTHH:MM:SS`), que ya ordena bien como texto.
+// Las listas vacías y el vencimiento sin fecha quedan al final en ambos sentidos.
 const { campo, direccion, ordenarPor, filasOrdenadas } = useOrdenacionTabla<Tarea, CampoOrdenable>(
   toRef(tienda, 'tareas'),
   {
     nombre: (a, b) => compararTexto(a.nombre, b.nombre),
     prioridad: compararConNulosAlFinal((tarea) => tarea.prioridad, compararNumero),
     descripcion: (a, b) => compararTexto(a.descripcion, b.descripcion),
-    fechaHora: (a, b) => a.fecha_hora.localeCompare(b.fecha_hora),
+    etiquetas: compararConNulosAlFinal((tarea) => unirNombres(tarea.etiquetas), compararTexto),
+    asignados: compararConNulosAlFinal((tarea) => unirNombres(tarea.asignados), compararTexto),
+    fechaCreacion: (a, b) => compararIso(a.fecha_creacion, b.fecha_creacion),
+    fechaVencimiento: compararConNulosAlFinal((tarea) => tarea.fecha_vencimiento, compararIso),
   },
 )
 
@@ -66,8 +105,14 @@ const COLUMNAS_ORDENABLES: { campo: CampoOrdenable; etiqueta: string }[] = [
   { campo: 'nombre', etiqueta: 'Nombre' },
   { campo: 'prioridad', etiqueta: 'Prioridad' },
   { campo: 'descripcion', etiqueta: 'Descripción' },
-  { campo: 'fechaHora', etiqueta: 'Fecha y hora' },
+  { campo: 'etiquetas', etiqueta: 'Etiquetas' },
+  { campo: 'asignados', etiqueta: 'Asignado a' },
+  { campo: 'fechaCreacion', etiqueta: 'Fecha de creación' },
+  { campo: 'fechaVencimiento', etiqueta: 'Fecha de vencimiento' },
 ]
+// Columnas de la tabla que se muestran como chips.
+const CAMPOS_LISTA = ['etiquetas', 'asignados'] as const
+
 const COLUMNAS_EXPORTACION = COLUMNAS_ORDENABLES.map((columna) => columna.etiqueta)
 
 // Se exportan todas las filas en el orden actual y con los valores tal como se ven.
@@ -76,7 +121,10 @@ const filasExportacion = computed<CeldaExportada[][]>(() =>
     tarea.nombre,
     tarea.prioridad ?? '—',
     tarea.descripcion,
-    formatearFechaHora(tarea.fecha_hora),
+    unirNombres(tarea.etiquetas) ?? '—',
+    unirNombres(tarea.asignados) ?? '—',
+    formatearFechaHora(tarea.fecha_creacion),
+    tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—',
   ]),
 )
 
@@ -84,14 +132,17 @@ function limpiarFormulario(): void {
   formulario.nombre = ''
   formulario.prioridad = ''
   formulario.descripcion = ''
-  formulario.fechaHora = ''
+  formulario.fechaCreacion = ''
+  formulario.fechaVencimiento = ''
+  formulario.etiquetas = []
+  formulario.asignados = []
   errorFormulario.value = null
   idEnEdicion.value = null
 }
 
 function abrirParaCrear(): void {
   limpiarFormulario()
-  formulario.fechaHora = formatearFechaHora(new Date())
+  formulario.fechaCreacion = formatearFechaHora(new Date())
   panelAbierto.value = true
 }
 
@@ -101,7 +152,13 @@ function abrirParaEditar(tarea: Tarea): void {
   formulario.nombre = tarea.nombre
   formulario.prioridad = tarea.prioridad ?? ''
   formulario.descripcion = tarea.descripcion
-  formulario.fechaHora = formatearFechaHora(tarea.fecha_hora)
+  formulario.fechaCreacion = formatearFechaHora(tarea.fecha_creacion)
+  formulario.fechaVencimiento = tarea.fecha_vencimiento
+    ? formatearFechaHora(tarea.fecha_vencimiento)
+    : ''
+  // Copias, para que editar los chips no altere la tarea mostrada en la tabla.
+  formulario.etiquetas = [...tarea.etiquetas]
+  formulario.asignados = [...tarea.asignados]
   panelAbierto.value = true
 }
 
@@ -110,18 +167,36 @@ function aPrioridad(valor: string | number | null): number | null {
   return Number(valor)
 }
 
+/**
+ * Comprueba las fechas del formulario y las devuelve en ISO, o devuelve el
+ * mensaje de error que hay que mostrar.
+ */
+function validarFechas(): { creacion: string; vencimiento: string | null } | { error: string } {
+  const creacion = aFechaHoraIso(formulario.fechaCreacion)
+  if (creacion === null) return { error: ERROR_FECHA_HORA }
+  if (formulario.fechaVencimiento.trim() === '') return { creacion, vencimiento: null }
+  const vencimiento = aFechaHoraIso(formulario.fechaVencimiento)
+  if (vencimiento === null) return { error: ERROR_FECHA_VENCIMIENTO }
+  // Ambas en ISO con la misma forma: comparar el texto es comparar las fechas.
+  if (vencimiento < creacion) return { error: ERROR_VENCIMIENTO_ANTERIOR }
+  return { creacion, vencimiento }
+}
+
 async function guardar(): Promise<void> {
   errorFormulario.value = null
-  const fechaHora = aFechaHoraIso(formulario.fechaHora)
-  if (fechaHora === null) {
-    errorFormulario.value = ERROR_FECHA_HORA
+  const fechas = validarFechas()
+  if ('error' in fechas) {
+    errorFormulario.value = fechas.error
     return
   }
   const datos: DatosTarea = {
     nombre: formulario.nombre,
     prioridad: aPrioridad(formulario.prioridad),
     descripcion: formulario.descripcion,
-    fecha_hora: fechaHora,
+    fecha_creacion: fechas.creacion,
+    fecha_vencimiento: fechas.vencimiento,
+    etiquetas: [...formulario.etiquetas],
+    asignados: [...formulario.asignados],
   }
   try {
     if (idEnEdicion.value === null) {
@@ -182,14 +257,38 @@ async function guardar(): Promise<void> {
               maxlength="500"
             />
           </div>
+          <SelectorEtiquetas
+            id="etiquetas"
+            v-model="formulario.etiquetas"
+            etiqueta="Etiquetas"
+            :longitud-maxima="50"
+            texto-nuevo='Crear etiqueta "{valor}"'
+            :sugerencias="tienda.etiquetas"
+          />
+          <SelectorEtiquetas
+            id="asignados"
+            v-model="formulario.asignados"
+            etiqueta="Asignado a"
+            :longitud-maxima="100"
+            texto-nuevo='Añadir persona "{valor}"'
+            :sugerencias="tienda.personas"
+          />
           <div class="flex flex-col gap-1.5">
-            <Label for="tarea-fecha-hora">Fecha y hora</Label>
-            <Input
-              id="tarea-fecha-hora"
-              v-model="formulario.fechaHora"
-              placeholder="dd/mm/aaaa hh:mm:ss"
+            <Label for="fecha-creacion">Fecha de creación</Label>
+            <SelectorFechaHora
+              id="fecha-creacion"
+              v-model="formulario.fechaCreacion"
+              etiqueta="Fecha de creación"
               required
-              :pattern="PATRON_FECHA_HORA"
+            />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <Label for="fecha-vencimiento">Fecha de vencimiento</Label>
+            <SelectorFechaHora
+              id="fecha-vencimiento"
+              v-model="formulario.fechaVencimiento"
+              etiqueta="Fecha de vencimiento"
+              anulable
             />
           </div>
 
@@ -250,8 +349,28 @@ async function guardar(): Promise<void> {
           <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
             tarea.descripcion
           }}</TableCell>
+          <TableCell
+            v-for="campoLista in CAMPOS_LISTA"
+            :key="campoLista"
+            class="whitespace-normal [overflow-wrap:anywhere]"
+          >
+            <ul v-if="tarea[campoLista].length > 0" class="flex flex-wrap gap-1">
+              <li
+                v-for="nombre in tarea[campoLista]"
+                :key="nombre"
+                data-testid="chip-tabla"
+                class="bg-secondary text-secondary-foreground inline-flex max-w-full rounded-md border px-2 py-0.5 text-xs font-medium"
+              >
+                {{ nombre }}
+              </li>
+            </ul>
+            <template v-else>—</template>
+          </TableCell>
           <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
-            formatearFechaHora(tarea.fecha_hora)
+            formatearFechaHora(tarea.fecha_creacion)
+          }}</TableCell>
+          <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
+            tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—'
           }}</TableCell>
           <TableCell>
             <Button
