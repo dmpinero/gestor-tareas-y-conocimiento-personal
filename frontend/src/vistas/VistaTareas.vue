@@ -1,9 +1,19 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, toRef } from 'vue'
 
 import type { DatosTarea, Tarea } from '@/api/tipos'
 import { aFechaHoraIso, formatearFechaHora, PATRON_FECHA_HORA } from '@/lib/fechas'
 import { useTiendaTareas } from '@/stores/tareas'
+import {
+  compararConNulosAlFinal,
+  compararNumero,
+  compararTexto,
+  useOrdenacionTabla,
+  valorAriaSort,
+} from '@/composables/useOrdenacionTabla'
+import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
+import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
+import type { CeldaExportada } from '@/lib/exportarTabla'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
@@ -38,6 +48,37 @@ const formulario = reactive<{
 onMounted(() => {
   void tienda.cargar()
 })
+
+type CampoOrdenable = 'nombre' | 'prioridad' | 'descripcion' | 'fechaHora'
+
+// Las fechas llegan en ISO (`YYYY-MM-DDTHH:MM:SS`), que ya ordena bien como texto.
+const { campo, direccion, ordenarPor, filasOrdenadas } = useOrdenacionTabla<Tarea, CampoOrdenable>(
+  toRef(tienda, 'tareas'),
+  {
+    nombre: (a, b) => compararTexto(a.nombre, b.nombre),
+    prioridad: compararConNulosAlFinal((tarea) => tarea.prioridad, compararNumero),
+    descripcion: (a, b) => compararTexto(a.descripcion, b.descripcion),
+    fechaHora: (a, b) => a.fecha_hora.localeCompare(b.fecha_hora),
+  },
+)
+
+const COLUMNAS_ORDENABLES: { campo: CampoOrdenable; etiqueta: string }[] = [
+  { campo: 'nombre', etiqueta: 'Nombre' },
+  { campo: 'prioridad', etiqueta: 'Prioridad' },
+  { campo: 'descripcion', etiqueta: 'Descripción' },
+  { campo: 'fechaHora', etiqueta: 'Fecha y hora' },
+]
+const COLUMNAS_EXPORTACION = COLUMNAS_ORDENABLES.map((columna) => columna.etiqueta)
+
+// Se exportan todas las filas en el orden actual y con los valores tal como se ven.
+const filasExportacion = computed<CeldaExportada[][]>(() =>
+  filasOrdenadas.value.map((tarea) => [
+    tarea.nombre,
+    tarea.prioridad ?? '—',
+    tarea.descripcion,
+    formatearFechaHora(tarea.fecha_hora),
+  ]),
+)
 
 function limpiarFormulario(): void {
   formulario.nombre = ''
@@ -174,18 +215,34 @@ async function guardar(): Promise<void> {
     >
       Todavía no hay tareas.
     </p>
-    <Table v-else-if="tienda.tareas.length > 0" class="mt-4">
+    <div v-if="tienda.tareas.length > 0" class="mt-4 flex justify-end">
+      <BotonesExportarTabla
+        nombre-fichero="Tareas"
+        titulo="Tareas"
+        :columnas="COLUMNAS_EXPORTACION"
+        :filas="filasExportacion"
+      />
+    </div>
+    <Table v-if="tienda.tareas.length > 0" class="mt-2">
       <TableHeader>
         <TableRow>
-          <TableHead>Nombre</TableHead>
-          <TableHead>Prioridad</TableHead>
-          <TableHead>Descripción</TableHead>
-          <TableHead>Fecha y hora</TableHead>
+          <TableHead
+            v-for="columna in COLUMNAS_ORDENABLES"
+            :key="columna.campo"
+            :aria-sort="valorAriaSort(campo === columna.campo, direccion)"
+          >
+            <CabeceraOrdenable
+              :activo="campo === columna.campo"
+              :direccion="direccion"
+              @ordenar="ordenarPor(columna.campo)"
+              >{{ columna.etiqueta }}</CabeceraOrdenable
+            >
+          </TableHead>
           <TableHead><span class="sr-only">Acciones</span></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow v-for="tarea in tienda.tareas" :key="tarea.id">
+        <TableRow v-for="tarea in filasOrdenadas" :key="tarea.id">
           <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
             tarea.nombre
           }}</TableCell>
