@@ -4,7 +4,7 @@
   "description": "Herramientas de versionado y release del monorepo (no es la aplicación en sí, ver backend/ y frontend/).",
   "devDependencies": {
     "@semantic-release/github": "^12.0.10",
-    "conventional-changelog-conventionalcommits": "^9.3.1",
+    "conventional-changelog-conventionalcommits": "^10.4.1",
     "semantic-release": "^25.0.9"
   },
   "overrides": {
