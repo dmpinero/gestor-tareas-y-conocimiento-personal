@@ -1,0 +1,36 @@
+server {
+    listen ${PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Resolver dinamico: con un host fijo en proxy_pass, nginx lo resuelve
+    # UNA SOLA VEZ al arrancar y, si en ese instante el backend aun no esta
+    # listo (p. ej. en Railway, antes de que su red privada propague el
+    # registro DNS del otro servicio), nginx se niega a arrancar y no
+    # vuelve a intentarlo solo. Usando una variable en proxy_pass, nginx
+    # resuelve por peticion (con el "resolver" de abajo) y reintenta solo
+    # cuando el backend tarda en estar disponible.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+
+    location /api/v1/ {
+        # Con una variable en proxy_pass, nginx ignora la parte de ruta del
+        # destino para el reemplazo del prefijo de location y reenvia la URI
+        # original tal cual (ver docs de proxy_pass); como ya coincide con
+        # las rutas reales del backend, no hay que repetir "/api/v1/" aqui.
+        set $backend ${URL_BACKEND};
+        proxy_pass $backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/ /index.html;
+    }
+}

@@ -1,0 +1,45 @@
+name: CI Frontend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Sin filtro de "paths": si el workflow no se dispara para una PR (por no tocar
+# frontend/), un check "requerido" en la protección de rama se quedaría en
+# pendiente para siempre y bloquearía el merge. Se ejecuta siempre; es rápido.
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  calidad-y-tests-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint (incluye naming-convention Clean Code)
+        run: pnpm exec eslint .
+
+      - name: Comprobación de tipos (vue-tsc)
+        run: pnpm type-check
+
+      - name: Tests unitarios (Vitest)
+        run: pnpm test:unit run
+
+      - name: Build de producción
+        run: pnpm build
