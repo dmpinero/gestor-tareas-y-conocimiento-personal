@@ -26,5 +26,11 @@ export const useTiendaTareas = defineStore('tareas', () => {
     tareas.value.push(tarea)
   }
 
-  return { tareas, cargando, error, cargar, crear }
+  async function actualizar(id: number, datos: DatosTarea): Promise<void> {
+    const tarea = await clienteApi.actualizar<Tarea>(`/tareas/${id}`, datos)
+    const indice = tareas.value.findIndex((t) => t.id === id)
+    if (indice !== -1) tareas.value[indice] = tarea
+  }
+
+  return { tareas, cargando, error, cargar, crear, actualizar }
 })
