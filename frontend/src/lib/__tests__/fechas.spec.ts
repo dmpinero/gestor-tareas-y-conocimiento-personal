@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
+import { aFechaHoraIso, formatearFechaHora, formatearMarcaTemporalFichero } from '@/lib/fechas'
 
 describe('formatearFechaHora', () => {
   it('formatea un Date como dd/mm/aaaa hh:mm:ss en hora local', () => {
@@ -42,5 +42,11 @@ describe('aFechaHoraIso', () => {
     ['10/01/2026 10:00:60', 'segundo 60'],
   ])('devuelve null con una fecha inexistente: %s (%s)', (valor) => {
     expect(aFechaHoraIso(valor)).toBeNull()
+  })
+})
+
+describe('formatearMarcaTemporalFichero', () => {
+  it('formatea un Date como ddmmaaaa_hhmmss en hora local', () => {
+    expect(formatearMarcaTemporalFichero(new Date(2026, 0, 5, 9, 3, 7))).toBe('05012026_090307')
   })
 })

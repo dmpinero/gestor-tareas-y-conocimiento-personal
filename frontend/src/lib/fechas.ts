@@ -65,3 +65,14 @@ export function aFechaHoraIso(texto: string): string | null {
   }
   return `${anio}-${mes}-${dia}T${hora}:${minuto}:${segundo}`
 }
+
+/**
+ * Marca temporal para nombres de fichero exportados: `ddmmaaaa_hhmmss` en
+ * hora local, sin separadores dentro de cada bloque para que el nombre sea
+ * válido en cualquier sistema operativo.
+ */
+export function formatearMarcaTemporalFichero(fecha: Date = new Date()): string {
+  const dia = `${dosCifras(fecha.getDate())}${dosCifras(fecha.getMonth() + 1)}${fecha.getFullYear()}`
+  const hora = `${dosCifras(fecha.getHours())}${dosCifras(fecha.getMinutes())}${dosCifras(fecha.getSeconds())}`
+  return `${dia}_${hora}`
+}

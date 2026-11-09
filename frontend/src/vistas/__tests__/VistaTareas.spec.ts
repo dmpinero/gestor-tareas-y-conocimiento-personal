@@ -3,7 +3,13 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clienteApi } from '@/api/cliente'
+import { exportarTablaExcel, exportarTablaPDF } from '@/lib/exportarTabla'
 import VistaTareas from '../VistaTareas.vue'
+
+vi.mock('@/lib/exportarTabla', () => ({
+  exportarTablaExcel: vi.fn<(...args: unknown[]) => Promise<void>>(),
+  exportarTablaPDF: vi.fn<(...args: unknown[]) => Promise<void>>(),
+}))
 
 vi.mock('@/api/cliente', () => ({
   clienteApi: {
@@ -39,7 +45,8 @@ const SELECTOR_FECHA = 'input[placeholder="dd/mm/aaaa hh:mm:ss"]'
 let contenedor: VueWrapper | null = null
 
 async function montar(tareas: unknown[] = TAREAS): Promise<VueWrapper> {
-  vi.mocked(clienteApi.obtener).mockResolvedValue(tareas)
+  // Copia para que los tests que editan no alteren los datos compartidos.
+  vi.mocked(clienteApi.obtener).mockResolvedValue(structuredClone(tareas))
   const pinia = createPinia()
   setActivePinia(pinia)
   contenedor = mount(VistaTareas, { global: { plugins: [pinia] }, attachTo: document.body })
@@ -359,5 +366,129 @@ describe('VistaTareas', () => {
       'El nombre es demasiado largo',
     )
     expect(envoltorio.findAll('tbody tr')).toHaveLength(0)
+  })
+
+  describe('ordenación', () => {
+    const TAREAS_ORDEN = [
+      { id: 1, nombre: 'beta', prioridad: 3, descripcion: 'b', fecha_hora: '2026-05-01T10:00:00' },
+      {
+        id: 2,
+        nombre: 'Árbol',
+        prioridad: null,
+        descripcion: 'c',
+        fecha_hora: '2026-01-01T10:00:00',
+      },
+      { id: 3, nombre: 'casa', prioridad: 1, descripcion: 'a', fecha_hora: '2026-12-31T23:59:59' },
+    ]
+
+    function nombresEnTabla(envoltorio: VueWrapper): string[] {
+      return envoltorio.findAll('tbody tr').map((fila) => fila.findAll('td')[0]!.text())
+    }
+
+    function cabecera(envoltorio: VueWrapper, etiqueta: string) {
+      const boton = envoltorio.findAll('th button').find((b) => b.text() === etiqueta)
+      if (!boton) throw new Error(`No se encontró la cabecera ordenable "${etiqueta}"`)
+      return boton
+    }
+
+    function thDe(envoltorio: VueWrapper, etiqueta: string) {
+      const th = envoltorio.findAll('th').find((t) => t.text() === etiqueta)
+      if (!th) throw new Error(`No se encontró la columna "${etiqueta}"`)
+      return th
+    }
+
+    it('muestra las filas en el orden original y todas las columnas de datos son ordenables', async () => {
+      const envoltorio = await montar(TAREAS_ORDEN)
+
+      expect(nombresEnTabla(envoltorio)).toEqual(['beta', 'Árbol', 'casa'])
+      for (const etiqueta of ['Nombre', 'Prioridad', 'Descripción', 'Fecha y hora']) {
+        expect(cabecera(envoltorio, etiqueta).attributes('type')).toBe('button')
+        expect(thDe(envoltorio, etiqueta).attributes('aria-sort')).toBeUndefined()
+      }
+      expect(envoltorio.findAll('th button').map((b) => b.text())).not.toContain('Acciones')
+    })
+
+    it('ordena por nombre ascendente y descendente respetando los acentos', async () => {
+      const envoltorio = await montar(TAREAS_ORDEN)
+
+      await cabecera(envoltorio, 'Nombre').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Árbol', 'beta', 'casa'])
+      expect(thDe(envoltorio, 'Nombre').attributes('aria-sort')).toBe('ascending')
+
+      await cabecera(envoltorio, 'Nombre').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['casa', 'beta', 'Árbol'])
+      expect(thDe(envoltorio, 'Nombre').attributes('aria-sort')).toBe('descending')
+    })
+
+    it('ordena por prioridad dejando las vacías al final en ambos sentidos', async () => {
+      const envoltorio = await montar(TAREAS_ORDEN)
+
+      await cabecera(envoltorio, 'Prioridad').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['casa', 'beta', 'Árbol'])
+      expect(thDe(envoltorio, 'Nombre').attributes('aria-sort')).toBeUndefined()
+
+      await cabecera(envoltorio, 'Prioridad').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['beta', 'casa', 'Árbol'])
+    })
+
+    it('ordena por descripción y por fecha y hora', async () => {
+      const envoltorio = await montar(TAREAS_ORDEN)
+
+      await cabecera(envoltorio, 'Descripción').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['casa', 'beta', 'Árbol'])
+
+      await cabecera(envoltorio, 'Fecha y hora').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Árbol', 'beta', 'casa'])
+      await cabecera(envoltorio, 'Fecha y hora').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['casa', 'beta', 'Árbol'])
+    })
+  })
+
+  describe('exportación', () => {
+    const COLUMNAS = ['Nombre', 'Prioridad', 'Descripción', 'Fecha y hora']
+
+    function botonExportar(envoltorio: VueWrapper, nombre: string) {
+      const boton = envoltorio.find(`button[aria-label="${nombre}"]`)
+      if (!boton.exists()) throw new Error(`No se encontró el botón "${nombre}"`)
+      return boton
+    }
+
+    it('no muestra los botones de exportar si no hay tareas', async () => {
+      const envoltorio = await montar([])
+
+      expect(envoltorio.find('button[aria-label="Exportar a Excel"]').exists()).toBe(false)
+      expect(envoltorio.find('button[aria-label="Exportar a PDF"]').exists()).toBe(false)
+    })
+
+    it('exporta a Excel todas las filas tal como se muestran, sin la columna de acciones', async () => {
+      const envoltorio = await montar()
+
+      await botonExportar(envoltorio, 'Exportar a Excel').trigger('click')
+
+      expect(exportarTablaExcel).toHaveBeenCalledTimes(1)
+      const [nombreFichero, columnas, filas] = vi.mocked(exportarTablaExcel).mock.calls[0]!
+      expect(nombreFichero).toMatch(/^Tareas_\d{8}_\d{6}\.xlsx$/)
+      expect(columnas).toEqual(COLUMNAS)
+      expect(filas).toEqual([
+        ['Escribir informe', 2, 'Informe trimestral', '10/11/2026 09:30:00'],
+        ['Leer artículo', '—', 'Artículo sobre Vue', '01/12/2026 17:05:09'],
+      ])
+    })
+
+    it('exporta a PDF con el título "Tareas" respetando el orden actual', async () => {
+      const envoltorio = await montar()
+      const boton = envoltorio.findAll('th button').find((b) => b.text() === 'Nombre')!
+      await boton.trigger('click')
+      await boton.trigger('click')
+
+      await botonExportar(envoltorio, 'Exportar a PDF').trigger('click')
+
+      expect(exportarTablaPDF).toHaveBeenCalledTimes(1)
+      const [nombreFichero, titulo, columnas, filas] = vi.mocked(exportarTablaPDF).mock.calls[0]!
+      expect(nombreFichero).toMatch(/^Tareas_\d{8}_\d{6}\.pdf$/)
+      expect(titulo).toBe('Tareas')
+      expect(columnas).toEqual(COLUMNAS)
+      expect((filas as unknown[][]).map((f) => f[0])).toEqual(['Leer artículo', 'Escribir informe'])
+    })
   })
 })

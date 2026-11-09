@@ -101,3 +101,42 @@ test('la fecha y hora se rellena con la actual y se puede editar una tarea', asy
   await page.reload()
   await expect(page.locator('tr', { hasText: nombre })).toContainText('Después de editar')
 })
+
+test('ordena la tabla por una columna y exporta el listado a Excel y PDF', async ({ page }) => {
+  const marca = `${Date.now()}`
+  const nombres = [`zz ${marca}`, `aa ${marca}`]
+
+  await page.goto('/tareas')
+  for (const nombre of nombres) {
+    await page.getByRole('button', { name: 'Crear tarea' }).click()
+    const panel = page.getByRole('dialog')
+    await panel.getByPlaceholder('Nombre').fill(nombre)
+    await panel.getByPlaceholder('Descripción').fill('Para ordenar y exportar')
+    await panel.getByRole('button', { name: 'Guardar' }).click()
+    await expect(panel).toBeHidden()
+  }
+
+  const cabeceraNombre = page.getByRole('columnheader', { name: 'Nombre' })
+  const filasDeLaPrueba = page.locator('tbody tr', { hasText: marca })
+
+  await cabeceraNombre.getByRole('button', { name: 'Nombre' }).click()
+  await expect(cabeceraNombre).toHaveAttribute('aria-sort', 'ascending')
+  await expect(filasDeLaPrueba.first()).toContainText(`aa ${marca}`)
+
+  await cabeceraNombre.getByRole('button', { name: 'Nombre' }).click()
+  await expect(cabeceraNombre).toHaveAttribute('aria-sort', 'descending')
+  await expect(filasDeLaPrueba.first()).toContainText(`zz ${marca}`)
+  await page.screenshot({ path: 'e2e/capturas/tareas-04-ordenada.png' })
+
+  const [descargaExcel] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Exportar a Excel' }).click(),
+  ])
+  expect(descargaExcel.suggestedFilename()).toMatch(/^Tareas_\d{8}_\d{6}\.xlsx$/)
+
+  const [descargaPdf] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Exportar a PDF' }).click(),
+  ])
+  expect(descargaPdf.suggestedFilename()).toMatch(/^Tareas_\d{8}_\d{6}\.pdf$/)
+})

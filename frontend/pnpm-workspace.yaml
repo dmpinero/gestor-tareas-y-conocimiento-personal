@@ -1,9 +1,13 @@
 allowBuilds:
+  # core-js: transitiva de jspdf/jspdf-autotable; su script de postinstalación
+  # solo imprime un aviso de patrocinio, no hace falta para que funcione.
+  core-js: false
   vue-demi: true
 
 overrides:
   shell-quote: ">=1.12.0"
   source-map-js: ">=1.2.2"
+  dompurify: ">=3.4.17"
   postcss-selector-parser: ">=7.1.6"
   brace-expansion@^1.0.0: "^1.1.21"
   brace-expansion@^2.0.0: "^2.1.7"
