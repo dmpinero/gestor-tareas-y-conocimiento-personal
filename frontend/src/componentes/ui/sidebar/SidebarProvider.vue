@@ -11,9 +11,11 @@ import {
 
 const props = defineProps<{ class?: string }>()
 
+// Sin preferencia guardada, el panel arranca colapsado; si el usuario lo
+// expandió o colapsó antes, se respeta su elección.
 function leerEstadoInicial(): 'expandido' | 'colapsado' {
   const guardado = localStorage.getItem(CLAVE_ALMACENAMIENTO)
-  return guardado === 'colapsado' ? 'colapsado' : 'expandido'
+  return guardado === 'expandido' ? 'expandido' : 'colapsado'
 }
 
 const estado = ref<'expandido' | 'colapsado'>(leerEstadoInicial())
