@@ -1,0 +1,89 @@
+[project]
+name = "gestor-tareas"
+version = "0.1.0"
+description = "API para la gestión de tareas y conocimiento personal"
+readme = "README.md"
+authors = [
+    { name = "dmpinero", email = "dmpinero@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.19.1",
+    "fastapi>=0.141.1",
+    "opentelemetry-exporter-otlp>=1.44.0",
+    "opentelemetry-instrumentation-fastapi>=0.65b0",
+    "opentelemetry-sdk>=1.44.0",
+    "passlib[argon2]>=1.7.4",
+    "prometheus-fastapi-instrumentator>=8.1.0",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.13.0",
+    "pymysql>=1.2.0",
+    "python-json-logger>=4.2.0",
+    "python-multipart>=0.0.32",
+    "sentry-sdk>=2.68.0",
+    "sqlalchemy>=2.0.52",
+    "uvicorn[standard]>=0.52.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.21,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "httpx>=0.28.1",
+    "import-linter>=2.13",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-bdd>=8.1.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.3",
+    "schemathesis>=4.24.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+bdd_features_base_dir = "tests/bdd/caracteristicas"
+
+[tool.coverage.run]
+source = ["src/gestor_tareas"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Scripts autogenerados por "alembic revision --autogenerate"; no se lintan a
+# mano, se regeneran con cada migración.
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+# N: pep8-naming — fuerza PascalCase en clases y snake_case en funciones/variables,
+# también con identificadores en español.
+
+[tool.ruff.lint.pep8-naming]
+classmethod-decorators = ["classmethod"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Depends()/Query() en los valores por defecto es el patrón idiomático de FastAPI
+# para la inyección de dependencias, no una llamada mutable accidental (B008).
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Body"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+
+[tool.importlinter]
+root_package = "gestor_tareas"
+
+[[tool.importlinter.contracts]]
+name = "Capas de la arquitectura hexagonal"
+type = "layers"
+layers = [
+    "gestor_tareas.interfaces",
+    "gestor_tareas.infraestructura",
+    "gestor_tareas.aplicacion",
+    "gestor_tareas.dominio",
+]
+# El dominio no puede depender de nada por encima; cada capa solo conoce las
+# que tiene debajo en esta lista (regla de dependencias de Clean Architecture).
