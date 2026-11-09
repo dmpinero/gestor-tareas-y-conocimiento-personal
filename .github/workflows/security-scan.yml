@@ -1,0 +1,43 @@
+name: Análisis de seguridad
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  # Necesario en repositorios privados: la action de gitleaks lista los commits
+  # de la PR vía API y sin este permiso GitHub responde 403.
+  pull-requests: read
+
+jobs:
+  gitleaks:
+    # El token de las PRs abiertas por Dependabot es de solo lectura y la action
+    # de gitleaks necesita listar los commits de la PR vía API; sus bumps de
+    # lockfile no son un vector realista de secretos, así que se excluyen.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detección de secretos (gitleaks)
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  revision-dependencias:
+    # dependency-review-action requiere GitHub Advanced Security, que en repos
+    # privados es una función de pago. En un repo privado nos apoyamos en las
+    # alertas de Dependabot (ya activadas) para las CVEs conocidas.
+    if: github.event_name == 'pull_request' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Revisión de dependencias (CVEs conocidas)
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
