@@ -5,7 +5,9 @@ Cada modelo hereda de ``Base`` (ver ``sesion.py``) para registrarse en
 generar migraciones con ``--autogenerate``.
 """
 
-from sqlalchemy import CheckConstraint, Integer, String
+from datetime import datetime
+
+from sqlalchemy import CheckConstraint, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from gestor_tareas.infraestructura.persistencia.sesion import Base
@@ -23,6 +25,8 @@ class TareaModelo(Base):
     nombre: Mapped[str] = mapped_column(String(200), nullable=False)
     prioridad: Mapped[int | None] = mapped_column(Integer, nullable=True)
     descripcion: Mapped[str] = mapped_column(String(500), nullable=False)
+    # DATETIME sin zona horaria: hora local tal como la escribe la persona usuaria.
+    fecha_hora: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
 
 __all__ = ["Base", "TareaModelo"]

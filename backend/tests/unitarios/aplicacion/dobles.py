@@ -16,3 +16,11 @@ class RepositorioTareasFalso:
 
     def listar(self) -> list[Tarea]:
         return [self._tareas[id_tarea] for id_tarea in sorted(self._tareas)]
+
+    def obtener_por_id(self, id_tarea: int) -> Tarea | None:
+        return self._tareas.get(id_tarea)
+
+    def actualizar(self, tarea: Tarea) -> Tarea:
+        assert tarea.id in self._tareas
+        self._tareas[tarea.id] = tarea
+        return tarea

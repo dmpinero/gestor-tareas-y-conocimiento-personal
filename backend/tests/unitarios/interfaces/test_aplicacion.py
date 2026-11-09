@@ -8,7 +8,7 @@ cliente = TestClient(crear_aplicacion())
 def test_la_api_expone_salud_y_tareas_bajo_api_v1() -> None:
     rutas = set(cliente.get("/openapi.json").json()["paths"])
 
-    assert rutas == {"/api/v1/salud", "/api/v1/tareas"}
+    assert rutas == {"/api/v1/salud", "/api/v1/tareas", "/api/v1/tareas/{id_tarea}"}
 
 
 def test_ninguna_ruta_exige_autenticacion() -> None:
