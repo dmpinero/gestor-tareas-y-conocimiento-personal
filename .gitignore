@@ -12,6 +12,8 @@ backend/.ruff_cache/
 backend/.coverage
 backend/coverage.xml
 backend/htmlcov/
+backend/.hypothesis/
+backend/.import_linter_cache/
 backend/dist/
 
 # Node (frontend)

@@ -1,0 +1,76 @@
+name: CI Backend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Sin filtro de "paths": si el workflow no se dispara para una PR (por no tocar
+# backend/), un check "requerido" en la protección de rama se quedaría en
+# pendiente para siempre y bloquearía el merge. Se ejecuta siempre; es rápido.
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  calidad-y-tests-backend:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: gestor_tareas
+          MYSQL_USER: gestor
+          MYSQL_PASSWORD: gestor
+          MYSQL_ROOT_PASSWORD: raiz
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -ugestor -pgestor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      URL_BASE_DATOS: mysql+pymysql://gestor:gestor@localhost:3306/gestor_tareas?charset=utf8mb4
+      # En producción es un volumen montado en /datos (ver docker-compose.yml);
+      # el runner de CI no tiene permisos para crear /datos en la raíz, así
+      # que aquí se usa un directorio normal y escribible.
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.21"
+          enable-cache: true
+
+      - name: Instalar dependencias
+        run: uv sync --frozen
+
+      - name: Ruff (lint)
+        run: uv run ruff check .
+
+      - name: Ruff (formato)
+        run: uv run ruff format --check .
+
+      - name: Bandit (SAST)
+        run: uv run bandit -r src -q
+
+      - name: import-linter (capas Clean Architecture)
+        run: uv run lint-imports
+
+      - name: Aplicar migraciones (Alembic)
+        run: uv run alembic upgrade head
+
+      - name: pytest (unitarios + integración + contrato + BDD) con cobertura
+        run: uv run pytest --cov=src/gestor_tareas --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+
+      - name: Publicar informe de cobertura
+        uses: actions/upload-artifact@v7
+        with:
+          name: cobertura-backend
+          path: backend/coverage.xml
