@@ -160,3 +160,65 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "descripcion": "Texto",
         "fecha_hora": "2026-11-09T10:30:00",
     }
+
+
+# Regresión: schemathesis generó un nombre "\u00a0" (espacio duro) que cumplía el
+# contrato publicado (`minLength: 1`) pero la API rechazaba con 422 al recortarlo.
+# El contrato y la validación deben usar la misma definición de espacio.
+ESPACIOS_UNICODE = ["\u00a0", "\u2003", "\u3000", "\ufeff", "\t\n", "\u00a0 \u2028"]
+
+
+@pytest.mark.parametrize("campo", ["nombre", "descripcion"])
+@pytest.mark.parametrize("valor", ESPACIOS_UNICODE)
+def test_rechaza_textos_formados_solo_por_espacios_unicode(campo: str, valor: str) -> None:
+    with pytest.raises(ValidationError):
+        TareaCrearEsquema(**_datos(**{campo: valor}))
+    with pytest.raises(ValidationError):
+        TareaActualizarEsquema(**_datos(**{campo: valor}))
+
+
+@pytest.mark.parametrize("campo", ["nombre", "descripcion"])
+def test_el_contrato_exige_un_caracter_que_no_sea_espacio(campo: str) -> None:
+    for esquema in (TareaCrearEsquema, TareaActualizarEsquema):
+        propiedad = esquema.model_json_schema()["properties"][campo]
+        assert propiedad["pattern"] == r"\S"
+
+
+def test_recorta_espacios_unicode_alrededor_del_texto() -> None:
+    esquema = TareaCrearEsquema(**_datos(nombre="\u00a0Tarea\u3000", descripcion="\ufeffTexto\t"))
+
+    assert esquema.nombre == "Tarea"
+    assert esquema.descripcion == "Texto"
+
+
+# Regresión: en modo laxo Pydantic aceptaba `true` (→ 1) y `"2"` (→ 2)
+# aunque el contrato publica `integer | null`.
+@pytest.mark.parametrize("prioridad", [True, False, "2", 2.5])
+def test_rechaza_prioridad_que_no_es_un_entero_json(prioridad: object) -> None:
+    with pytest.raises(ValidationError):
+        TareaCrearEsquema(**_datos(prioridad=prioridad))
+    with pytest.raises(ValidationError):
+        TareaActualizarEsquema(**_datos(prioridad=prioridad))
+
+
+def test_acepta_prioridad_entera_escrita_como_decimal() -> None:
+    # En JSON Schema `3.0` es un `integer` válido; se guarda como 3.
+    esquema = TareaCrearEsquema(**_datos(prioridad=3.0))
+
+    assert esquema.prioridad == 3
+    assert isinstance(esquema.prioridad, int)
+
+
+def test_el_contrato_publica_el_rango_de_la_prioridad() -> None:
+    for esquema in (TareaCrearEsquema, TareaActualizarEsquema):
+        variantes = esquema.model_json_schema()["properties"]["prioridad"]["anyOf"]
+        entero = next(v for v in variantes if v.get("type") == "integer")
+        assert (entero["minimum"], entero["maximum"]) == (1, 5)
+
+
+@pytest.mark.parametrize("valor", ["\x1c", "\x1f", "\x85"])
+def test_acepta_caracteres_que_json_schema_no_considera_espacio(valor: str) -> None:
+    # Python los trata como espacio, pero el `\S` del contrato no: deben aceptarse.
+    esquema = TareaCrearEsquema(**_datos(nombre=valor))
+
+    assert esquema.nombre == valor

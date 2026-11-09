@@ -2,7 +2,14 @@ import re
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, PlainValidator, WithJsonSchema
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Field,
+    PlainSerializer,
+    PlainValidator,
+    WithJsonSchema,
+)
 
 # Fecha y hora local en ISO 8601 sin zona horaria: "YYYY-MM-DDTHH:MM:SS", con una
 # fracción de segundo opcional que se descarta. El patrón solo admite fechas reales
@@ -55,14 +62,63 @@ FechaHoraLocal = Annotated[
 ]
 
 
-class TareaCrearEsquema(BaseModel):
-    # Se recortan los espacios antes de validar: un nombre o una descripción
-    # formados solo por espacios quedan vacíos y se rechazan con 422.
-    model_config = ConfigDict(str_strip_whitespace=True)
+# Espacios según ECMA-262 (`\s` en las expresiones regulares de JSON Schema):
+# WhiteSpace y LineTerminator. Python (`str.isspace`) y el motor de Rust de
+# Pydantic usan otras definiciones (p. ej. Python trata `\x1c` como espacio),
+# así que se fija la lista para que contrato y validación coincidan.
+ESPACIOS_JSON_SCHEMA = (
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
 
-    nombre: str = Field(min_length=1, max_length=200)
-    prioridad: int | None = Field(default=None, ge=1, le=5)
-    descripcion: str = Field(min_length=1, max_length=500)
+
+def _recortar_espacios(valor: object) -> object:
+    """Recorta los espacios de JSON Schema de los extremos del texto.
+
+    Tras recortar, un texto no vacío contiene al menos un carácter que no es
+    espacio, que es justo lo que publica el contrato con `pattern: "\\S"`.
+    """
+    return valor.strip(ESPACIOS_JSON_SCHEMA) if isinstance(valor, str) else valor
+
+
+# Texto obligatorio: se recorta antes de validar, así que uno formado solo por
+# espacios (incluidos los Unicode, como el espacio duro) queda vacío y da 422.
+TextoObligatorio = Annotated[str, BeforeValidator(_recortar_espacios)]
+
+# Solo se publica en el contrato: la comprobación real es `min_length=1` tras
+# recortar, para no depender de la semántica de `\S` del motor de Pydantic.
+_PATRON_NO_VACIO = {"pattern": r"\S"}
+
+
+def _normalizar_prioridad(valor: object) -> object:
+    """Aplica la semántica de `integer` de JSON Schema.
+
+    `3.0` es un entero válido y se convierte en 3; los booleanos no son enteros
+    (en Python `True` es un `int`, así que se rechazan explícitamente). El resto
+    lo valida `int` en modo estricto, que rechaza cadenas como `"2"` y `2.5`.
+    """
+    if isinstance(valor, bool):
+        raise ValueError("La prioridad debe ser un número entero.")
+    if isinstance(valor, float) and valor.is_integer():
+        return int(valor)
+    return valor
+
+
+# Los límites van antes del `BeforeValidator`: en el orden inverso Pydantic
+# publica `ge`/`le` en el JSON Schema en lugar de `minimum`/`maximum`.
+PrioridadEntera = Annotated[
+    int, Field(strict=True, ge=1, le=5), BeforeValidator(_normalizar_prioridad)
+]
+
+
+class TareaCrearEsquema(BaseModel):
+    nombre: TextoObligatorio = Field(
+        min_length=1, max_length=200, json_schema_extra=_PATRON_NO_VACIO
+    )
+    prioridad: PrioridadEntera | None = None
+    descripcion: TextoObligatorio = Field(
+        min_length=1, max_length=500, json_schema_extra=_PATRON_NO_VACIO
+    )
     fecha_hora: FechaHoraLocal
 
 
