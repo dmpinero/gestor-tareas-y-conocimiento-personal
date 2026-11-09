@@ -25,11 +25,11 @@ Rama: `tablas/pr4-ordenar-exportar` (encadenada sobre `tareas/pr3-fecha-edicion`
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S3 (dependencias y `pnpm-workspace.yaml`) | inline | hecha (sin commit) | — |
-| T2 | S1 (composable `useOrdenacionTabla`, `CabeceraOrdenable` y sus specs) | delegada (writer A, paralelo con T3) | pendiente | — |
-| T3 | S2 (`descargas.ts`, `exportarTabla.ts`, `BotonesExportarTabla` y sus specs) | delegada (writer B, paralelo con T2) | pendiente | — |
-| T4 | S1–S2 (integración en `VistaTareas`, spec de la vista, e2e de ordenación y descarga) | inline | pendiente | — |
-| T5 | S1–S3 (verificador independiente: dependencias nuevas, item 5) | delegada (verificador) | pendiente | — |
+| T1 | S3 (dependencias y `pnpm-workspace.yaml`) | inline | hecha | `c8861c0` |
+| T2 | S1 (composable `useOrdenacionTabla`, `CabeceraOrdenable` y sus specs) | delegada (writer A, paralelo con T3) | hecha | `8d97c21` |
+| T3 | S2 (`descargas.ts`, `exportarTabla.ts`, `BotonesExportarTabla` y sus specs) | delegada (writer B, paralelo con T2) | hecha | `8d97c21` |
+| T4 | S1–S2 (integración en `VistaTareas`, spec de la vista, e2e de ordenación y descarga) | inline | hecha | `8d97c21` |
+| T5 | S1–S3 (verificador independiente: dependencias nuevas, item 5) | delegada (verificador) | hecha (sin blockers) | `8d97c21` |
 
 Evidencia de ruta: T2 y T3 son unidades independientes con superficies disjuntas (`composables/` + `componentes/compartido/CabeceraOrdenable*` frente a `lib/` + `componentes/compartido/BotonesExportarTabla*`); `VistaTareas.vue` es un fichero compartido y lo integra el padre al final (T4). Las dependencias nuevas son riesgo item 5 → verificador.
 
@@ -40,3 +40,7 @@ Evidencia de ruta: T2 y T3 son unidades independientes con superficies disjuntas
 - **L2** (2026-11-09) Mapeo de la referencia: ordenación en cliente con `useOrdenacionTabla` + `CabeceraOrdenable` (asc/desc, sin `aria-sort`); exportación con `exceljs`, `jspdf` y `jspdf-autotable` cargados con `import()`; se exportan todas las filas filtradas y ordenadas, ya formateadas. Usuario: "dale, arrancá con ordenar y exportar".
 - **L3** (2026-11-09) T1: `pnpm add` dejó `core-js: set this to true or false` en `pnpm-workspace.yaml`; se corrige a `false` como en la referencia y se añade el override de `dompurify`. `pnpm audit --prod`: 1 moderada en `uuid` (<11.1.1, vía `exceljs`) que solo afecta a v3/v5/v6 con `buf`; `exceljs` usa v4 → no aplica, se deja anotada.
 - **L4** (2026-11-09) La base local tiene datos del usuario: los e2e de esta feature se ejecutan contra una pila aislada, nunca contra la base de `docker compose`.
+- **L5** (2026-11-09) T2 (writer A): `useOrdenacionTabla` con comparadores `{ esNulo, comparar }` para dejar los nulos al final, `compararTexto` (`es`, `sensitivity: base`), `compararNumero`, `valorAriaSort`; `CabeceraOrdenable` con iconos opcionales. T3 (writer B): `descargarBlob`, `exportarTablaExcel`/`exportarTablaPDF` (apaisado) con `import()`, `BotonesExportarTabla`, `formatearMarcaTemporalFichero` en `fechas.ts`. RED observado en ambas.
+- **L6** (2026-11-09) T4 inline: integración en `VistaTareas` (RED de 6 tests de vista, después 99/99). Los datos simulados de la spec se clonan en `montar` porque el test de edición alteraba el array compartido. e2e de ordenación y descarga contra una pila aislada: 19/19. Build: chunk principal 236 → 244 kB; `exceljs` y `jspdf` en chunks diferidos.
+- **L7** (2026-11-09) T5, verificador: S1–S3 en verde, sin blockers. Licencias MIT. El aviso de `uuid` no es alcanzable: `exceljs` solo llama a `v4()` sin argumentos. Contenido de los ficheros comprobado (hoja "Datos", cabecera en negrita, orden actual, "—", PDF apaisado). Advisories: un fallo al exportar no muestra aviso; `descargarBlob` solo probado en Chromium; aviso de chunk > 500 kB por `exceljs`.
+- **L8** (2026-11-09) Usuario: "pushea, abre pr4 y despliega nueva versión de la aplicación". PR #15. No hay proyecto de Railway conectado ("de momento no está conectado a Railway"); se publica la versión en GitHub mergeando la cadena a `main` ("sí, mergea todo a main").
