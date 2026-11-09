@@ -20,6 +20,12 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore"
+    ignore:
+      # La v10 del preset exige conventional-changelog-writer@9, pero
+      # @semantic-release/release-notes-generator 14.x aún usa el writer 8 y el
+      # release falla al generar las notas. Quitar cuando el generador lo adopte.
+      - dependency-name: "conventional-changelog-conventionalcommits"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directories:
