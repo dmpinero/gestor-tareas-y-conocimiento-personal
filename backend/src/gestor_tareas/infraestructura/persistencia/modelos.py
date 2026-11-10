@@ -124,10 +124,23 @@ class TareaModelo(Base):
     )
 
 
+class PasoWorkflowOportunidadModelo(Base):
+    """Paso del workflow estándar de las oportunidades (hay un único workflow)."""
+
+    __tablename__ = "pasos_workflow_oportunidades"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Posición del paso, 1..n sin huecos. La unicidad la garantiza la base de datos;
+    # por eso el repositorio renumera en dos fases (ver su `_renumerar`).
+    numero: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+
+
 __all__ = [
     "Base",
     "EtiquetaModelo",
     "OportunidadModelo",
+    "PasoWorkflowOportunidadModelo",
     "PersonaModelo",
     "TareaModelo",
     "tarea_etiquetas",

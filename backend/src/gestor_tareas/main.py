@@ -11,7 +11,13 @@ from gestor_tareas.interfaces.api.manejadores_errores import registrar_manejador
 from gestor_tareas.interfaces.api.middleware.cabeceras_seguridad import (
     MiddlewareCabecerasSeguridad,
 )
-from gestor_tareas.interfaces.api.v1.enrutadores import etiquetas, personas, salud, tareas
+from gestor_tareas.interfaces.api.v1.enrutadores import (
+    etiquetas,
+    personas,
+    salud,
+    tareas,
+    workflow_oportunidades,
+)
 
 
 def crear_aplicacion() -> FastAPI:
@@ -34,6 +40,7 @@ def crear_aplicacion() -> FastAPI:
     aplicacion.include_router(tareas.enrutador, prefix="/api/v1")
     aplicacion.include_router(etiquetas.enrutador, prefix="/api/v1")
     aplicacion.include_router(personas.enrutador, prefix="/api/v1")
+    aplicacion.include_router(workflow_oportunidades.enrutador, prefix="/api/v1")
 
     Instrumentator().instrument(aplicacion).expose(
         aplicacion, endpoint="/metricas", include_in_schema=False
