@@ -106,13 +106,16 @@ def test_eliminar_y_marcar_a_la_vez_la_misma_subtarea(sesion_bd) -> None:
     ]
     resultados = _a_la_vez(operaciones)
 
-    # Cada marcado o bien llegó antes de la eliminación (y devolvió la subtarea
-    # resuelta) o bien después (y ya no la encontró: 404); nunca un error 500.
+    # Cada marcado o bien llegó antes de la eliminación o bien después (y ya no
+    # la encontró: 404); nunca un error 500. Si llegó antes, la tarea se relee
+    # tras confirmar, así que la eliminación puede haberse confirmado entre medias
+    # y la respuesta ya no incluye la subtarea; lo que nunca puede verse es la
+    # subtarea sin resolver.
     assert isinstance(resultados[0], Tarea)
     assert resultados[0].subtareas == []
     for resultado in resultados[1:]:
         if isinstance(resultado, Tarea):
-            assert [s.resuelta for s in resultado.subtareas] == [True]
+            assert [s.resuelta for s in resultado.subtareas] in ([True], [])
         else:
             assert str(resultado) == (
                 f"No existe la subtarea con id {id_sub} en la tarea con id {id_tarea}"
