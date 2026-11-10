@@ -63,3 +63,54 @@ test('el panel "Crear tarea" no tiene violaciones de accesibilidad en modo oscur
   const resultado = await auditarPanelCrearTarea(page)
   expect(resultado.violations).toEqual([])
 })
+
+// El historial de cambios se lee de la API de GitHub; se simula para no depender
+// de la red ni del límite de peticiones. Incluye HTML peligroso para comprobar
+// que se sanea antes de mostrarlo.
+const RELEASES_SIMULADAS = [
+  {
+    tag_name: 'v9.9.9',
+    name: 'v9.9.9',
+    body: '### ✨ Novedades\n\n* una novedad\n\n<img src="x" alt="" onerror="window.__inyectado = true">',
+    published_at: '2026-11-10T00:00:00Z',
+    html_url: 'https://github.com/',
+  },
+]
+
+async function auditarHistorialDeCambios(page: Page) {
+  // Rutas separadas para la última release y el historial (Playwright usa la
+  // última ruta registrada que coincide).
+  await page.route('https://api.github.com/**/releases*', (ruta) =>
+    ruta.fulfill({ json: RELEASES_SIMULADAS }),
+  )
+  await page.route('https://api.github.com/**/releases/latest', (ruta) =>
+    ruta.fulfill({ json: RELEASES_SIMULADAS[0] }),
+  )
+  await page.getByRole('button', { name: 'Ayuda: historial de cambios' }).click()
+  await page.getByRole('button', { name: 'Historial de cambios', exact: true }).click()
+  const modal = page.getByRole('dialog', { name: 'Historial de cambios' })
+  await expect(modal.getByText('una novedad')).toBeVisible()
+  await modal.evaluate((elemento) =>
+    Promise.all(elemento.getAnimations().map((animacion) => animacion.finished)),
+  )
+  const inyectado = await page.evaluate(() => (window as { __inyectado?: boolean }).__inyectado)
+  expect(inyectado).toBeUndefined()
+  return auditarPagina(page)
+}
+
+test('el historial de cambios no tiene violaciones de accesibilidad en modo claro (WCAG 2.1 AA)', async ({
+  page,
+}) => {
+  await page.goto('/')
+  const resultado = await auditarHistorialDeCambios(page)
+  expect(resultado.violations).toEqual([])
+})
+
+test('el historial de cambios no tiene violaciones de accesibilidad en modo oscuro (WCAG 2.1 AA)', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await activarModoOscuro(page)
+  const resultado = await auditarHistorialDeCambios(page)
+  expect(resultado.violations).toEqual([])
+})

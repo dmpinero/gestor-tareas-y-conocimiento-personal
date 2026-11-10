@@ -60,3 +60,31 @@ test('el modo oscuro se conserva al recargar la página, sin parpadeo', async ({
     'true',
   )
 })
+
+// Regresión: el historial se volvía a descargar cada vez que se reabría el
+// menú de ayuda (reka desmonta su contenido y con él la caché de la modal).
+test('el historial de cambios se descarga una sola vez aunque se reabra el menú de ayuda', async ({
+  page,
+}) => {
+  let peticionesHistorial = 0
+  await page.route('https://api.github.com/**/releases*', (ruta) => {
+    peticionesHistorial += 1
+    return ruta.fulfill({ json: [{ tag_name: 'v1.0.0', name: 'v1.0.0', body: '* novedad' }] })
+  })
+  await page.route('https://api.github.com/**/releases/latest', (ruta) =>
+    ruta.fulfill({ json: { tag_name: 'v1.0.0', name: 'v1.0.0', body: '' } }),
+  )
+  await page.goto('/')
+
+  for (let vuelta = 0; vuelta < 3; vuelta += 1) {
+    await page.getByRole('button', { name: 'Ayuda: historial de cambios' }).click()
+    await page.getByRole('button', { name: 'Historial de cambios', exact: true }).click()
+    const modal = page.getByRole('dialog', { name: 'Historial de cambios', exact: true })
+    await expect(modal.getByText('novedad')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(modal).toBeHidden()
+    await page.keyboard.press('Escape')
+  }
+
+  expect(peticionesHistorial).toBe(1)
+})
