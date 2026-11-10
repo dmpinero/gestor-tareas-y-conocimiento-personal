@@ -108,6 +108,47 @@ class PasoOportunidadModelo(Base):
     )
 
 
+class SubtareaModelo(Base):
+    """Subtarea de una tarea. Borrar la tarea borra sus subtareas; borrar una persona
+    asignada a alguna lo impide la clave ajena (RESTRICT por defecto)."""
+
+    __tablename__ = "subtareas"
+    __table_args__ = (
+        CheckConstraint(
+            "prioridad IS NULL OR prioridad BETWEEN 1 AND 5", name="ck_subtareas_prioridad_rango"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", ondelete="CASCADE"), nullable=False
+    )
+    nombre: Mapped[str] = mapped_column(String(200), nullable=False)
+    persona_id: Mapped[int | None] = mapped_column(ForeignKey("personas.id"), nullable=True)
+    prioridad: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resuelta: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    asignado: Mapped[PersonaModelo | None] = relationship(lazy="selectin")
+
+
+class ComentarioModelo(Base):
+    """Comentario del histórico de una tarea; borrar la tarea borra sus comentarios.
+
+    No hay relación desde ``TareaModelo``: los comentarios no se cargan con la tarea.
+    """
+
+    __tablename__ = "comentarios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", ondelete="CASCADE"), nullable=False
+    )
+    texto: Mapped[str] = mapped_column(String(500), nullable=False)
+    # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
+    creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+
+
 class TareaModelo(Base):
     __tablename__ = "tareas"
     __table_args__ = (
@@ -152,6 +193,13 @@ class TareaModelo(Base):
         passive_deletes=True,
         order_by=PasoOportunidadModelo.numero,
     )
+    # Subtareas por orden de alta. Al borrar la tarea las borra el ON DELETE CASCADE.
+    subtareas: Mapped[list[SubtareaModelo]] = relationship(
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by=SubtareaModelo.id,
+    )
 
 
 class PasoWorkflowOportunidadModelo(Base):
@@ -168,11 +216,13 @@ class PasoWorkflowOportunidadModelo(Base):
 
 __all__ = [
     "Base",
+    "ComentarioModelo",
     "EtiquetaModelo",
     "OportunidadModelo",
     "PasoOportunidadModelo",
     "PasoWorkflowOportunidadModelo",
     "PersonaModelo",
+    "SubtareaModelo",
     "TareaModelo",
     "tarea_etiquetas",
     "tarea_personas",

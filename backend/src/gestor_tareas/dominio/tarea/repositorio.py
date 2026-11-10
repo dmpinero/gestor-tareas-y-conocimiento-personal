@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from gestor_tareas.dominio.tarea.entidades import Tarea
+from gestor_tareas.dominio.tarea.entidades import Subtarea, Tarea
 
 
 class RepositorioTareas(Protocol):
@@ -12,7 +12,8 @@ class RepositorioTareas(Protocol):
 
     def crear(self, tarea: Tarea) -> Tarea:
         """Guarda una tarea nueva, con el estado ``tarea.completada`` y sus
-        ``tarea.pasos_oportunidad`` (a los que asigna id)."""
+        ``tarea.pasos_oportunidad`` (a los que asigna id). Una tarea nueva no
+        tiene subtareas: se ignora ``tarea.subtareas``."""
         ...
 
     def listar(self) -> list[Tarea]:
@@ -36,6 +37,8 @@ class RepositorioTareas(Protocol):
         Los pasos de la oportunidad tampoco cambian (se ignora
         ``tarea.pasos_oportunidad``), salvo que la tarea deje de ser oportunidad
         (``tarea.tipo`` distinto de ``TipoTarea.OPORTUNIDAD``): entonces se borran.
+
+        Las subtareas no cambian nunca (se ignora ``tarea.subtareas``).
         """
         ...
 
@@ -53,4 +56,30 @@ class RepositorioTareas(Protocol):
         no existe, el paso no existe o es de otra tarea). El resto de datos de la
         tarea no cambia.
         """
+        ...
+
+    def anadir_subtarea(self, id_tarea: int, subtarea: Subtarea) -> Tarea | None:
+        """Añade la subtarea, pendiente, al final de las de la tarea y devuelve la tarea.
+
+        ``subtarea.asignado`` debe existir ya en el catálogo de personas (ver
+        ``RepositorioPersonas.obtener_o_crear``). Devuelve ``None`` si la tarea no
+        existe, y entonces deshace la transacción (también las altas en el
+        catálogo hechas en ella). El resto de datos de la tarea no cambia.
+        """
+        ...
+
+    def cambiar_resuelta_subtarea(
+        self, id_tarea: int, id_subtarea: int, resuelta: bool
+    ) -> Tarea | None:
+        """Marca la subtarea como resuelta o pendiente y devuelve la tarea.
+
+        Devuelve ``None`` si la tarea no tiene una subtarea con ese id (porque la
+        tarea no existe, la subtarea no existe o es de otra tarea). El resto de
+        datos de la tarea no cambia.
+        """
+        ...
+
+    def eliminar_subtarea(self, id_tarea: int, id_subtarea: int) -> Tarea | None:
+        """Borra la subtarea y devuelve la tarea, o ``None`` si la tarea no tiene
+        una subtarea con ese id (como en ``cambiar_resuelta_subtarea``)."""
         ...

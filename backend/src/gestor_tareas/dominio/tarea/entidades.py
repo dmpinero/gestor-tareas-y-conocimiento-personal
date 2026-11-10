@@ -45,6 +45,23 @@ class PasoOportunidad:
 
 
 @dataclass
+class Subtarea:
+    """Parte de una tarea, que solo existe dentro de ella.
+
+    ``nombre`` es obligatorio (hasta 200 caracteres). ``asignado`` es el nombre de
+    una persona del catálogo (como mucho una) y ``prioridad`` va de 1 a 5; ambos
+    son opcionales. ``resuelta`` indica si está hecha; una subtarea nueva está
+    pendiente.
+    """
+
+    nombre: str
+    asignado: str | None = None
+    prioridad: int | None = None
+    resuelta: bool = False
+    id: int | None = None
+
+
+@dataclass
 class Tarea:
     """Tarea de la persona usuaria. La prioridad va de 1 (más prioritaria) a 5.
 
@@ -61,6 +78,9 @@ class Tarea:
     ``pasos_oportunidad`` son los pasos de una oportunidad, ordenados por número.
     Solo los tiene una tarea creada como oportunidad (se copian del workflow al
     darla de alta), y los pierde si deja de serlo.
+
+    ``subtareas`` son las subtareas de la tarea por orden de alta. Solo cambian con
+    sus propias operaciones: editar la tarea o cambiar su tipo no las altera.
     """
 
     nombre: str
@@ -74,4 +94,5 @@ class Tarea:
     oportunidad: Oportunidad | None = None
     completada: bool = False
     pasos_oportunidad: list[PasoOportunidad] = field(default_factory=list)
+    subtareas: list[Subtarea] = field(default_factory=list)
     id: int | None = None

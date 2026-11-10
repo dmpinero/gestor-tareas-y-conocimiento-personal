@@ -1,9 +1,10 @@
 from copy import deepcopy
 from dataclasses import replace
 
+from gestor_tareas.dominio.comentario.entidades import Comentario
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
 from gestor_tareas.dominio.persona.entidades import Persona
-from gestor_tareas.dominio.tarea.entidades import Tarea, TipoTarea
+from gestor_tareas.dominio.tarea.entidades import Subtarea, Tarea, TipoTarea
 from gestor_tareas.dominio.workflow_oportunidades.entidades import PasoWorkflowOportunidad
 
 
@@ -14,9 +15,11 @@ class RepositorioTareasFalso:
         self._tareas: dict[int, Tarea] = {}
         self._siguiente_id = 1
         self._siguiente_id_paso = 1
+        self._siguiente_id_subtarea = 1
 
     def crear(self, tarea: Tarea) -> Tarea:
         tarea.id = self._siguiente_id
+        tarea.subtareas = []
         for paso in tarea.pasos_oportunidad:
             paso.id = self._siguiente_id_paso
             self._siguiente_id_paso += 1
@@ -35,9 +38,11 @@ class RepositorioTareasFalso:
     def actualizar(self, tarea: Tarea) -> Tarea:
         assert tarea.id in self._tareas
         guardada = self._tareas[tarea.id]
-        # Como el repositorio real, la edición no cambia el estado completada ni los
-        # pasos, salvo que la tarea deje de ser oportunidad: entonces los borra.
+        # Como el repositorio real, la edición no cambia el estado completada, ni las
+        # subtareas, ni los pasos, salvo que la tarea deje de ser oportunidad:
+        # entonces los borra.
         tarea.completada = guardada.completada
+        tarea.subtareas = deepcopy(guardada.subtareas)
         tarea.pasos_oportunidad = (
             deepcopy(guardada.pasos_oportunidad) if tarea.tipo is TipoTarea.OPORTUNIDAD else []
         )
@@ -60,6 +65,55 @@ class RepositorioTareasFalso:
             return None
         paso.hecho = hecho
         return deepcopy(tarea)
+
+    def anadir_subtarea(self, id_tarea: int, subtarea: Subtarea) -> Tarea | None:
+        tarea = self._tareas.get(id_tarea)
+        if tarea is None:
+            return None
+        tarea.subtareas.append(replace(subtarea, id=self._siguiente_id_subtarea, resuelta=False))
+        self._siguiente_id_subtarea += 1
+        return deepcopy(tarea)
+
+    def _subtarea(self, id_tarea: int, id_subtarea: int) -> Subtarea | None:
+        tarea = self._tareas.get(id_tarea)
+        return next((s for s in (tarea.subtareas if tarea else []) if s.id == id_subtarea), None)
+
+    def cambiar_resuelta_subtarea(
+        self, id_tarea: int, id_subtarea: int, resuelta: bool
+    ) -> Tarea | None:
+        subtarea = self._subtarea(id_tarea, id_subtarea)
+        if subtarea is None:
+            return None
+        subtarea.resuelta = resuelta
+        return deepcopy(self._tareas[id_tarea])
+
+    def eliminar_subtarea(self, id_tarea: int, id_subtarea: int) -> Tarea | None:
+        subtarea = self._subtarea(id_tarea, id_subtarea)
+        if subtarea is None:
+            return None
+        self._tareas[id_tarea].subtareas.remove(subtarea)
+        return deepcopy(self._tareas[id_tarea])
+
+
+class RepositorioComentariosFalso:
+    """Doble de RepositorioComentarios en memoria, sobre las tareas de otro doble."""
+
+    def __init__(self, tareas: RepositorioTareasFalso) -> None:
+        self._tareas = tareas
+        self.comentarios: list[Comentario] = []
+
+    def crear(self, comentario: Comentario) -> Comentario | None:
+        if self._tareas.obtener_por_id(comentario.id_tarea) is None:
+            return None
+        guardado = replace(comentario, id=len(self.comentarios) + 1)
+        self.comentarios.append(guardado)
+        return replace(guardado)
+
+    def listar_de_tarea(self, id_tarea: int) -> list[Comentario] | None:
+        if self._tareas.obtener_por_id(id_tarea) is None:
+            return None
+        propios = [c for c in self.comentarios if c.id_tarea == id_tarea]
+        return [replace(c) for c in sorted(propios, key=lambda c: (c.creado, c.id))]
 
 
 class RepositorioWorkflowOportunidadesFalso:
