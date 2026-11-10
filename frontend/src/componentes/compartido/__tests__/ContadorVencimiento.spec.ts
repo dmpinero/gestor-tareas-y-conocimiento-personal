@@ -18,15 +18,18 @@ describe('ContadorVencimiento', () => {
     vi.useRealTimers()
   })
 
-  it('muestra cuánto falta para vencer sin el color de vencida', () => {
+  it('con 48 horas o más muestra cuánto falta en verde', () => {
     vi.setSystemTime(new Date(2026, 10, 18, 14, 44, 40))
 
     const contador = montar()
 
     const span = contador.get('[data-testid="contador-vencimiento"]')
     expect(span.text()).toBe('Vence en 2 d 03 h 15 min 20 s')
+    expect(span.classes()).toEqual(
+      expect.arrayContaining(['text-green-700', 'dark:text-green-400']),
+    )
     expect(span.classes()).not.toContain('text-destructive')
-    expect(span.classes()).toContain('text-muted-foreground')
+    expect(span.attributes('data-nivel')).toBe('holgada')
     expect(span.attributes('data-vencida')).toBe('false')
     contador.unmount()
   })
@@ -53,7 +56,7 @@ describe('ContadorVencimiento', () => {
     const span = contador.get('[data-testid="contador-vencimiento"]')
     expect(span.text()).toBe('Vencida hace 00 h 00 min')
     expect(span.classes()).toContain('text-destructive')
-    expect(span.classes()).not.toContain('text-muted-foreground')
+    expect(span.attributes('data-nivel')).toBe('vencida')
     expect(span.attributes('data-vencida')).toBe('true')
     contador.unmount()
   })
@@ -78,6 +81,35 @@ describe('ContadorVencimiento', () => {
     await contador.setProps({ vencimiento: '2026-11-18T14:45:00' })
 
     expect(contador.text()).toBe('Vence en 00 h 00 min 20 s')
+    contador.unmount()
+  })
+
+  it('con más de 24 y menos de 48 horas se muestra en naranja', () => {
+    vi.setSystemTime(new Date(2026, 10, 19, 12, 0, 0))
+
+    const contador = montar()
+
+    const span = contador.get('[data-testid="contador-vencimiento"]')
+    expect(span.text()).toBe('Vence en 1 d 06 h 00 min 00 s')
+    expect(span.classes()).toEqual(
+      expect.arrayContaining(['text-orange-700', 'dark:text-orange-400']),
+    )
+    expect(span.attributes('data-nivel')).toBe('menos-de-48h')
+    contador.unmount()
+  })
+
+  it('con menos de 24 horas se muestra en rojo y cambia de color al cruzar el umbral', async () => {
+    vi.setSystemTime(new Date(2026, 10, 19, 17, 59, 59))
+    const contador = montar()
+    const span = () => contador.get('[data-testid="contador-vencimiento"]')
+    expect(span().attributes('data-nivel')).toBe('menos-de-48h')
+
+    vi.advanceTimersByTime(2000)
+    await contador.vm.$nextTick()
+
+    expect(span().text()).toBe('Vence en 23 h 59 min 59 s')
+    expect(span().classes()).toContain('text-destructive')
+    expect(span().attributes('data-nivel')).toBe('menos-de-24h')
     contador.unmount()
   })
 })
