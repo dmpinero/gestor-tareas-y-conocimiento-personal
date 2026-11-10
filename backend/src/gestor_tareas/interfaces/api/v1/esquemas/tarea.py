@@ -239,8 +239,9 @@ class TareaCrearEsquema(BaseModel):
 class TareaActualizarEsquema(TareaCrearEsquema):
     """Cuerpo de la edición: los mismos campos y validaciones que el alta.
 
-    Ni el alta ni la edición reciben ``completada``: como cualquier campo
-    desconocido, se descarta, y el estado solo cambia con ``TareaCompletadaEsquema``.
+    Ni el alta ni la edición reciben ``completada`` ni ``pasos_oportunidad``: como
+    cualquier campo desconocido, se descartan. El estado solo cambia con
+    ``TareaCompletadaEsquema`` y el de cada paso con ``PasoHechoEsquema``.
     """
 
 
@@ -249,6 +250,23 @@ class TareaCompletadaEsquema(BaseModel):
     cadena como ``"true"``, un número o ``null`` se rechazan con 422."""
 
     completada: bool = Field(strict=True)
+
+
+class PasoHechoEsquema(BaseModel):
+    """Cuerpo del cambio de estado de un paso de una oportunidad. Solo admite
+    ``true`` o ``false`` de JSON: una cadena, un número o ``null`` se rechazan con
+    422."""
+
+    hecho: bool = Field(strict=True)
+
+
+class PasoOportunidadSalidaEsquema(BaseModel):
+    """Paso de una oportunidad, copiado del workflow al crearla, con su avance."""
+
+    id: int
+    numero: int
+    nombre: str
+    hecho: bool
 
 
 class TareaSalidaEsquema(BaseModel):
@@ -263,3 +281,7 @@ class TareaSalidaEsquema(BaseModel):
     tipo: TipoTareaEsquema | None
     oportunidad: OportunidadSalidaEsquema | None
     completada: bool
+    pasos_oportunidad: list[PasoOportunidadSalidaEsquema] = Field(
+        description="Pasos de la oportunidad por número; vacía si no es oportunidad "
+        "o no tiene pasos."
+    )

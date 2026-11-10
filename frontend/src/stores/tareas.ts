@@ -71,6 +71,26 @@ export const useTiendaTareas = defineStore('tareas', () => {
     }
   }
 
+  // Cambia un paso del workflow de una oportunidad entre hecho y pendiente.
+  // Como `alternarCompletada`: si la API falla se guarda el mensaje en `error`
+  // y la tarea se queda como estaba.
+  async function alternarPasoTarea(idTarea: number, idPaso: number): Promise<void> {
+    const paso = tareas.value
+      .find((t) => t.id === idTarea)
+      ?.pasos_oportunidad.find((p) => p.id === idPaso)
+    if (!paso) return
+    error.value = null
+    try {
+      const tarea = await clienteApi.parchear<Tarea>(`/tareas/${idTarea}/pasos/${idPaso}`, {
+        hecho: !paso.hecho,
+      })
+      const indice = tareas.value.findIndex((t) => t.id === idTarea)
+      if (indice !== -1) tareas.value[indice] = tarea
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+    }
+  }
+
   return {
     tareas,
     cargando,
@@ -82,5 +102,6 @@ export const useTiendaTareas = defineStore('tareas', () => {
     crear,
     actualizar,
     alternarCompletada,
+    alternarPasoTarea,
   }
 })

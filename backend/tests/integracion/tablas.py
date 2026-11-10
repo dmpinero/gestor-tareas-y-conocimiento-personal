@@ -8,6 +8,7 @@ def vaciar_tablas(sesion: Session) -> None:
     claves ajenas."""
     for tabla in (
         modelos.PasoWorkflowOportunidadModelo.__table__,
+        modelos.PasoOportunidadModelo.__table__,
         modelos.tarea_etiquetas,
         modelos.tarea_personas,
         modelos.OportunidadModelo.__table__,

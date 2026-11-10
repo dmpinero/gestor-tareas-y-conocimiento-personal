@@ -34,6 +34,7 @@ const TAREAS = [
     tipo: null,
     oportunidad: null,
     completada: false,
+    pasos_oportunidad: [],
   },
   {
     id: 2,
@@ -47,6 +48,7 @@ const TAREAS = [
     tipo: null,
     oportunidad: null,
     completada: false,
+    pasos_oportunidad: [],
   },
 ]
 
@@ -75,6 +77,13 @@ const OPORTUNIDAD = {
 }
 // "Escribir informe" convertida en una oportunidad.
 const TAREA_OPORTUNIDAD = { ...TAREAS[0], tipo: 'oportunidad', oportunidad: OPORTUNIDAD }
+// Pasos del workflow copiados en una oportunidad: 1 de 3 hechos.
+const PASOS = [
+  { id: 10, numero: 1, nombre: 'Contactar', hecho: true },
+  { id: 11, numero: 2, nombre: 'Enviar propuesta', hecho: false },
+  { id: 12, numero: 3, nombre: 'Firmar contrato', hecho: false },
+]
+const OPORTUNIDAD_CON_PASOS = { ...TAREA_OPORTUNIDAD, pasos_oportunidad: PASOS }
 
 // Fecha y hora "actuales" fijas para que el valor por defecto sea determinista.
 const AHORA = new Date(2026, 10, 9, 18, 45, 30)
@@ -730,6 +739,7 @@ describe('VistaTareas', () => {
         ...SIN_EXTRAS,
         tipo: 'oportunidad',
         oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
+        pasos_oportunidad: [],
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -765,6 +775,7 @@ describe('VistaTareas', () => {
         ...SIN_EXTRAS,
         tipo: 'oportunidad',
         oportunidad: OPORTUNIDAD,
+        pasos_oportunidad: [],
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -844,6 +855,16 @@ describe('VistaTareas', () => {
       // Los campos propios de la oportunidad no aparecen en la tabla.
       expect(envoltorio.find('table').text()).not.toContain('OP-1')
       expect(envoltorio.find('table').text()).not.toContain('Contrato de soporte')
+    })
+
+    it('junto al tipo muestra cuántos pasos de la oportunidad están hechos', async () => {
+      const envoltorio = await montar([OPORTUNIDAD_CON_PASOS, TAREA_OPORTUNIDAD, TAREAS[1]])
+
+      expect(filasTabla(envoltorio).map((fila) => fila[7])).toEqual([
+        'Oportunidad · 1/3',
+        'Oportunidad',
+        '—',
+      ])
     })
   })
 
@@ -1017,6 +1038,66 @@ describe('VistaTareas', () => {
         expect(panelActual().textContent).toContain('EstadoCompletada')
       })
     })
+
+    describe('pasos del workflow', () => {
+      async function abrirDetalle(envoltorio: VueWrapper): Promise<HTMLElement> {
+        await envoltorio
+          .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
+          .trigger('click')
+        await flushPromises()
+        return panelActual()
+      }
+
+      function casillas(modal: HTMLElement): HTMLElement[] {
+        return [...modal.querySelectorAll<HTMLElement>('[role="checkbox"]')]
+      }
+
+      it('al marcar un paso en el detalle lo guarda y actualiza la modal y el avance de la tabla', async () => {
+        vi.mocked(clienteApi.parchear).mockImplementation((ruta, cuerpo) => {
+          const idPaso = Number(String(ruta).split('/').pop())
+          const { hecho } = cuerpo as { hecho: boolean }
+          return Promise.resolve({
+            ...structuredClone(OPORTUNIDAD_CON_PASOS),
+            pasos_oportunidad: PASOS.map((paso) =>
+              paso.id === idPaso ? { ...paso, hecho } : paso,
+            ),
+          })
+        })
+        const envoltorio = await montar([OPORTUNIDAD_CON_PASOS])
+        const modal = await abrirDetalle(envoltorio)
+        expect(casillas(modal).map((c) => c.getAttribute('aria-checked'))).toEqual([
+          'true',
+          'false',
+          'false',
+        ])
+
+        casillas(modal)[1]!.click()
+        await flushPromises()
+
+        expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/pasos/11', { hecho: true })
+        expect(casillas(panelActual()).map((c) => c.getAttribute('aria-checked'))).toEqual([
+          'true',
+          'true',
+          'false',
+        ])
+        expect(filasTabla(envoltorio)[0]![7]).toBe('Oportunidad · 2/3')
+      })
+
+      it('si la API falla muestra el error dentro de la modal y el paso no cambia', async () => {
+        vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('Paso no encontrado'))
+        const envoltorio = await montar([OPORTUNIDAD_CON_PASOS])
+        const modal = await abrirDetalle(envoltorio)
+
+        casillas(modal)[1]!.click()
+        await flushPromises()
+
+        expect(panelActual().querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+          'Paso no encontrado',
+        )
+        expect(casillas(panelActual())[1]!.getAttribute('aria-checked')).toBe('false')
+        expect(filasTabla(envoltorio)[0]![7]).toBe('Oportunidad · 1/3')
+      })
+    })
   })
 
   describe('ordenación', () => {
@@ -1033,6 +1114,7 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
+        pasos_oportunidad: [],
       },
       {
         id: 2,
@@ -1046,6 +1128,7 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
+        pasos_oportunidad: [],
       },
       {
         id: 3,
@@ -1060,6 +1143,7 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
+        pasos_oportunidad: [],
       },
     ]
 
@@ -1176,6 +1260,26 @@ describe('VistaTareas', () => {
       expect(nombresEnTabla(envoltorio)).toEqual(['Árbol', 'beta', 'casa'])
       expect(thDe(envoltorio, 'Tipo').attributes('aria-sort')).toBe('descending')
     })
+
+    it('ordena por tipo usando solo su texto, sin tener en cuenta el avance de los pasos', async () => {
+      const envoltorio = await montar([
+        // Con el avance, "Oportunidad · 1/3" iría detrás de "Oportunidad"; empatan y
+        // se conserva el orden de llegada.
+        {
+          ...TAREAS_ORDEN[0],
+          tipo: 'oportunidad',
+          oportunidad: OPORTUNIDAD,
+          pasos_oportunidad: PASOS,
+        },
+        TAREAS_ORDEN[1],
+        { ...TAREAS_ORDEN[2], tipo: 'oportunidad', oportunidad: OPORTUNIDAD },
+      ])
+
+      await cabecera(envoltorio, 'Tipo').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['beta', 'casa', 'Árbol'])
+      await cabecera(envoltorio, 'Tipo').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['beta', 'casa', 'Árbol'])
+    })
   })
 
   describe('exportación', () => {
@@ -1264,6 +1368,16 @@ describe('VistaTareas', () => {
       expect(filas[0]).toHaveLength(COLUMNAS.length)
       expect(JSON.stringify(filas)).not.toContain('OP-1')
     })
+
+    it('exporta solo el texto del tipo, sin el avance de los pasos', async () => {
+      const envoltorio = await montar([OPORTUNIDAD_CON_PASOS, TAREAS[1]])
+
+      await botonExportar(envoltorio, 'Exportar a Excel').trigger('click')
+
+      const filas = vi.mocked(exportarTablaExcel).mock.calls[0]![2] as unknown[][]
+      expect(filas.map((fila) => fila[7])).toEqual(['Oportunidad', '—'])
+      expect(JSON.stringify(filas)).not.toContain('Contactar')
+    })
   })
 
   describe('filtros', () => {
@@ -1280,6 +1394,7 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
+        pasos_oportunidad: [],
       },
       {
         id: 2,
@@ -1293,6 +1408,7 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
+        pasos_oportunidad: [],
       },
       {
         id: 3,
@@ -1306,6 +1422,7 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
+        pasos_oportunidad: [],
       },
     ]
     const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']

@@ -2,10 +2,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gestor_tareas.dominio.nombres_catalogo import ordenar_nombres
-from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
+from gestor_tareas.dominio.tarea.entidades import Oportunidad, PasoOportunidad, Tarea, TipoTarea
 from gestor_tareas.infraestructura.persistencia.modelos import (
     EtiquetaModelo,
     OportunidadModelo,
+    PasoOportunidadModelo,
     PersonaModelo,
     TareaModelo,
 )
@@ -36,6 +37,10 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         tipo=TipoTarea(modelo.tipo) if modelo.tipo is not None else None,
         oportunidad=_a_oportunidad(modelo.oportunidad),
         completada=modelo.completada,
+        pasos_oportunidad=[
+            PasoOportunidad(id=p.id, numero=p.numero, nombre=p.nombre, hecho=p.hecho)
+            for p in sorted(modelo.pasos_oportunidad, key=lambda p: p.numero)
+        ],
     )
 
 
@@ -73,6 +78,10 @@ class RepositorioTareasSqlAlchemy:
         modelo.asignados = self._filas_catalogo(PersonaModelo, tarea.asignados)
         modelo.tipo = tarea.tipo.value if tarea.tipo is not None else None
         self._asignar_oportunidad(modelo, tarea.oportunidad)
+        # Los pasos solo se guardan al crear la tarea; una tarea que deja de ser
+        # oportunidad los pierde ("delete-orphan" borra sus filas).
+        if tarea.tipo is not TipoTarea.OPORTUNIDAD:
+            modelo.pasos_oportunidad = []
 
     @staticmethod
     def _asignar_oportunidad(modelo: TareaModelo, oportunidad: Oportunidad | None) -> None:
@@ -92,7 +101,13 @@ class RepositorioTareasSqlAlchemy:
 
     def crear(self, tarea: Tarea) -> Tarea:
         with traducir_conflictos(self._sesion):
-            modelo = TareaModelo(completada=tarea.completada)
+            modelo = TareaModelo(
+                completada=tarea.completada,
+                pasos_oportunidad=[
+                    PasoOportunidadModelo(numero=p.numero, nombre=p.nombre, hecho=p.hecho)
+                    for p in tarea.pasos_oportunidad
+                ],
+            )
             self._asignar_datos(modelo, tarea)
             self._sesion.add(modelo)
             self._sesion.commit()
@@ -121,3 +136,27 @@ class RepositorioTareasSqlAlchemy:
             modelo.completada = completada
             self._sesion.commit()
         return _a_entidad(modelo)
+
+    def cambiar_hecho_paso(self, id_tarea: int, id_paso: int, hecho: bool) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            # Lectura con bloqueo: ve lo último confirmado y espera a una edición en
+            # curso que pueda estar borrando los pasos (si los borra, no lo encuentra).
+            consulta = (
+                select(PasoOportunidadModelo)
+                .where(
+                    PasoOportunidadModelo.id == id_paso,
+                    PasoOportunidadModelo.tarea_id == id_tarea,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            paso = self._sesion.scalars(consulta).one_or_none()
+            if paso is None:
+                self._sesion.rollback()
+                return None
+            paso.hecho = hecho
+            self._sesion.flush()
+            # Antes de confirmar: la tarea, con el paso ya cambiado en la sesión.
+            tarea = _a_entidad(self._sesion.get(TareaModelo, id_tarea))
+            self._sesion.commit()
+        return tarea

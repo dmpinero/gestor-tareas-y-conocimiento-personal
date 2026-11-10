@@ -13,7 +13,12 @@ class ActualizarTarea:
     """Sustituye todos los datos editables de una tarea ya existente.
 
     Las etiquetas y personas asignadas sustituyen por completo a las anteriores, y
-    también el tipo y sus datos (sin tipo, la tarea pierde sus datos de oportunidad).
+    también el tipo y sus datos (sin tipo, la tarea pierde sus datos de oportunidad
+    y sus pasos).
+
+    Los pasos de una oportunidad que sigue siéndolo se conservan con su avance. Una
+    tarea que pasa a ser oportunidad no recibe pasos: solo se copian del workflow
+    al crear una oportunidad nueva (las que ya existían no los reciben).
     """
 
     def __init__(

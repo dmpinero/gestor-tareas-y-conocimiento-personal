@@ -21,6 +21,9 @@ from gestor_tareas.infraestructura.persistencia.modelos import EtiquetaModelo, P
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
 )
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflow_oportunidades_sqlalchemy import (  # noqa: E501
+    RepositorioWorkflowOportunidadesSqlAlchemy,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     RepositorioEtiquetasSqlAlchemy,
     RepositorioPersonasSqlAlchemy,
@@ -39,6 +42,7 @@ def _crear(etiquetas: list[str], asignados: list[str]) -> Tarea:
             RepositorioTareasSqlAlchemy(sesion),
             RepositorioEtiquetasSqlAlchemy(sesion),
             RepositorioPersonasSqlAlchemy(sesion),
+            RepositorioWorkflowOportunidadesSqlAlchemy(sesion),
         ).ejecutar(
             nombre="C",
             descripcion="d",

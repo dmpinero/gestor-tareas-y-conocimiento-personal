@@ -6,12 +6,14 @@ from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
+from gestor_tareas.aplicacion.tarea.marcar_paso_hecho import MarcarPasoHecho
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
-from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
+from gestor_tareas.dominio.tarea.entidades import Oportunidad, PasoOportunidad, Tarea, TipoTarea
 from tests.unitarios.aplicacion.dobles import (
     RepositorioEtiquetasFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
+    RepositorioWorkflowOportunidadesFalso,
 )
 
 _FECHA_CREACION = datetime(2026, 11, 9, 10, 30, 0)
@@ -19,19 +21,28 @@ _FECHA_VENCIMIENTO = datetime(2026, 11, 20, 18, 0, 0)
 
 
 class _Repositorios:
-    def __init__(self, etiquetas: tuple[str, ...] = (), personas: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        etiquetas: tuple[str, ...] = (),
+        personas: tuple[str, ...] = (),
+        workflow: tuple[str, ...] = (),
+    ) -> None:
         self.tareas = RepositorioTareasFalso()
         self.etiquetas = RepositorioEtiquetasFalso(*etiquetas)
         self.personas = RepositorioPersonasFalso(*personas)
+        self.workflow = RepositorioWorkflowOportunidadesFalso(*workflow)
 
     def crear(self) -> CrearTarea:
-        return CrearTarea(self.tareas, self.etiquetas, self.personas)
+        return CrearTarea(self.tareas, self.etiquetas, self.personas, self.workflow)
 
     def actualizar(self) -> ActualizarTarea:
         return ActualizarTarea(self.tareas, self.etiquetas, self.personas)
 
     def marcar_completada(self) -> MarcarCompletada:
         return MarcarCompletada(self.tareas)
+
+    def marcar_paso_hecho(self) -> MarcarPasoHecho:
+        return MarcarPasoHecho(self.tareas)
 
 
 def test_crear_tarea_la_guarda_y_le_asigna_id() -> None:
@@ -349,3 +360,158 @@ def test_actualizar_tarea_conserva_el_estado_completada() -> None:
 
     assert actualizada.completada is True
     assert repos.tareas.listar()[0].completada is True
+
+
+# --- Pasos de las oportunidades ---------------------------------------------------
+
+_WORKFLOW = ("Contactar", "Proponer", "Cerrar")
+
+
+def _crear_oportunidad(repos: _Repositorios, nombre: str = "Venta") -> Tarea:
+    return repos.crear().ejecutar(
+        nombre=nombre,
+        descripcion="d",
+        fecha_creacion=_FECHA_CREACION,
+        tipo=TipoTarea.OPORTUNIDAD,
+        oportunidad=Oportunidad(codigo="OP-1"),
+    )
+
+
+def _editar(repos: _Repositorios, id_tarea: int, tipo: TipoTarea | None) -> Tarea:
+    return repos.actualizar().ejecutar(
+        id_tarea,
+        nombre="Editada",
+        descripcion="d",
+        fecha_creacion=_FECHA_CREACION,
+        tipo=tipo,
+        oportunidad=Oportunidad(codigo="OP-2") if tipo is TipoTarea.OPORTUNIDAD else None,
+    )
+
+
+def _pasos_sin_id(tarea: Tarea) -> list[tuple[int, str, bool]]:
+    return [(p.numero, p.nombre, p.hecho) for p in tarea.pasos_oportunidad]
+
+
+def test_crear_una_oportunidad_le_copia_los_pasos_del_workflow_en_orden_y_pendientes() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+    # El workflow se lee por número, aunque se haya guardado en otro orden.
+    repos.workflow.pasos.reverse()
+
+    tarea = _crear_oportunidad(repos)
+
+    esperados = [(1, "Contactar", False), (2, "Proponer", False), (3, "Cerrar", False)]
+    assert _pasos_sin_id(tarea) == esperados
+    assert all(p.id is not None for p in tarea.pasos_oportunidad)
+    assert _pasos_sin_id(repos.tareas.listar()[0]) == esperados
+
+
+def test_crear_una_tarea_sin_tipo_no_le_copia_pasos_ni_lee_el_workflow() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+
+    tarea = repos.crear().ejecutar(nombre="T", descripcion="d", fecha_creacion=_FECHA_CREACION)
+
+    assert tarea.pasos_oportunidad == []
+    assert repos.workflow.lecturas_para_copiar == 0
+
+
+def test_crear_una_oportunidad_con_el_workflow_vacio_no_le_copia_pasos() -> None:
+    repos = _Repositorios()
+
+    assert _crear_oportunidad(repos).pasos_oportunidad == []
+
+
+def test_los_pasos_copiados_no_cambian_al_cambiar_el_workflow_despues() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+    tarea = _crear_oportunidad(repos)
+
+    repos.workflow.pasos[0].nombre = "Renombrado"
+    repos.workflow.pasos.pop()
+    nueva = _crear_oportunidad(repos, "Otra")
+
+    guardada = repos.tareas.obtener_por_id(tarea.id)
+    assert [p.nombre for p in guardada.pasos_oportunidad] == ["Contactar", "Proponer", "Cerrar"]
+    assert [p.nombre for p in nueva.pasos_oportunidad] == ["Renombrado", "Proponer"]
+
+
+def test_editar_una_oportunidad_que_sigue_siendolo_conserva_sus_pasos() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+    tarea = _crear_oportunidad(repos)
+    repos.marcar_paso_hecho().ejecutar(tarea.id, tarea.pasos_oportunidad[0].id, True)
+
+    editada = _editar(repos, tarea.id, TipoTarea.OPORTUNIDAD)
+
+    esperados = [(1, "Contactar", True), (2, "Proponer", False), (3, "Cerrar", False)]
+    assert _pasos_sin_id(editada) == esperados
+    assert _pasos_sin_id(repos.tareas.obtener_por_id(tarea.id)) == esperados
+
+
+def test_editar_una_oportunidad_para_quitarle_el_tipo_borra_sus_pasos() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+    tarea = _crear_oportunidad(repos)
+
+    editada = _editar(repos, tarea.id, None)
+
+    assert editada.pasos_oportunidad == []
+    assert repos.tareas.obtener_por_id(tarea.id).pasos_oportunidad == []
+
+
+def test_editar_una_tarea_para_hacerla_oportunidad_no_le_genera_pasos() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+    tarea = repos.crear().ejecutar(nombre="T", descripcion="d", fecha_creacion=_FECHA_CREACION)
+
+    editada = _editar(repos, tarea.id, TipoTarea.OPORTUNIDAD)
+
+    assert editada.pasos_oportunidad == []
+    assert repos.tareas.obtener_por_id(tarea.id).pasos_oportunidad == []
+    assert repos.workflow.lecturas_para_copiar == 0
+
+
+def test_marcar_un_paso_como_hecho_y_pendiente_solo_cambia_ese_paso() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+    tarea = _crear_oportunidad(repos)
+    segundo = tarea.pasos_oportunidad[1]
+
+    hecho = repos.marcar_paso_hecho().ejecutar(tarea.id, segundo.id, True)
+
+    assert _pasos_sin_id(hecho) == [
+        (1, "Contactar", False),
+        (2, "Proponer", True),
+        (3, "Cerrar", False),
+    ]
+    assert hecho.nombre == tarea.nombre
+    assert _pasos_sin_id(repos.tareas.obtener_por_id(tarea.id)) == _pasos_sin_id(hecho)
+
+    pendiente = repos.marcar_paso_hecho().ejecutar(tarea.id, segundo.id, False)
+
+    assert [p.hecho for p in pendiente.pasos_oportunidad] == [False, False, False]
+
+
+def test_marcar_un_paso_de_una_tarea_que_no_existe_lanza_no_encontrada() -> None:
+    repos = _Repositorios()
+
+    with pytest.raises(EntidadNoEncontradaError, match="No existe la tarea con id 99"):
+        repos.marcar_paso_hecho().ejecutar(99, 1, True)
+
+
+def test_marcar_un_paso_que_no_existe_lanza_no_encontrada() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+    tarea = _crear_oportunidad(repos)
+
+    with pytest.raises(EntidadNoEncontradaError, match=f"en la tarea con id {tarea.id}"):
+        repos.marcar_paso_hecho().ejecutar(tarea.id, 999, True)
+
+
+def test_marcar_un_paso_de_otra_tarea_lanza_no_encontrada_y_no_lo_cambia() -> None:
+    repos = _Repositorios(workflow=_WORKFLOW)
+    una = _crear_oportunidad(repos, "Una")
+    otra = _crear_oportunidad(repos, "Otra")
+    paso_de_otra = otra.pasos_oportunidad[0]
+
+    with pytest.raises(EntidadNoEncontradaError):
+        repos.marcar_paso_hecho().ejecutar(una.id, paso_de_otra.id, True)
+
+    assert repos.tareas.obtener_por_id(otra.id).pasos_oportunidad[0].hecho is False
+
+
+def test_paso_oportunidad_nuevo_esta_pendiente() -> None:
+    assert PasoOportunidad(numero=1, nombre="Contactar").hecho is False

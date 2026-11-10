@@ -25,6 +25,7 @@ const tareaEjemplo = {
   tipo: null,
   oportunidad: null,
   completada: false,
+  pasos_oportunidad: [],
 }
 
 const ETIQUETAS = [
@@ -326,6 +327,72 @@ describe('useTiendaTareas', () => {
 
       expect(clienteApi.parchear).not.toHaveBeenCalled()
       expect(tienda.tareas).toEqual([tareaEjemplo])
+    })
+  })
+
+  describe('alternarPasoTarea', () => {
+    const PASOS = [
+      { id: 10, numero: 1, nombre: 'Contactar', hecho: false },
+      { id: 11, numero: 2, nombre: 'Enviar propuesta', hecho: true },
+    ]
+    const oportunidad = {
+      ...tareaEjemplo,
+      tipo: 'oportunidad' as const,
+      oportunidad: { codigo: 'OP-1', descripcion: null, observaciones: null },
+      pasos_oportunidad: PASOS,
+    }
+
+    it('marca como hecho un paso pendiente con PATCH /tareas/{id}/pasos/{id_paso} y reemplaza la tarea', async () => {
+      const otra = { ...tareaEjemplo, id: 2, nombre: 'Otra' }
+      vi.mocked(clienteApi.obtener).mockResolvedValue([oportunidad, otra])
+      const actualizada = {
+        ...oportunidad,
+        pasos_oportunidad: [{ ...PASOS[0]!, hecho: true }, PASOS[1]!],
+      }
+      vi.mocked(clienteApi.parchear).mockResolvedValue(actualizada)
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.alternarPasoTarea(1, 10)
+
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/pasos/10', { hecho: true })
+      expect(tienda.tareas).toEqual([actualizada, otra])
+      expect(tienda.error).toBeNull()
+    })
+
+    it('vuelve a pendiente un paso hecho enviando el valor negado', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([oportunidad])
+      vi.mocked(clienteApi.parchear).mockResolvedValue(oportunidad)
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.alternarPasoTarea(1, 11)
+
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/pasos/11', { hecho: false })
+    })
+
+    it('si la API falla guarda el mensaje de error y no altera la lista', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([oportunidad])
+      vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('Paso no encontrado'))
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.alternarPasoTarea(1, 10)
+
+      expect(tienda.error).toBe('Paso no encontrado')
+      expect(tienda.tareas).toEqual([oportunidad])
+    })
+
+    it('con una tarea o un paso que no están en la lista no llama a la API', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([oportunidad])
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.alternarPasoTarea(99, 10)
+      await tienda.alternarPasoTarea(1, 99)
+
+      expect(clienteApi.parchear).not.toHaveBeenCalled()
+      expect(tienda.tareas).toEqual([oportunidad])
     })
   })
 })

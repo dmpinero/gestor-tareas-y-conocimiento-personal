@@ -90,11 +90,32 @@ async function confirmarEliminacion(): Promise<void> {
   if (!paso) return
   pasoAEliminar.value = null
   await tienda.eliminar(paso.id)
+  // La fila del paso eliminado desaparece: el foco va al campo de alta en vez
+  // de perderse en el <body>.
+  await nextTick()
+  document.getElementById('nombre-paso-nuevo')?.focus()
+}
+
+// Tras mover un paso con los botones, devuelve el foco al mismo botón del paso
+// movido (o al otro si ya está en un extremo). El botón se desactiva mientras se
+// guarda y el navegador mandaba el foco al <body>.
+async function enfocarBotonDeMover(nombre: string, accion: 'Subir' | 'Bajar'): Promise<void> {
+  await nextTick()
+  const otra = accion === 'Subir' ? 'Bajar' : 'Subir'
+  for (const etiqueta of [`${accion} paso ${nombre}`, `${otra} paso ${nombre}`]) {
+    const boton = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find(
+      (b) => b.getAttribute('aria-label') === etiqueta && !b.disabled,
+    )
+    if (boton) {
+      boton.focus()
+      return
+    }
+  }
 }
 
 // Mueve el paso de `origen` a la posición `destino` (índices de la lista),
 // guarda el nuevo orden y anuncia la posición final a los lectores de pantalla.
-async function mover(origen: number, destino: number): Promise<void> {
+async function mover(origen: number, destino: number, accion?: 'Subir' | 'Bajar'): Promise<void> {
   const lista = pasos.value
   const paso = lista[origen]
   if (!paso || origen === destino || destino < 0 || destino >= lista.length) return
@@ -108,6 +129,7 @@ async function mover(origen: number, destino: number): Promise<void> {
   if (!correcto) return
   const movido = tienda.pasos.find((p) => p.id === paso.id)
   if (movido) anuncio.value = `${movido.nombre} movido a la posición ${movido.numero}`
+  if (movido && accion) await enfocarBotonDeMover(movido.nombre, accion)
 }
 
 function alEmpezarArrastre(evento: DragEvent, indice: number): void {
@@ -255,7 +277,7 @@ function posicionDestino(indice: number): 'antes' | 'despues' | undefined {
             variant="ghost"
             :aria-label="`Subir paso ${paso.nombre}`"
             :disabled="indice === 0 || reordenando"
-            @click="mover(indice, indice - 1)"
+            @click="mover(indice, indice - 1, 'Subir')"
           >
             <ArrowUp aria-hidden="true" />
           </Button>
@@ -265,7 +287,7 @@ function posicionDestino(indice: number): 'antes' | 'despues' | undefined {
             variant="ghost"
             :aria-label="`Bajar paso ${paso.nombre}`"
             :disabled="indice === pasos.length - 1 || reordenando"
-            @click="mover(indice, indice + 1)"
+            @click="mover(indice, indice + 1, 'Bajar')"
           >
             <ArrowDown aria-hidden="true" />
           </Button>

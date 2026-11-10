@@ -244,6 +244,8 @@ describe('VistaWorkflowOportunidades', () => {
       expect(clienteApi.eliminar).toHaveBeenCalledWith(`${RUTA}/2`)
       expect(textosPasos(vista)).toEqual(['1. Contacto inicial', '2. Cierre'])
       expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+      // La fila del paso eliminado ya no existe: el foco va al campo de alta.
+      expect(document.activeElement?.id).toBe('nombre-paso-nuevo')
     })
 
     it('cancelar la confirmación no elimina el paso', async () => {
@@ -271,6 +273,40 @@ describe('VistaWorkflowOportunidades', () => {
       expect(boton(vista, 'Bajar paso Contacto inicial').attributes('disabled')).toBeUndefined()
       expect(boton(vista, 'Subir paso Cierre').attributes('disabled')).toBeUndefined()
       expect(boton(vista, 'Bajar paso Cierre').attributes('disabled')).toBeDefined()
+    })
+
+    // Regresión (accesibilidad): el botón pulsado se desactiva mientras se guarda
+    // y el navegador mandaba el foco al <body>; quien usa teclado perdía su sitio.
+    it('tras "Bajar" el foco vuelve al botón "Bajar" del paso movido', async () => {
+      const vista = await montar()
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(ordenarSegun([2, 1, 3]))
+      const bajar = boton(vista, 'Bajar paso Contacto inicial')
+      ;(bajar.element as HTMLButtonElement).focus()
+
+      await bajar.trigger('click')
+      await flushPromises()
+
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Bajar paso Contacto inicial')
+    })
+
+    it('si el paso llega al final, el foco pasa a su botón "Subir"', async () => {
+      const vista = await montar()
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(ordenarSegun([1, 3, 2]))
+
+      await boton(vista, 'Bajar paso Propuesta').trigger('click')
+      await flushPromises()
+
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Subir paso Propuesta')
+    })
+
+    it('si el paso llega al principio, el foco pasa a su botón "Bajar"', async () => {
+      const vista = await montar()
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(ordenarSegun([2, 1, 3]))
+
+      await boton(vista, 'Subir paso Propuesta').trigger('click')
+      await flushPromises()
+
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Bajar paso Propuesta')
     })
 
     it('"Subir" guarda el nuevo orden y muestra los números recalculados', async () => {

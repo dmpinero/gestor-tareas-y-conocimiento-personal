@@ -15,6 +15,15 @@ class RepositorioWorkflowOportunidades(Protocol):
         """Devuelve todos los pasos ordenados por número."""
         ...
 
+    def leer_pasos_para_copiar(self) -> list[PasoWorkflowOportunidad]:
+        """Devuelve todos los pasos ordenados por número, para copiarlos en una tarea.
+
+        La lectura nunca ve el workflow a medias de un alta, una baja o una
+        reordenación simultánea, y las impide hasta que termine la transacción de
+        quien lee: la copia debe guardarse en esa misma transacción.
+        """
+        ...
+
     def anadir_paso(self, nombre: str) -> PasoWorkflowOportunidad:
         """Guarda un paso nuevo al final del workflow (número = último + 1)."""
         ...

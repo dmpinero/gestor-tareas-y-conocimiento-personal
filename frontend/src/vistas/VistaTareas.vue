@@ -48,8 +48,26 @@ const panelAbierto = ref(false)
 const errorFormulario = ref<string | null>(null)
 // `null` en modo crear; el id de la tarea en modo editar.
 const idEnEdicion = ref<number | null>(null)
-// Tarea abierta en la modal de detalle, o `null` si está cerrada.
-const tareaEnDetalle = ref<Tarea | null>(null)
+// Id de la tarea abierta en la modal de detalle, o `null` si está cerrada. Se
+// lee de la tienda para que la modal refleje los cambios (p. ej. un paso marcado).
+const idEnDetalle = ref<number | null>(null)
+const tareaEnDetalle = computed<Tarea | null>(
+  () => tienda.tareas.find((tarea) => tarea.id === idEnDetalle.value) ?? null,
+)
+
+function alternarPasoEnDetalle(idPaso: number): void {
+  if (idEnDetalle.value !== null) void tienda.alternarPasoTarea(idEnDetalle.value, idPaso)
+}
+
+// Texto del tipo en la tabla; en una oportunidad con pasos, con su avance
+// ("Oportunidad · 3/7"). Ordenar, filtrar y exportar usan solo el tipo.
+function textoTipoEnTabla(tarea: Tarea): string {
+  const etiqueta = etiquetaTipoTarea(tarea.tipo)
+  if (etiqueta === null) return '—'
+  if (tarea.tipo !== 'oportunidad' || tarea.pasos_oportunidad.length === 0) return etiqueta
+  const hechos = tarea.pasos_oportunidad.filter((paso) => paso.hecho).length
+  return `${etiqueta} · ${hechos}/${tarea.pasos_oportunidad.length}`
+}
 
 const ERROR_FECHA_HORA = 'La fecha y hora debe tener el formato dd/mm/aaaa hh:mm:ss y ser válida.'
 const ERROR_FECHA_VENCIMIENTO =
@@ -722,9 +740,7 @@ async function guardar(): Promise<void> {
             </template>
             <template v-else>—</template>
           </TableCell>
-          <TableCell :class="claseCelda(tarea)">{{
-            etiquetaTipoTarea(tarea.tipo) ?? '—'
-          }}</TableCell>
+          <TableCell :class="claseCelda(tarea)">{{ textoTipoEnTabla(tarea) }}</TableCell>
           <TableCell>
             <div class="flex gap-1">
               <Button
@@ -741,7 +757,7 @@ async function guardar(): Promise<void> {
                 size="icon"
                 :aria-label="`Ver detalle de la tarea ${tarea.nombre}`"
                 title="Detalle"
-                @click="tareaEnDetalle = tarea"
+                @click="idEnDetalle = tarea.id"
               >
                 <Eye />
               </Button>
@@ -762,6 +778,11 @@ async function guardar(): Promise<void> {
       </TableBody>
     </Table>
 
-    <DetalleTarea :tarea="tareaEnDetalle" @cerrar="tareaEnDetalle = null" />
+    <DetalleTarea
+      :tarea="tareaEnDetalle"
+      :error="tienda.error"
+      @cerrar="idEnDetalle = null"
+      @alternar-paso="alternarPasoEnDetalle"
+    />
   </section>
 </template>

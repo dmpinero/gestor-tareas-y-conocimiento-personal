@@ -11,7 +11,8 @@ class RepositorioTareas(Protocol):
     """
 
     def crear(self, tarea: Tarea) -> Tarea:
-        """Guarda una tarea nueva, con el estado ``tarea.completada``."""
+        """Guarda una tarea nueva, con el estado ``tarea.completada`` y sus
+        ``tarea.pasos_oportunidad`` (a los que asigna id)."""
         ...
 
     def listar(self) -> list[Tarea]:
@@ -31,6 +32,10 @@ class RepositorioTareas(Protocol):
 
         El estado completada no cambia (se ignora ``tarea.completada``): solo lo
         cambia ``cambiar_completada``.
+
+        Los pasos de la oportunidad tampoco cambian (se ignora
+        ``tarea.pasos_oportunidad``), salvo que la tarea deje de ser oportunidad
+        (``tarea.tipo`` distinto de ``TipoTarea.OPORTUNIDAD``): entonces se borran.
         """
         ...
 
@@ -38,5 +43,14 @@ class RepositorioTareas(Protocol):
         """Guarda el estado completada de la tarea y la devuelve, o ``None`` si no existe.
 
         El resto de datos de la tarea no cambia.
+        """
+        ...
+
+    def cambiar_hecho_paso(self, id_tarea: int, id_paso: int, hecho: bool) -> Tarea | None:
+        """Marca el paso de la oportunidad como hecho o pendiente y devuelve la tarea.
+
+        Devuelve ``None`` si la tarea no tiene un paso con ese id (porque la tarea
+        no existe, el paso no existe o es de otra tarea). El resto de datos de la
+        tarea no cambia.
         """
         ...

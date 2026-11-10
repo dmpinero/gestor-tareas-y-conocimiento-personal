@@ -164,6 +164,7 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         tipo=None,
         oportunidad=None,
         completada=False,
+        pasos_oportunidad=[],
     )
 
     assert salida.model_dump(mode="json") == {
@@ -178,6 +179,7 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "tipo": None,
         "oportunidad": None,
         "completada": False,
+        "pasos_oportunidad": [],
     }
 
 
@@ -194,6 +196,7 @@ def test_salida_serializa_la_fecha_de_vencimiento_ausente_como_null() -> None:
         tipo=None,
         oportunidad=None,
         completada=False,
+        pasos_oportunidad=[],
     )
 
     assert salida.model_dump(mode="json")["fecha_vencimiento"] is None

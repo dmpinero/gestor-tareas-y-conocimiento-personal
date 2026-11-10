@@ -10,6 +10,7 @@ from tests.unitarios.aplicacion.dobles import (
     RepositorioEtiquetasFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
+    RepositorioWorkflowOportunidadesFalso,
 )
 
 
@@ -85,7 +86,12 @@ class _RepositorioTareasQueChocaUnaVez(RepositorioTareasFalso):
 def test_crear_tarea_repite_el_alta_completa_si_choca_con_otra_peticion() -> None:
     tareas = _RepositorioTareasQueChocaUnaVez()
 
-    tarea = CrearTarea(tareas, RepositorioEtiquetasFalso(), RepositorioPersonasFalso()).ejecutar(
+    tarea = CrearTarea(
+        tareas,
+        RepositorioEtiquetasFalso(),
+        RepositorioPersonasFalso(),
+        RepositorioWorkflowOportunidadesFalso(),
+    ).ejecutar(
         nombre="Uno",
         descripcion="d",
         fecha_creacion=datetime(2026, 11, 9, 10, 0, 0),
