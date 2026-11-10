@@ -20,3 +20,8 @@ class ConflictoDeConcurrenciaError(Exception):
     Por ejemplo, un interbloqueo en la base de datos. Ya no queda nada a medias:
     puede reintentarse la operación completa desde el principio.
     """
+
+
+class OrdenDePasosInvalidoError(Exception):
+    """Se lanza al reordenar el workflow con una lista que no es una permutación
+    exacta de sus pasos (con repetidos, con pasos de menos o con ids que no existen)."""

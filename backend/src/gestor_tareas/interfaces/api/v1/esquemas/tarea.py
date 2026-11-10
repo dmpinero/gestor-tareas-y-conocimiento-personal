@@ -14,6 +14,11 @@ from pydantic import (
 )
 
 from gestor_tareas.dominio.tarea.entidades import TipoTarea
+from gestor_tareas.interfaces.api.v1.esquemas.texto import (
+    PATRON_NO_VACIO,
+    TextoObligatorio,
+    recortar_espacios,
+)
 
 # Fecha y hora local en ISO 8601 sin zona horaria: "YYYY-MM-DDTHH:MM:SS", con una
 # fracción de segundo opcional que se descarta. El patrón solo admite fechas reales
@@ -66,41 +71,13 @@ FechaHoraLocal = Annotated[
 ]
 
 
-# Espacios según ECMA-262 (`\s` en las expresiones regulares de JSON Schema):
-# WhiteSpace y LineTerminator. Python (`str.isspace`) y el motor de Rust de
-# Pydantic usan otras definiciones (p. ej. Python trata `\x1c` como espacio),
-# así que se fija la lista para que contrato y validación coincidan.
-ESPACIOS_JSON_SCHEMA = (
-    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
-    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
-)
-
-
-def _recortar_espacios(valor: object) -> object:
-    """Recorta los espacios de JSON Schema de los extremos del texto.
-
-    Tras recortar, un texto no vacío contiene al menos un carácter que no es
-    espacio, que es justo lo que publica el contrato con `pattern: "\\S"`.
-    """
-    return valor.strip(ESPACIOS_JSON_SCHEMA) if isinstance(valor, str) else valor
-
-
-# Texto obligatorio: se recorta antes de validar, así que uno formado solo por
-# espacios (incluidos los Unicode, como el espacio duro) queda vacío y da 422.
-TextoObligatorio = Annotated[str, BeforeValidator(_recortar_espacios)]
-
-# Solo se publica en el contrato: la comprobación real es `min_length=1` tras
-# recortar, para no depender de la semántica de `\S` del motor de Pydantic.
-_PATRON_NO_VACIO = {"pattern": r"\S"}
-
-
 # Nombres de etiqueta y de persona: mismo enfoque que `nombre` (recorte con los
 # espacios de JSON Schema y `pattern: "\\S"` publicado en cada elemento).
 NombreEtiqueta = Annotated[
-    TextoObligatorio, Field(min_length=1, max_length=50, json_schema_extra=_PATRON_NO_VACIO)
+    TextoObligatorio, Field(min_length=1, max_length=50, json_schema_extra=PATRON_NO_VACIO)
 ]
 NombrePersona = Annotated[
-    TextoObligatorio, Field(min_length=1, max_length=100, json_schema_extra=_PATRON_NO_VACIO)
+    TextoObligatorio, Field(min_length=1, max_length=100, json_schema_extra=PATRON_NO_VACIO)
 ]
 
 
@@ -131,7 +108,7 @@ def _texto_opcional(valor: object) -> object:
     Así un texto vacío o formado solo por espacios equivale a no indicarlo, y la
     API no guarda ni devuelve cadenas vacías en los campos opcionales.
     """
-    recortado = _recortar_espacios(valor)
+    recortado = recortar_espacios(valor)
     return None if recortado == "" else recortado
 
 
@@ -147,9 +124,7 @@ ObservacionesOportunidad = Annotated[
 class OportunidadEsquema(BaseModel):
     """Datos de una tarea de tipo oportunidad."""
 
-    codigo: TextoObligatorio = Field(
-        min_length=1, max_length=10, json_schema_extra=_PATRON_NO_VACIO
-    )
+    codigo: TextoObligatorio = Field(min_length=1, max_length=10, json_schema_extra=PATRON_NO_VACIO)
     descripcion: DescripcionOportunidad = Field(
         default=None, description="Opcional. Vacía o solo con espacios se guarda como null."
     )
@@ -215,11 +190,11 @@ class TareaCrearEsquema(BaseModel):
     model_config = ConfigDict(json_schema_extra=_regla_tipo_y_datos_en_el_contrato())
 
     nombre: TextoObligatorio = Field(
-        min_length=1, max_length=200, json_schema_extra=_PATRON_NO_VACIO
+        min_length=1, max_length=200, json_schema_extra=PATRON_NO_VACIO
     )
     prioridad: PrioridadEntera | None = None
     descripcion: TextoObligatorio = Field(
-        min_length=1, max_length=500, json_schema_extra=_PATRON_NO_VACIO
+        min_length=1, max_length=500, json_schema_extra=PATRON_NO_VACIO
     )
     fecha_creacion: FechaHoraLocal
     fecha_vencimiento: FechaHoraLocal | None = Field(

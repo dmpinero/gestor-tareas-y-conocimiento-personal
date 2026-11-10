@@ -74,3 +74,15 @@ export interface ElementoCatalogo {
   id: number
   nombre: string
 }
+
+/**
+ * Paso del workflow estándar de las oportunidades
+ * (`/workflow-oportunidades/pasos`). `numero` es la posición 1..n que asigna
+ * el sistema; un paso nuevo va al final y al reordenar se recalcula.
+ */
+export interface PasoWorkflow {
+  id: number
+  numero: number
+  /** Entre 1 y 50 caracteres, sin espacios al principio ni al final. */
+  nombre: string
+}

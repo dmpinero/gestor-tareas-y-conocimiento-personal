@@ -4,8 +4,10 @@ from gestor_tareas.infraestructura.persistencia import modelos
 
 
 def vaciar_tablas(sesion: Session) -> None:
-    """Vacía las tablas de tareas y catálogos, respetando el orden de las claves ajenas."""
+    """Vacía las tablas de tareas, catálogos y workflow, respetando el orden de las
+    claves ajenas."""
     for tabla in (
+        modelos.PasoWorkflowOportunidadModelo.__table__,
         modelos.tarea_etiquetas,
         modelos.tarea_personas,
         modelos.OportunidadModelo.__table__,
