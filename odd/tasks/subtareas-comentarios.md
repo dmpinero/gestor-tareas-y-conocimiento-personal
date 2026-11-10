@@ -28,14 +28,16 @@ Rama: `feature/subtareas-comentarios` (desde `main` v1.17.0) · Entrega: `stacke
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1, S2, S4 (backend: subtareas y comentarios, dos migraciones encadenadas, endpoints, tests) | delegada (writer A, paralelo) | pendiente | — |
-| T2 | S1 (frontend: componente `SubtareasTarea`, tipos, acciones del almacén, specs) | delegada (writer B, paralelo) | pendiente | — |
-| T3 | S2 (frontend: componente `ComentariosTarea`, specs) | delegada (writer C, paralelo) | pendiente | — |
-| T4 | S3 (integración en `DetalleTarea` en dos columnas) y e2e contra pila aislada | inline | pendiente | — |
-| T5 | S1–S4 (verificador independiente: migraciones y contrato, items 1 y 3) | delegada (verificador) | pendiente | — |
+| T1 | S1, S2, S4 (backend: subtareas y comentarios, dos migraciones encadenadas, endpoints, tests) | delegada (writer A, paralelo) | hecha | `e3e1c24` |
+| T2 | S1 (frontend: componente `SubtareasTarea`, tipos, acciones del almacén, specs) | delegada (writer B, paralelo) | hecha | `d3498d4` |
+| T3 | S2 (frontend: componente `ComentariosTarea`, specs) | delegada (writer C, paralelo) | hecha | `d3498d4` + corrección |
+| T4 | S3 (integración en `DetalleTarea` en dos columnas) y e2e contra pila aislada | inline | hecha | `d3498d4` |
+| T5 | S1–S4 (verificador independiente: migraciones y contrato, items 1 y 3) | delegada (verificador) | hecha (2 blockers corregidos) | — |
 
 ## Log
 
 - **L1** (2026-11-10) Pedido original del usuario (con imagen de referencia):
   > Quiero que implementes la posiblidad de crear subtareas dentro de una tarea, para ello se podrá hacer desde el detalle de la tarea, tal y como está en la imagen. También quiero poder tener un histórico de comentarios en cada tarea, indicando un texto (500 caracteres) como se ve en la parte derecha de la imagen. Esto hazlo en la parte derecha del detalle
 - **L2** (2026-11-10) Propuesta de diseño (campos de subtarea, comentarios sin autor y sin edición) → usuario: "sí, hazlo así".
+- **L3** (2026-11-10) T1 (writer A): tablas `subtareas` y `comentarios` (migraciones `e8b3f1a6d2c4` y `f7c2d9e4a1b8`), endpoints de S4; la persona asignada reutiliza `obtener_o_crear` del catálogo; las operaciones de subtarea releen la tarea tras confirmar (antes podían devolver `asignado: null` por la instantánea de REPEATABLE READ). 570 tests, 98,54 %, contrato 10/10. T2 y T3 (writers B y C): `SubtareasTarea` y `ComentariosTarea`. T4 inline: detalle en dos columnas; los mocks de `VistaTareas.spec` devolvían tareas para la ruta de comentarios (`RangeError` sin capturar que contaminaba otro test) y ahora devuelven `[]`. Playwright 34/34 dos veces.
+- **L4** (2026-11-10) T5, verificador: backend, migraciones (hash y esquema idénticos), contrato aditivo y concurrencia sin 5xx. Blockers: B1 el historial desplazable de comentarios no era enfocable (axe `scrollable-region-focusable` con ~15 comentarios); B2 al enviar con el botón el foco caía en el <body>. Corregidos (contenedor `role="region"` "Comentarios anteriores" con `tabindex="0"`; el foco vuelve al campo tras enviar), con RED en 2 tests unitarios y un e2e con 17 comentarios y auditoría axe. Vitest 367/367, Playwright 35/35; también se corrige el aviso de oxlint en la spec. Advisories: la tabla de subtareas desplaza en horizontal en móvil; el contador cuenta unidades UTF-16; no existe `DELETE /tareas/{id}` (el borrado en cascada solo se comprueba en base de datos).
