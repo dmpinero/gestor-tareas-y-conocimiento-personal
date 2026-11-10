@@ -150,4 +150,25 @@ describe('FiltroMultiple', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[['Mi etiqueta', '']]])
     wrapper.unmount()
   })
+
+  describe('con un nombre masculino', () => {
+    const propsMasculino = {
+      ...propsBase,
+      nombreSingular: 'tipo',
+      nombrePlural: 'tipos',
+      genero: 'masculino' as const,
+    }
+
+    it('con todos seleccionados muestra "Todos los tipos"', () => {
+      const wrapper = mount(FiltroMultiple, { props: { ...propsMasculino, modelValue: [1, 2] } })
+
+      expect(wrapper.get('button').text()).toBe('Todos los tipos')
+    })
+
+    it('sin selección muestra "Ningún tipo"', () => {
+      const wrapper = mount(FiltroMultiple, { props: { ...propsMasculino, modelValue: [] } })
+
+      expect(wrapper.get('button').text()).toBe('Ningún tipo')
+    })
+  })
 })

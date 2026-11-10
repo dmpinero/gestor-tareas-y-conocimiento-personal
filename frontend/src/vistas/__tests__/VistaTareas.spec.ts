@@ -30,6 +30,8 @@ const TAREAS = [
     fecha_vencimiento: '2026-11-20T18:00:00',
     etiquetas: ['Backend', 'Urgente'],
     asignados: ['Ana'],
+    tipo: null,
+    oportunidad: null,
   },
   {
     id: 2,
@@ -40,6 +42,8 @@ const TAREAS = [
     fecha_vencimiento: null,
     etiquetas: [],
     asignados: [],
+    tipo: null,
+    oportunidad: null,
   },
 ]
 
@@ -52,8 +56,22 @@ const PERSONAS = [
   { id: 2, nombre: 'Luis' },
 ]
 
-// Campos de una tarea que el test no rellena: sin vencimiento, etiquetas ni personas.
-const SIN_EXTRAS = { fecha_vencimiento: null, etiquetas: [], asignados: [] }
+// Campos de una tarea que el test no rellena: sin vencimiento, etiquetas, personas ni tipo.
+const SIN_EXTRAS = {
+  fecha_vencimiento: null,
+  etiquetas: [],
+  asignados: [],
+  tipo: null,
+  oportunidad: null,
+}
+
+const OPORTUNIDAD = {
+  codigo: 'OP-1',
+  descripcion: 'Contrato de soporte',
+  observaciones: 'Primera línea\nSegunda línea',
+}
+// "Escribir informe" convertida en una oportunidad.
+const TAREA_OPORTUNIDAD = { ...TAREAS[0], tipo: 'oportunidad', oportunidad: OPORTUNIDAD }
 
 // Fecha y hora "actuales" fijas para que el valor por defecto sea determinista.
 const AHORA = new Date(2026, 10, 9, 18, 45, 30)
@@ -156,6 +174,13 @@ async function enviar(panel: HTMLElement): Promise<void> {
   await flushPromises()
 }
 
+async function elegirTipo(panel: HTMLElement, valor: string): Promise<void> {
+  const selector = campo<HTMLSelectElement>(panel, '#tarea-tipo')
+  selector.value = valor
+  selector.dispatchEvent(new Event('change'))
+  await flushPromises()
+}
+
 describe('VistaTareas', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -184,6 +209,7 @@ describe('VistaTareas', () => {
       'Asignado a',
       'Fecha de creación',
       'Fecha de vencimiento',
+      'Tipo',
       'Acciones',
     ])
     expect(filasTabla(envoltorio)).toEqual([
@@ -195,9 +221,10 @@ describe('VistaTareas', () => {
         'Ana',
         '10/11/2026 09:30:00',
         '20/11/2026 18:00:00',
-        'Editar',
+        '—',
+        '',
       ],
-      ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', 'Editar'],
+      ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', '—', ''],
     ])
   })
 
@@ -310,7 +337,7 @@ describe('VistaTareas', () => {
       ...SIN_EXTRAS,
     })
     expect(filasTabla(envoltorio)).toEqual([
-      ['Con fecha', '—', 'Detalle', '—', '—', '02/01/2027 03:04:05', '—', 'Editar'],
+      ['Con fecha', '—', 'Detalle', '—', '—', '02/01/2027 03:04:05', '—', '—', ''],
     ])
   })
 
@@ -327,6 +354,8 @@ describe('VistaTareas', () => {
       fecha_vencimiento: '2026-11-30T12:00:00',
       etiquetas: ['Frontend', 'Urgente'],
       asignados: ['Luis'],
+      tipo: null,
+      oportunidad: null,
     })
     const panel = await abrirPanel(envoltorio)
 
@@ -359,6 +388,8 @@ describe('VistaTareas', () => {
       fecha_vencimiento: '2026-11-30T12:00:00',
       etiquetas: ['Urgente', 'Frontend'],
       asignados: ['Luis'],
+      tipo: null,
+      oportunidad: null,
     })
     // Tras guardar se vuelven a pedir los catálogos por si hay nombres nuevos.
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -372,7 +403,8 @@ describe('VistaTareas', () => {
         'Luis',
         AHORA_TEXTO,
         '30/11/2026 12:00:00',
-        'Editar',
+        '—',
+        '',
       ],
     ])
   })
@@ -448,6 +480,8 @@ describe('VistaTareas', () => {
       fecha_vencimiento: null,
       etiquetas: ['Urgente'],
       asignados: ['Ana'],
+      tipo: null,
+      oportunidad: null,
     })
     const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
 
@@ -468,6 +502,8 @@ describe('VistaTareas', () => {
       fecha_vencimiento: null,
       etiquetas: ['Urgente'],
       asignados: ['Ana'],
+      tipo: null,
+      oportunidad: null,
     })
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(filasTabla(envoltorio)).toEqual([
@@ -479,9 +515,10 @@ describe('VistaTareas', () => {
         'Ana',
         '11/11/2026 08:00:00',
         '—',
-        'Editar',
+        '—',
+        '',
       ],
-      ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', 'Editar'],
+      ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', '—', ''],
     ])
 
     // Tras editar, "Crear tarea" vuelve al modo crear con el formulario limpio.
@@ -542,7 +579,7 @@ describe('VistaTareas', () => {
     })
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(filasTabla(envoltorio)).toEqual([
-      ['Nueva', '1', 'Detalle', '—', '—', AHORA_TEXTO, '—', 'Editar'],
+      ['Nueva', '1', 'Detalle', '—', '—', AHORA_TEXTO, '—', '—', ''],
     ])
 
     const panelReabierto = await abrirPanel(envoltorio)
@@ -595,6 +632,236 @@ describe('VistaTareas', () => {
     expect(envoltorio.findAll('tbody tr')).toHaveLength(0)
   })
 
+  describe('tipo de tarea', () => {
+    it('el campo "Tipo de tarea" ofrece "Sin tipo" y "Oportunidad", sin tipo por defecto', async () => {
+      const panel = await abrirPanel(await montar())
+
+      expect(panel.querySelector('label[for="tarea-tipo"]')?.textContent?.trim()).toBe(
+        'Tipo de tarea',
+      )
+      const selector = campo<HTMLSelectElement>(panel, '#tarea-tipo')
+      expect([...selector.options].map((opcion) => [opcion.value, opcion.text])).toEqual([
+        ['', 'Sin tipo'],
+        ['oportunidad', 'Oportunidad'],
+      ])
+      expect(selector.value).toBe('')
+      expect(panel.querySelector('#oportunidad-codigo')).toBeNull()
+    })
+
+    it('al elegir "Oportunidad" muestra sus campos con sus restricciones', async () => {
+      const panel = await abrirPanel(await montar())
+
+      await elegirTipo(panel, 'oportunidad')
+
+      expect(panel.querySelector('fieldset legend')?.textContent?.trim()).toBe('Oportunidad')
+      const etiquetas = new Map(
+        [...panel.querySelectorAll('label[for]')].map((l) => [
+          l.getAttribute('for'),
+          l.textContent?.trim(),
+        ]),
+      )
+      expect(etiquetas.get('oportunidad-codigo')).toBe('Código de la oportunidad')
+      expect(etiquetas.get('oportunidad-descripcion')).toBe('Descripción de la oportunidad')
+      expect(etiquetas.get('oportunidad-observaciones')).toBe('Observaciones')
+      const codigo = campo<HTMLInputElement>(panel, '#oportunidad-codigo')
+      expect(codigo.required).toBe(true)
+      expect(codigo.getAttribute('maxlength')).toBe('10')
+      const descripcion = campo<HTMLInputElement>(panel, '#oportunidad-descripcion')
+      expect(descripcion.required).toBe(false)
+      expect(descripcion.getAttribute('maxlength')).toBe('200')
+      const observaciones = campo<HTMLTextAreaElement>(panel, '#oportunidad-observaciones')
+      expect(observaciones.tagName).toBe('TEXTAREA')
+      expect(observaciones.required).toBe(false)
+      expect(observaciones.getAttribute('maxlength')).toBe('5000')
+
+      await elegirTipo(panel, '')
+      expect(panel.querySelector('#oportunidad-codigo')).toBeNull()
+    })
+
+    it('crea una oportunidad enviando su tipo y sus campos, con los opcionales vacíos como null', async () => {
+      const envoltorio = await montar([])
+      vi.mocked(clienteApi.crear).mockResolvedValue({
+        id: 7,
+        nombre: 'Venta',
+        prioridad: null,
+        descripcion: 'Detalle',
+        fecha_creacion: AHORA_ISO,
+        ...SIN_EXTRAS,
+        tipo: 'oportunidad',
+        oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
+      })
+      const panel = await abrirPanel(envoltorio)
+
+      await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Venta')
+      await escribir(campo(panel, 'textarea[placeholder="Descripción"]'), 'Detalle')
+      await elegirTipo(panel, 'oportunidad')
+      await escribir(campo(panel, '#oportunidad-codigo'), 'OP-7')
+      await escribir(campo(panel, '#oportunidad-descripcion'), '   ')
+      await enviar(panel)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas', {
+        nombre: 'Venta',
+        prioridad: null,
+        descripcion: 'Detalle',
+        fecha_creacion: AHORA_ISO,
+        ...SIN_EXTRAS,
+        tipo: 'oportunidad',
+        oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
+      })
+      expect(filasTabla(envoltorio)).toEqual([
+        ['Venta', '—', 'Detalle', '—', '—', AHORA_TEXTO, '—', 'Oportunidad', ''],
+      ])
+    })
+
+    it('envía la descripción y las observaciones de la oportunidad escritas', async () => {
+      const envoltorio = await montar([])
+      vi.mocked(clienteApi.crear).mockResolvedValue({
+        id: 8,
+        nombre: 'Venta',
+        prioridad: null,
+        descripcion: 'Detalle',
+        fecha_creacion: AHORA_ISO,
+        ...SIN_EXTRAS,
+        tipo: 'oportunidad',
+        oportunidad: OPORTUNIDAD,
+      })
+      const panel = await abrirPanel(envoltorio)
+
+      await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Venta')
+      await escribir(campo(panel, 'textarea[placeholder="Descripción"]'), 'Detalle')
+      await elegirTipo(panel, 'oportunidad')
+      await escribir(campo(panel, '#oportunidad-codigo'), OPORTUNIDAD.codigo)
+      await escribir(campo(panel, '#oportunidad-descripcion'), OPORTUNIDAD.descripcion)
+      await escribir(campo(panel, '#oportunidad-observaciones'), OPORTUNIDAD.observaciones)
+      await enviar(panel)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith(
+        '/tareas',
+        expect.objectContaining({ tipo: 'oportunidad', oportunidad: OPORTUNIDAD }),
+      )
+    })
+
+    it('al editar una oportunidad carga su tipo y sus campos', async () => {
+      const panel = await abrirPanelEdicion(
+        await montar([TAREA_OPORTUNIDAD, TAREAS[1]]),
+        'Escribir informe',
+      )
+
+      expect(campo<HTMLSelectElement>(panel, '#tarea-tipo').value).toBe('oportunidad')
+      expect(campo<HTMLInputElement>(panel, '#oportunidad-codigo').value).toBe('OP-1')
+      expect(campo<HTMLInputElement>(panel, '#oportunidad-descripcion').value).toBe(
+        'Contrato de soporte',
+      )
+      expect(campo<HTMLTextAreaElement>(panel, '#oportunidad-observaciones').value).toBe(
+        'Primera línea\nSegunda línea',
+      )
+    })
+
+    it('al editar una oportunidad sin descripción ni observaciones deja esos campos vacíos', async () => {
+      const tarea = {
+        ...TAREA_OPORTUNIDAD,
+        oportunidad: { codigo: 'OP-1', descripcion: null, observaciones: null },
+      }
+      const panel = await abrirPanelEdicion(await montar([tarea]), 'Escribir informe')
+
+      expect(campo<HTMLInputElement>(panel, '#oportunidad-descripcion').value).toBe('')
+      expect(campo<HTMLTextAreaElement>(panel, '#oportunidad-observaciones').value).toBe('')
+    })
+
+    it('al volver a "Sin tipo" oculta el bloque y envía tipo y oportunidad como null', async () => {
+      const envoltorio = await montar([TAREA_OPORTUNIDAD])
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...TAREAS[0] })
+      const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+
+      await elegirTipo(panel, '')
+      expect(panel.querySelector('#oportunidad-codigo')).toBeNull()
+      await enviar(panel)
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith(
+        '/tareas/1',
+        expect.objectContaining({ tipo: null, oportunidad: null }),
+      )
+      expect(filasTabla(envoltorio)[0]?.[7]).toBe('—')
+    })
+
+    it('tras editar una oportunidad, "Crear tarea" vuelve a "Sin tipo" con el bloque vacío', async () => {
+      const envoltorio = await montar([TAREA_OPORTUNIDAD])
+      await abrirPanelEdicion(envoltorio, 'Escribir informe')
+
+      const panel = await abrirPanel(envoltorio)
+      expect(campo<HTMLSelectElement>(panel, '#tarea-tipo').value).toBe('')
+      await elegirTipo(panel, 'oportunidad')
+      expect(campo<HTMLInputElement>(panel, '#oportunidad-codigo').value).toBe('')
+      expect(campo<HTMLInputElement>(panel, '#oportunidad-descripcion').value).toBe('')
+      expect(campo<HTMLTextAreaElement>(panel, '#oportunidad-observaciones').value).toBe('')
+    })
+
+    it('muestra el tipo en la tabla y "—" en las tareas sin tipo', async () => {
+      const envoltorio = await montar([TAREA_OPORTUNIDAD, TAREAS[1]])
+
+      expect(filasTabla(envoltorio).map((fila) => fila[7])).toEqual(['Oportunidad', '—'])
+      // Los campos propios de la oportunidad no aparecen en la tabla.
+      expect(envoltorio.find('table').text()).not.toContain('OP-1')
+      expect(envoltorio.find('table').text()).not.toContain('Contrato de soporte')
+    })
+  })
+
+  describe('acciones de la fila', () => {
+    it('"Editar" y "Detalle" son iconos con nombre accesible y title', async () => {
+      const envoltorio = await montar()
+
+      const editar = envoltorio.find('button[aria-label="Editar tarea Escribir informe"]')
+      expect(editar.attributes('title')).toBe('Editar')
+      expect(editar.text()).toBe('')
+      expect(editar.find('svg').exists()).toBe(true)
+      const detalle = envoltorio.find(
+        'button[aria-label="Ver detalle de la tarea Escribir informe"]',
+      )
+      expect(detalle.attributes('title')).toBe('Detalle')
+      expect(detalle.text()).toBe('')
+      expect(detalle.find('svg').exists()).toBe(true)
+      expect(
+        envoltorio.find('button[aria-label="Ver detalle de la tarea Leer artículo"]').exists(),
+      ).toBe(true)
+    })
+
+    it('"Detalle" abre la modal con todos los campos de esa tarea y se cierra con "Cerrar"', async () => {
+      const envoltorio = await montar([TAREA_OPORTUNIDAD, TAREAS[1]])
+
+      await envoltorio
+        .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
+        .trigger('click')
+      await flushPromises()
+
+      const modal = panelActual()
+      expect(modal.querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
+      expect(modal.textContent).toContain('OP-1')
+      expect(modal.textContent).toContain('Contrato de soporte')
+      expect(modal.className).toContain('w-[90vw]')
+
+      const cerrar = [...modal.querySelectorAll('button')].find(
+        (boton) => boton.textContent?.trim() === 'Cerrar',
+      )!
+      cerrar.click()
+      await flushPromises()
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+    })
+
+    it('la modal de detalle se cierra con Escape', async () => {
+      const envoltorio = await montar()
+
+      await envoltorio
+        .find('button[aria-label="Ver detalle de la tarea Leer artículo"]')
+        .trigger('click')
+      await flushPromises()
+      expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Leer artículo')
+
+      panelActual().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await flushPromises()
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+    })
+  })
+
   describe('ordenación', () => {
     const TAREAS_ORDEN = [
       {
@@ -606,6 +873,8 @@ describe('VistaTareas', () => {
         fecha_vencimiento: '2026-06-01T10:00:00',
         etiquetas: ['Urgente'],
         asignados: [],
+        tipo: null,
+        oportunidad: null,
       },
       {
         id: 2,
@@ -616,6 +885,8 @@ describe('VistaTareas', () => {
         fecha_vencimiento: null,
         etiquetas: [],
         asignados: ['Luis'],
+        tipo: null,
+        oportunidad: null,
       },
       {
         id: 3,
@@ -627,6 +898,8 @@ describe('VistaTareas', () => {
         // Desordenadas a propósito: se ordena por el texto alfabético "Backend, Urgente".
         etiquetas: ['Urgente', 'Backend'],
         asignados: ['Luis', 'Ana'],
+        tipo: null,
+        oportunidad: null,
       },
     ]
 
@@ -658,6 +931,7 @@ describe('VistaTareas', () => {
         'Asignado a',
         'Fecha de creación',
         'Fecha de vencimiento',
+        'Tipo',
       ]) {
         expect(cabecera(envoltorio, etiqueta).attributes('type')).toBe('button')
         expect(thDe(envoltorio, etiqueta).attributes('aria-sort')).toBeUndefined()
@@ -727,6 +1001,21 @@ describe('VistaTareas', () => {
       await cabecera(envoltorio, 'Fecha de vencimiento').trigger('click')
       expect(nombresEnTabla(envoltorio)).toEqual(['beta', 'casa', 'Árbol'])
     })
+
+    it('ordena por tipo dejando las tareas sin tipo al final en ambos sentidos', async () => {
+      const envoltorio = await montar([
+        TAREAS_ORDEN[0],
+        { ...TAREAS_ORDEN[1], tipo: 'oportunidad', oportunidad: OPORTUNIDAD },
+        TAREAS_ORDEN[2],
+      ])
+
+      await cabecera(envoltorio, 'Tipo').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Árbol', 'beta', 'casa'])
+      expect(thDe(envoltorio, 'Tipo').attributes('aria-sort')).toBe('ascending')
+      await cabecera(envoltorio, 'Tipo').trigger('click')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Árbol', 'beta', 'casa'])
+      expect(thDe(envoltorio, 'Tipo').attributes('aria-sort')).toBe('descending')
+    })
   })
 
   describe('exportación', () => {
@@ -738,6 +1027,7 @@ describe('VistaTareas', () => {
       'Asignado a',
       'Fecha de creación',
       'Fecha de vencimiento',
+      'Tipo',
     ]
 
     function botonExportar(envoltorio: VueWrapper, nombre: string) {
@@ -771,8 +1061,9 @@ describe('VistaTareas', () => {
           'Ana',
           '10/11/2026 09:30:00',
           '20/11/2026 18:00:00',
+          '—',
         ],
-        ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—'],
+        ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', '—'],
       ])
     })
 
@@ -802,6 +1093,17 @@ describe('VistaTareas', () => {
       expect(columnas).toEqual(COLUMNAS)
       expect((filas as unknown[][]).map((f) => f[0])).toEqual(['Leer artículo', 'Escribir informe'])
     })
+
+    it('exporta el tipo con su texto visible y nunca los campos de la oportunidad', async () => {
+      const envoltorio = await montar([TAREA_OPORTUNIDAD, TAREAS[1]])
+
+      await botonExportar(envoltorio, 'Exportar a Excel').trigger('click')
+
+      const filas = vi.mocked(exportarTablaExcel).mock.calls[0]![2] as unknown[][]
+      expect(filas.map((fila) => fila[7])).toEqual(['Oportunidad', '—'])
+      expect(filas[0]).toHaveLength(COLUMNAS.length)
+      expect(JSON.stringify(filas)).not.toContain('OP-1')
+    })
   })
 
   describe('filtros', () => {
@@ -815,6 +1117,8 @@ describe('VistaTareas', () => {
         fecha_vencimiento: '2026-03-15T23:59:59',
         etiquetas: ['Backend', 'Urgente'],
         asignados: ['Ana'],
+        tipo: null,
+        oportunidad: null,
       },
       {
         id: 2,
@@ -825,6 +1129,8 @@ describe('VistaTareas', () => {
         fecha_vencimiento: null,
         etiquetas: ['Backend'],
         asignados: ['Luis'],
+        tipo: null,
+        oportunidad: null,
       },
       {
         id: 3,
@@ -835,6 +1141,8 @@ describe('VistaTareas', () => {
         fecha_vencimiento: '2026-03-16T00:00:00',
         etiquetas: [],
         asignados: [],
+        tipo: null,
+        oportunidad: null,
       },
     ]
     const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']
@@ -1095,6 +1403,34 @@ describe('VistaTareas', () => {
         expect(casilla('Luis').getAttribute('aria-checked')).toBe('false')
       })
       expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Comprar café'])
+    })
+
+    it('filtra por tipo, incluida la opción "Sin tipo"', async () => {
+      const envoltorio = await montar([
+        { ...TAREAS_FILTRO[0], tipo: 'oportunidad', oportunidad: OPORTUNIDAD },
+        TAREAS_FILTRO[1],
+        TAREAS_FILTRO[2],
+      ])
+      expect(disparador(envoltorio, 'Filtrar por tipo').text()).toBe('Todos los tipos')
+
+      await conDesplegable(envoltorio, 'Filtrar por tipo', () => {
+        const opciones = [
+          ...document.body.querySelectorAll('[data-slot="popover-content"] li label'),
+        ].map((label) => label.textContent?.trim())
+        expect(opciones).toEqual(['Oportunidad', 'Sin tipo'])
+      })
+      await alternar(envoltorio, 'Filtrar por tipo', 'Sin tipo')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión'])
+      expect(disparador(envoltorio, 'Filtrar por tipo').text()).toBe('Oportunidad')
+
+      await alternar(envoltorio, 'Filtrar por tipo', 'Oportunidad')
+      expect(nombresEnTabla(envoltorio)).toEqual([])
+
+      const boton = envoltorio.findAll('button').find((b) => b.text() === 'Limpiar filtros')!
+      await boton.trigger('click')
+      await flushPromises()
+      expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+      expect(disparador(envoltorio, 'Filtrar por tipo').text()).toBe('Todos los tipos')
     })
   })
 })

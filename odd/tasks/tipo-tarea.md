@@ -25,10 +25,10 @@ Rama: `feature/tipo-tarea` (encadenada sobre `feature/filtros-tareas`) · Entreg
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1–S2 (backend: columna `tipo`, tabla `oportunidades`, migración, esquemas, validación cruzada, tests) | delegada (writer A, paralelo) | pendiente | — |
-| T2 | S1–S4 (frontend: tipos, store, formulario con bloque de Oportunidad, columna y filtro Tipo, iconos Editar/Detalle, modal de detalle, specs) | delegada (writer B, paralelo) | pendiente | — |
-| T3 | S1–S4 (e2e contra pila aislada, suite) | inline | pendiente | — |
-| T4 | S1–S4 (verificador independiente: migración y contrato, items 1 y 3) | delegada (verificador) | pendiente | — |
+| T1 | S1–S2 (backend: columna `tipo`, tabla `oportunidades`, migración, esquemas, validación cruzada, tests) | delegada (writer A, paralelo) | hecha | `3f6c04e` |
+| T2 | S1–S4 (frontend: tipos, store, formulario con bloque de Oportunidad, columna y filtro Tipo, iconos Editar/Detalle, modal de detalle, specs) | delegada (writer B, paralelo) | hecha | `7371034` |
+| T3 | S1–S4 (e2e contra pila aislada, suite) | inline | hecha | `7371034` |
+| T4 | S1–S4 (verificador independiente: migración y contrato, items 1 y 3) | delegada (verificador) | hecha (sin blockers) | — |
 
 Evidencia de ruta: T1 y T2 son unidades independientes con superficies disjuntas (`backend/` y `frontend/src`) y el contrato fijado en S1–S2. Riesgo: migración nueva (item 1) y ampliación del contrato público (item 3, pedida) → verificador.
 
@@ -44,3 +44,6 @@ Evidencia de ruta: T1 y T2 son unidades independientes con superficies disjuntas
   >             - El campo tipo será visualizable en el listado de tareas, el resto no.
   >             - Todos los campos de una tarea serán visibles en un icono Detalle, junto al botón Editar, que pasará a ser un icono. Al pulsar en detalle toda la info se abrirá en una modal que abarcará el 90% del ancho y del alto del viewport.
 - **L2** (2026-11-10) Preguntas: ¿otros tipos? → "habrá nuevos tipos de valores con campos propios, pero aún no los tengo decidido ¿los podemos poner más adelante?"; ¿tipo opcional o "General" por defecto? → "1." (opcional).
+- **L3** (2026-11-10) T1 (backend): `TipoTarea` (`StrEnum`), tabla `oportunidades` 1:1, migración `e5b8d1f3a6c2` (el downgrade quita el CHECK antes que la columna); la regla tipo/oportunidad se publica como `anyOf` a nivel de modelo, así schemathesis solo genera combinaciones válidas. 291 tests, 97,50 %, contrato 10/10. La base no impide una fila de `oportunidades` en una tarea sin tipo (un CHECK de MySQL no mira otra tabla); lo aplica la API.
+- **L4** (2026-11-10) T2 (frontend): `ui/dialog` (prop `sinAspa`), `DetalleTarea`, selector de tipo con `<fieldset>` Oportunidad, columna y filtro Tipo, iconos Editar/Detalle. `FiltroMultiple` gana la prop `genero` ("Todos los tipos", "Ningún tipo"; RED observado). Vitest 205/205. T3 inline: e2e de oportunidad y detalle; dos fallos del propio test (código contenido en el nombre; medida durante la animación de entrada) corregidos; Playwright 24/24 dos veces contra una pila aislada.
+- **L5** (2026-11-10) T4, verificador (cubre también `filtros-tareas.md`): todo en verde, sin blockers. Migración: hash de datos idéntico y `mysqldump` idéntico tras upgrade/downgrade; OpenAPI frente a `main` solo con añadidos; axe sin violaciones con filtros, panel en modo Oportunidad y detalle abiertos, en claro y oscuro. Advisories: componente `TipoTarea` huérfano en OpenAPI con el docstring del dominio; "Seleccionar todas" fijo en `FiltroMultiple`; mensaje de Pydantic en inglés para un código vacío (como en la base); `maxlength` del navegador cuenta unidades UTF-16 (emoji).

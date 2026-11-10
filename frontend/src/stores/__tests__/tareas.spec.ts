@@ -21,6 +21,8 @@ const tareaEjemplo = {
   fecha_vencimiento: null,
   etiquetas: ['Backend'],
   asignados: ['Ana'],
+  tipo: null,
+  oportunidad: null,
 }
 
 const ETIQUETAS = [
@@ -79,11 +81,37 @@ describe('useTiendaTareas', () => {
       fecha_vencimiento: null,
       etiquetas: ['Backend'],
       asignados: ['Ana'],
+      tipo: null,
+      oportunidad: null,
     }
     await tienda.crear(datos)
 
     expect(clienteApi.crear).toHaveBeenCalledWith('/tareas', datos)
     expect(tienda.tareas).toEqual([tareaEjemplo])
+  })
+
+  it('envía el tipo y los datos de la oportunidad tal cual y guarda la tarea devuelta', async () => {
+    const oportunidad = { codigo: 'OP-1', descripcion: null, observaciones: 'Línea 1\nLínea 2' }
+    const creada = { ...tareaEjemplo, tipo: 'oportunidad' as const, oportunidad }
+    vi.mocked(clienteApi.crear).mockResolvedValue(creada)
+    simularObtener()
+
+    const tienda = useTiendaTareas()
+    const datos = {
+      nombre: 'Escribir informe',
+      prioridad: null,
+      descripcion: 'Informe trimestral',
+      fecha_creacion: '2026-11-09T10:00:00',
+      fecha_vencimiento: null,
+      etiquetas: ['Backend'],
+      asignados: ['Ana'],
+      tipo: 'oportunidad' as const,
+      oportunidad,
+    }
+    await tienda.crear(datos)
+
+    expect(clienteApi.crear).toHaveBeenCalledWith('/tareas', datos)
+    expect(tienda.tareas).toEqual([creada])
   })
 
   it('propaga el error de la API al crear y no altera la lista', async () => {
@@ -99,6 +127,8 @@ describe('useTiendaTareas', () => {
         fecha_vencimiento: null,
         etiquetas: [],
         asignados: [],
+        tipo: null,
+        oportunidad: null,
       }),
     ).rejects.toThrow('datos inválidos')
     expect(tienda.tareas).toEqual([])
@@ -120,6 +150,8 @@ describe('useTiendaTareas', () => {
       fecha_vencimiento: null,
       etiquetas: ['Backend'],
       asignados: ['Ana'],
+      tipo: null,
+      oportunidad: null,
     }
     await tienda.actualizar(1, datos)
 
@@ -142,6 +174,8 @@ describe('useTiendaTareas', () => {
         fecha_vencimiento: null,
         etiquetas: [],
         asignados: [],
+        tipo: null,
+        oportunidad: null,
       }),
     ).rejects.toThrow('Tarea no encontrada')
     expect(tienda.tareas).toEqual([tareaEjemplo])
@@ -182,6 +216,8 @@ describe('useTiendaTareas', () => {
       fecha_vencimiento: null,
       etiquetas: ['Urgente'],
       asignados: ['Ana'],
+      tipo: null,
+      oportunidad: null,
     })
 
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -205,6 +241,8 @@ describe('useTiendaTareas', () => {
       fecha_vencimiento: null,
       etiquetas: ['Backend'],
       asignados: ['Ana'],
+      tipo: null,
+      oportunidad: null,
     })
 
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -225,6 +263,8 @@ describe('useTiendaTareas', () => {
         fecha_vencimiento: null,
         etiquetas: [],
         asignados: [],
+        tipo: null,
+        oportunidad: null,
       }),
     ).rejects.toThrow('datos inválidos')
     expect(clienteApi.obtener).not.toHaveBeenCalled()

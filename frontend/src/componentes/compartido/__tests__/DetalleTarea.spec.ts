@@ -1,0 +1,156 @@
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { afterEach, describe, expect, it } from 'vitest'
+
+import type { Tarea } from '@/api/tipos'
+import DetalleTarea from '../DetalleTarea.vue'
+
+const TAREA_SIN_TIPO: Tarea = {
+  id: 2,
+  nombre: 'Leer artículo',
+  prioridad: null,
+  descripcion: 'Artículo\nsobre Vue',
+  fecha_creacion: '2026-12-01T17:05:09',
+  fecha_vencimiento: null,
+  etiquetas: [],
+  asignados: [],
+  tipo: null,
+  oportunidad: null,
+}
+
+const TAREA_OPORTUNIDAD: Tarea = {
+  id: 1,
+  nombre: 'Escribir informe',
+  prioridad: 2,
+  descripcion: 'Informe trimestral',
+  fecha_creacion: '2026-11-10T09:30:00',
+  fecha_vencimiento: '2026-11-20T18:00:00',
+  etiquetas: ['Backend', 'Urgente'],
+  asignados: ['Ana', 'Luis'],
+  tipo: 'oportunidad',
+  oportunidad: {
+    codigo: 'OP-2026-01',
+    descripcion: null,
+    observaciones: 'Primera línea\nSegunda línea',
+  },
+}
+
+let contenedor: VueWrapper | null = null
+
+async function montar(tarea: Tarea | null): Promise<VueWrapper> {
+  contenedor = mount(DetalleTarea, { props: { tarea }, attachTo: document.body })
+  await flushPromises()
+  return contenedor
+}
+
+function modal(): HTMLElement {
+  const elemento = document.body.querySelector<HTMLElement>('[role="dialog"]')
+  if (!elemento) throw new Error('La modal de detalle no se abrió')
+  return elemento
+}
+
+// Pares término → valor de una lista de descripción.
+function paresDe(lista: Element): [string, string][] {
+  return [...lista.querySelectorAll(':scope > div')].map((fila) => [
+    fila.querySelector('dt')!.textContent!.trim(),
+    fila.querySelector('dd')!.textContent!.trim(),
+  ])
+}
+
+function listaDe(id: string): Element {
+  const lista = modal().querySelector(`dl[data-testid="${id}"]`)
+  if (!lista) throw new Error(`No se encontró la lista "${id}"`)
+  return lista
+}
+
+function botonCerrar(): HTMLButtonElement {
+  const botones = [...modal().querySelectorAll('button')].filter(
+    (boton) => boton.textContent?.trim() === 'Cerrar',
+  )
+  if (botones.length !== 1) throw new Error(`Se esperaba un botón "Cerrar" y hay ${botones.length}`)
+  return botones[0] as HTMLButtonElement
+}
+
+describe('DetalleTarea', () => {
+  afterEach(() => {
+    contenedor?.unmount()
+    contenedor = null
+    document.body.innerHTML = ''
+  })
+
+  it('sin tarea no muestra la modal', async () => {
+    await montar(null)
+
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('muestra todos los campos de la tarea con "—" en los vacíos y sin bloque de oportunidad', async () => {
+    await montar(TAREA_SIN_TIPO)
+
+    expect(modal().querySelector('h2')?.textContent?.trim()).toBe('Leer artículo')
+    expect(paresDe(listaDe('campos-tarea'))).toEqual([
+      ['Nombre', 'Leer artículo'],
+      ['Prioridad', '—'],
+      ['Descripción', 'Artículo\nsobre Vue'],
+      ['Etiquetas', '—'],
+      ['Asignado a', '—'],
+      ['Fecha de creación', '01/12/2026 17:05:09'],
+      ['Fecha de vencimiento', '—'],
+      ['Tipo', '—'],
+    ])
+    expect(modal().querySelector('[data-testid="campos-oportunidad"]')).toBeNull()
+    expect(modal().textContent).not.toContain('Código')
+  })
+
+  it('con tipo Oportunidad muestra su sección con todos sus campos', async () => {
+    await montar(TAREA_OPORTUNIDAD)
+
+    expect(paresDe(listaDe('campos-tarea'))).toEqual([
+      ['Nombre', 'Escribir informe'],
+      ['Prioridad', '2'],
+      ['Descripción', 'Informe trimestral'],
+      ['Etiquetas', 'Backend, Urgente'],
+      ['Asignado a', 'Ana, Luis'],
+      ['Fecha de creación', '10/11/2026 09:30:00'],
+      ['Fecha de vencimiento', '20/11/2026 18:00:00'],
+      ['Tipo', 'Oportunidad'],
+    ])
+    const seccion = listaDe('campos-oportunidad')
+    expect(modal().querySelector('h3')?.textContent?.trim()).toBe('Oportunidad')
+    expect(paresDe(seccion)).toEqual([
+      ['Código', 'OP-2026-01'],
+      ['Descripción de la oportunidad', '—'],
+      ['Observaciones', 'Primera línea\nSegunda línea'],
+    ])
+    // Los textos largos conservan sus saltos de línea.
+    const observaciones = [...seccion.querySelectorAll('dd')][2]!
+    expect(observaciones.className).toContain('whitespace-pre-wrap')
+  })
+
+  it('ocupa el 90 % del ancho y del alto del viewport con scroll interno', async () => {
+    await montar(TAREA_OPORTUNIDAD)
+
+    const clases = modal().className.split(/\s+/)
+    expect(clases).toEqual(expect.arrayContaining(['w-[90vw]', 'max-w-none', 'h-[90vh]']))
+    expect(clases).not.toContain('max-w-lg')
+    const zonaScroll = modal().querySelector('[data-testid="detalle-contenido"]')
+    expect(zonaScroll?.className).toContain('overflow-y-auto')
+  })
+
+  it('el botón "Cerrar" pide cerrar la modal', async () => {
+    const envoltorio = await montar(TAREA_SIN_TIPO)
+
+    botonCerrar().click()
+    await flushPromises()
+
+    expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+  })
+
+  it('la tecla Escape pide cerrar la modal', async () => {
+    const envoltorio = await montar(TAREA_SIN_TIPO)
+
+    modal().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+
+    expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+  })
+})
