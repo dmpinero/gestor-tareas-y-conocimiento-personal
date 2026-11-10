@@ -3,6 +3,7 @@ import VistaInicio from '@/vistas/VistaInicio.vue'
 import VistaTareas from '@/vistas/VistaTareas.vue'
 import VistaConocimiento from '@/vistas/VistaConocimiento.vue'
 import VistaAjustes from '@/vistas/VistaAjustes.vue'
+import VistaWorkflowOportunidades from '@/vistas/VistaWorkflowOportunidades.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -26,6 +27,11 @@ const router = createRouter({
       path: '/ajustes',
       name: 'ajustes',
       component: VistaAjustes,
+    },
+    {
+      path: '/ajustes/workflow-oportunidades',
+      name: 'workflow-oportunidades',
+      component: VistaWorkflowOportunidades,
     },
   ],
 })
