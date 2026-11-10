@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Self
 
 from pydantic import (
     BaseModel,
@@ -9,6 +9,7 @@ from pydantic import (
     PlainSerializer,
     PlainValidator,
     WithJsonSchema,
+    model_validator,
 )
 
 # Fecha y hora local en ISO 8601 sin zona horaria: "YYYY-MM-DDTHH:MM:SS", con una
@@ -31,7 +32,7 @@ _PATRON_FECHA_HORA = re.compile(PATRON_FECHA_HORA)
 def _validar_fecha_hora(valor: object) -> datetime:
     """Convierte la fecha y hora recibida en un ``datetime`` sin zona horaria.
 
-    Es la hora local tal como la escribe la persona usuaria (supuesto de S8). Un
+    Es la hora local tal como la escribe la persona usuaria. Un
     valor con zona horaria (``Z`` o ``+01:00``) se rechaza con 422 en vez de
     convertirlo, porque no hay una zona de referencia a la que traducirlo. La
     precisión es de segundos, como el formulario y la columna ``DATETIME``: los
@@ -90,6 +91,16 @@ TextoObligatorio = Annotated[str, BeforeValidator(_recortar_espacios)]
 _PATRON_NO_VACIO = {"pattern": r"\S"}
 
 
+# Nombres de etiqueta y de persona: mismo enfoque que `nombre` (recorte con los
+# espacios de JSON Schema y `pattern: "\\S"` publicado en cada elemento).
+NombreEtiqueta = Annotated[
+    TextoObligatorio, Field(min_length=1, max_length=50, json_schema_extra=_PATRON_NO_VACIO)
+]
+NombrePersona = Annotated[
+    TextoObligatorio, Field(min_length=1, max_length=100, json_schema_extra=_PATRON_NO_VACIO)
+]
+
+
 def _normalizar_prioridad(valor: object) -> object:
     """Aplica la semántica de `integer` de JSON Schema.
 
@@ -119,7 +130,23 @@ class TareaCrearEsquema(BaseModel):
     descripcion: TextoObligatorio = Field(
         min_length=1, max_length=500, json_schema_extra=_PATRON_NO_VACIO
     )
-    fecha_hora: FechaHoraLocal
+    fecha_creacion: FechaHoraLocal
+    fecha_vencimiento: FechaHoraLocal | None = Field(
+        default=None,
+        description="Opcional. Si se indica, no puede ser anterior a fecha_creacion (422).",
+    )
+    etiquetas: list[NombreEtiqueta] = Field(default_factory=list)
+    asignados: list[NombrePersona] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _vencimiento_no_anterior_a_creacion(self) -> Self:
+        # JSON Schema no puede comparar dos campos: la regla solo se documenta en
+        # la descripción de `fecha_vencimiento` del contrato OpenAPI.
+        if self.fecha_vencimiento is not None and self.fecha_vencimiento < self.fecha_creacion:
+            raise ValueError(
+                "La fecha de vencimiento no puede ser anterior a la fecha de creación."
+            )
+        return self
 
 
 class TareaActualizarEsquema(TareaCrearEsquema):
@@ -131,4 +158,7 @@ class TareaSalidaEsquema(BaseModel):
     nombre: str
     prioridad: int | None
     descripcion: str
-    fecha_hora: FechaHoraLocal
+    fecha_creacion: FechaHoraLocal
+    fecha_vencimiento: FechaHoraLocal | None
+    etiquetas: list[str]
+    asignados: list[str]

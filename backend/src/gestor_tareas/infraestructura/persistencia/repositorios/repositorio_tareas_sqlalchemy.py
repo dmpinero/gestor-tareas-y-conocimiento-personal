@@ -1,8 +1,17 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from gestor_tareas.dominio.nombres_catalogo import ordenar_nombres
 from gestor_tareas.dominio.tarea.entidades import Tarea
-from gestor_tareas.infraestructura.persistencia.modelos import TareaModelo
+from gestor_tareas.infraestructura.persistencia.modelos import (
+    EtiquetaModelo,
+    PersonaModelo,
+    TareaModelo,
+)
+from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import traducir_conflictos
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
+    filas_obtenidas,
+)
 
 
 def _a_entidad(modelo: TareaModelo) -> Tarea:
@@ -11,7 +20,10 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         nombre=modelo.nombre,
         prioridad=modelo.prioridad,
         descripcion=modelo.descripcion,
-        fecha_hora=modelo.fecha_hora,
+        fecha_creacion=modelo.fecha_creacion,
+        fecha_vencimiento=modelo.fecha_vencimiento,
+        etiquetas=ordenar_nombres(e.nombre for e in modelo.etiquetas),
+        asignados=ordenar_nombres(p.nombre for p in modelo.asignados),
     )
 
 
@@ -19,15 +31,41 @@ class RepositorioTareasSqlAlchemy:
     def __init__(self, sesion: Session) -> None:
         self._sesion = sesion
 
+    def _filas_catalogo[M: (EtiquetaModelo, PersonaModelo)](
+        self, modelo: type[M], nombres: list[str]
+    ) -> list[M]:
+        """Filas del catálogo con esos nombres, que ya deben existir.
+
+        Se usan las filas que ``obtener_o_crear`` ya devolvió en esta sesión. Solo
+        los nombres que no pasaron por él se buscan, con una lectura con bloqueo
+        (FOR SHARE) para ver también lo confirmado después de la instantánea.
+        """
+        if not nombres:
+            return []
+        filas, faltan = filas_obtenidas(self._sesion, modelo, nombres)
+        if faltan:
+            consulta = select(modelo).where(modelo.nombre.in_(faltan)).with_for_update(read=True)
+            filas.extend(self._sesion.scalars(consulta))
+        if len(filas) != len(nombres):
+            raise ValueError(f"Faltan nombres en el catálogo {modelo.__tablename__}: {nombres}")
+        return filas
+
+    def _asignar_datos(self, modelo: TareaModelo, tarea: Tarea) -> None:
+        modelo.nombre = tarea.nombre
+        modelo.prioridad = tarea.prioridad
+        modelo.descripcion = tarea.descripcion
+        modelo.fecha_creacion = tarea.fecha_creacion
+        modelo.fecha_vencimiento = tarea.fecha_vencimiento
+        # Asignar la lista completa sustituye el conjunto de enlaces de la tarea.
+        modelo.etiquetas = self._filas_catalogo(EtiquetaModelo, tarea.etiquetas)
+        modelo.asignados = self._filas_catalogo(PersonaModelo, tarea.asignados)
+
     def crear(self, tarea: Tarea) -> Tarea:
-        modelo = TareaModelo(
-            nombre=tarea.nombre,
-            prioridad=tarea.prioridad,
-            descripcion=tarea.descripcion,
-            fecha_hora=tarea.fecha_hora,
-        )
-        self._sesion.add(modelo)
-        self._sesion.commit()
+        with traducir_conflictos(self._sesion):
+            modelo = TareaModelo()
+            self._asignar_datos(modelo, tarea)
+            self._sesion.add(modelo)
+            self._sesion.commit()
         return _a_entidad(modelo)
 
     def listar(self) -> list[Tarea]:
@@ -39,10 +77,8 @@ class RepositorioTareasSqlAlchemy:
         return _a_entidad(modelo) if modelo is not None else None
 
     def actualizar(self, tarea: Tarea) -> Tarea:
-        modelo = self._sesion.get(TareaModelo, tarea.id)
-        modelo.nombre = tarea.nombre
-        modelo.prioridad = tarea.prioridad
-        modelo.descripcion = tarea.descripcion
-        modelo.fecha_hora = tarea.fecha_hora
-        self._sesion.commit()
+        with traducir_conflictos(self._sesion):
+            modelo = self._sesion.get(TareaModelo, tarea.id)
+            self._asignar_datos(modelo, tarea)
+            self._sesion.commit()
         return _a_entidad(modelo)

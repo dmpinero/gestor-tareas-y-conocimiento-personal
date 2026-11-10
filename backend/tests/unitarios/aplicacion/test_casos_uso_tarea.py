@@ -7,19 +7,37 @@ from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.tarea.entidades import Tarea
-from tests.unitarios.aplicacion.dobles import RepositorioTareasFalso
+from tests.unitarios.aplicacion.dobles import (
+    RepositorioEtiquetasFalso,
+    RepositorioPersonasFalso,
+    RepositorioTareasFalso,
+)
 
-_FECHA_HORA = datetime(2026, 11, 9, 10, 30, 0)
+_FECHA_CREACION = datetime(2026, 11, 9, 10, 30, 0)
+_FECHA_VENCIMIENTO = datetime(2026, 11, 20, 18, 0, 0)
+
+
+class _Repositorios:
+    def __init__(self, etiquetas: tuple[str, ...] = (), personas: tuple[str, ...] = ()) -> None:
+        self.tareas = RepositorioTareasFalso()
+        self.etiquetas = RepositorioEtiquetasFalso(*etiquetas)
+        self.personas = RepositorioPersonasFalso(*personas)
+
+    def crear(self) -> CrearTarea:
+        return CrearTarea(self.tareas, self.etiquetas, self.personas)
+
+    def actualizar(self) -> ActualizarTarea:
+        return ActualizarTarea(self.tareas, self.etiquetas, self.personas)
 
 
 def test_crear_tarea_la_guarda_y_le_asigna_id() -> None:
-    repo = RepositorioTareasFalso()
+    repos = _Repositorios()
 
-    tarea = CrearTarea(repo).ejecutar(
+    tarea = repos.crear().ejecutar(
         nombre="Preparar informe",
         prioridad=2,
         descripcion="Informe trimestral",
-        fecha_hora=_FECHA_HORA,
+        fecha_creacion=_FECHA_CREACION,
     )
 
     assert tarea == Tarea(
@@ -27,32 +45,102 @@ def test_crear_tarea_la_guarda_y_le_asigna_id() -> None:
         nombre="Preparar informe",
         prioridad=2,
         descripcion="Informe trimestral",
-        fecha_hora=_FECHA_HORA,
+        fecha_creacion=_FECHA_CREACION,
+        fecha_vencimiento=None,
+        etiquetas=[],
+        asignados=[],
     )
-    assert repo.listar() == [tarea]
+    assert repos.tareas.listar() == [tarea]
+    assert repos.etiquetas.listar() == []
+    assert repos.personas.listar() == []
 
 
 def test_crear_tarea_sin_prioridad_la_guarda_con_prioridad_nula() -> None:
-    repo = RepositorioTareasFalso()
+    repos = _Repositorios()
 
-    tarea = CrearTarea(repo).ejecutar(
-        nombre="Leer", prioridad=None, descripcion="Un libro", fecha_hora=_FECHA_HORA
+    tarea = repos.crear().ejecutar(
+        nombre="Leer", prioridad=None, descripcion="Un libro", fecha_creacion=_FECHA_CREACION
     )
 
     assert tarea.prioridad is None
-    assert repo.listar() == [tarea]
+    assert repos.tareas.listar() == [tarea]
+
+
+def test_crear_tarea_guarda_la_fecha_de_vencimiento() -> None:
+    repos = _Repositorios()
+
+    tarea = repos.crear().ejecutar(
+        nombre="Leer",
+        descripcion="Un libro",
+        fecha_creacion=_FECHA_CREACION,
+        fecha_vencimiento=_FECHA_VENCIMIENTO,
+    )
+
+    assert tarea.fecha_vencimiento == _FECHA_VENCIMIENTO
+    assert repos.tareas.listar()[0].fecha_vencimiento == _FECHA_VENCIMIENTO
+
+
+def test_crear_tarea_da_de_alta_etiquetas_y_personas_nuevas_ordenadas() -> None:
+    repos = _Repositorios()
+
+    tarea = repos.crear().ejecutar(
+        nombre="Leer",
+        descripcion="Un libro",
+        fecha_creacion=_FECHA_CREACION,
+        etiquetas=["urgente", "Casa", "bajo"],
+        asignados=["Lucía", "ana"],
+    )
+
+    assert tarea.etiquetas == ["bajo", "Casa", "urgente"]
+    assert tarea.asignados == ["ana", "Lucía"]
+    assert [e.nombre for e in repos.etiquetas.listar()] == ["bajo", "Casa", "urgente"]
+    assert [p.nombre for p in repos.personas.listar()] == ["ana", "Lucía"]
+
+
+def test_crear_tarea_ignora_duplicados_sin_distinguir_mayusculas_y_conserva_la_primera() -> None:
+    repos = _Repositorios()
+
+    tarea = repos.crear().ejecutar(
+        nombre="Leer",
+        descripcion="Un libro",
+        fecha_creacion=_FECHA_CREACION,
+        etiquetas=["Urgente", "URGENTE", "urgente"],
+        asignados=["Ana", "ana"],
+    )
+
+    assert tarea.etiquetas == ["Urgente"]
+    assert tarea.asignados == ["Ana"]
+    assert [e.nombre for e in repos.etiquetas.listar()] == ["Urgente"]
+    assert [p.nombre for p in repos.personas.listar()] == ["Ana"]
+
+
+def test_crear_tarea_reutiliza_el_catalogo_conservando_la_grafia_guardada() -> None:
+    repos = _Repositorios(etiquetas=("Urgente",), personas=("Ana López",))
+
+    tarea = repos.crear().ejecutar(
+        nombre="Leer",
+        descripcion="Un libro",
+        fecha_creacion=_FECHA_CREACION,
+        etiquetas=["URGENTE"],
+        asignados=["ana lópez"],
+    )
+
+    assert tarea.etiquetas == ["Urgente"]
+    assert tarea.asignados == ["Ana López"]
+    assert [(e.id, e.nombre) for e in repos.etiquetas.listar()] == [(1, "Urgente")]
+    assert [(p.id, p.nombre) for p in repos.personas.listar()] == [(1, "Ana López")]
 
 
 def test_listar_tareas_devuelve_las_tareas_creadas_en_orden() -> None:
-    repo = RepositorioTareasFalso()
-    primera = CrearTarea(repo).ejecutar(
-        nombre="Uno", prioridad=1, descripcion="Primera", fecha_hora=_FECHA_HORA
+    repos = _Repositorios()
+    primera = repos.crear().ejecutar(
+        nombre="Uno", prioridad=1, descripcion="Primera", fecha_creacion=_FECHA_CREACION
     )
-    segunda = CrearTarea(repo).ejecutar(
-        nombre="Dos", prioridad=None, descripcion="Segunda", fecha_hora=_FECHA_HORA
+    segunda = repos.crear().ejecutar(
+        nombre="Dos", prioridad=None, descripcion="Segunda", fecha_creacion=_FECHA_CREACION
     )
 
-    assert ListarTareas(repo).ejecutar() == [primera, segunda]
+    assert ListarTareas(repos.tareas).ejecutar() == [primera, segunda]
 
 
 def test_listar_tareas_sin_tareas_devuelve_lista_vacia() -> None:
@@ -60,18 +148,27 @@ def test_listar_tareas_sin_tareas_devuelve_lista_vacia() -> None:
 
 
 def test_actualizar_tarea_sustituye_todos_sus_datos() -> None:
-    repo = RepositorioTareasFalso()
-    creada = CrearTarea(repo).ejecutar(
-        nombre="Uno", prioridad=1, descripcion="Primera", fecha_hora=_FECHA_HORA
+    repos = _Repositorios()
+    creada = repos.crear().ejecutar(
+        nombre="Uno",
+        prioridad=1,
+        descripcion="Primera",
+        fecha_creacion=_FECHA_CREACION,
+        fecha_vencimiento=_FECHA_VENCIMIENTO,
+        etiquetas=["casa", "urgente"],
+        asignados=["Ana"],
     )
-    nueva_fecha_hora = datetime(2026, 12, 1, 8, 0, 0)
+    nueva_fecha = datetime(2026, 12, 1, 8, 0, 0)
 
-    actualizada = ActualizarTarea(repo).ejecutar(
+    actualizada = repos.actualizar().ejecutar(
         creada.id,
         nombre="Uno editada",
         prioridad=None,
         descripcion="Primera editada",
-        fecha_hora=nueva_fecha_hora,
+        fecha_creacion=nueva_fecha,
+        fecha_vencimiento=None,
+        etiquetas=["Trabajo", "CASA"],
+        asignados=[],
     )
 
     esperada = Tarea(
@@ -79,17 +176,46 @@ def test_actualizar_tarea_sustituye_todos_sus_datos() -> None:
         nombre="Uno editada",
         prioridad=None,
         descripcion="Primera editada",
-        fecha_hora=nueva_fecha_hora,
+        fecha_creacion=nueva_fecha,
+        fecha_vencimiento=None,
+        etiquetas=["casa", "Trabajo"],
+        asignados=[],
     )
     assert actualizada == esperada
-    assert repo.listar() == [esperada]
+    assert repos.tareas.listar() == [esperada]
+    assert [e.nombre for e in repos.etiquetas.listar()] == ["casa", "Trabajo", "urgente"]
+
+
+def test_actualizar_tarea_sin_etiquetas_ni_asignados_los_vacia() -> None:
+    repos = _Repositorios()
+    creada = repos.crear().ejecutar(
+        nombre="Uno",
+        descripcion="Primera",
+        fecha_creacion=_FECHA_CREACION,
+        etiquetas=["casa"],
+        asignados=["Ana"],
+    )
+
+    actualizada = repos.actualizar().ejecutar(
+        creada.id, nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION
+    )
+
+    assert (actualizada.etiquetas, actualizada.asignados) == ([], [])
+    assert repos.tareas.listar()[0].etiquetas == []
 
 
 def test_actualizar_tarea_inexistente_lanza_entidad_no_encontrada() -> None:
-    repo = RepositorioTareasFalso()
+    repos = _Repositorios()
 
     with pytest.raises(EntidadNoEncontradaError):
-        ActualizarTarea(repo).ejecutar(
-            99, nombre="X", prioridad=None, descripcion="Y", fecha_hora=_FECHA_HORA
+        repos.actualizar().ejecutar(
+            99,
+            nombre="X",
+            prioridad=None,
+            descripcion="Y",
+            fecha_creacion=_FECHA_CREACION,
+            etiquetas=["nueva"],
         )
-    assert repo.listar() == []
+    assert repos.tareas.listar() == []
+    # La tarea no existe: no se da de alta ninguna etiqueta.
+    assert repos.etiquetas.listar() == []

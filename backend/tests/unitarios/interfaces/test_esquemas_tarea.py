@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
+    PATRON_FECHA_HORA,
     TareaActualizarEsquema,
     TareaCrearEsquema,
     TareaSalidaEsquema,
@@ -15,7 +16,7 @@ def _datos(**cambios) -> dict:
         "nombre": "Tarea",
         "prioridad": 3,
         "descripcion": "Descripción",
-        "fecha_hora": "2026-11-09T10:30:00",
+        "fecha_creacion": "2026-11-09T10:30:00",
     }
     datos.update(cambios)
     return datos
@@ -91,42 +92,42 @@ def test_prioridad_es_opcional() -> None:
     assert TareaCrearEsquema(**_datos(prioridad=None)).prioridad is None
 
 
-def test_acepta_fecha_hora_iso_sin_zona_horaria() -> None:
-    assert TareaCrearEsquema(**_datos()).fecha_hora == datetime(2026, 11, 9, 10, 30, 0)
+def test_acepta_fecha_creacion_iso_sin_zona_horaria() -> None:
+    assert TareaCrearEsquema(**_datos()).fecha_creacion == datetime(2026, 11, 9, 10, 30, 0)
 
 
-def test_fecha_hora_es_obligatoria() -> None:
+def test_fecha_creacion_es_obligatoria() -> None:
     datos = _datos()
-    del datos["fecha_hora"]
+    del datos["fecha_creacion"]
     with pytest.raises(ValidationError):
         TareaCrearEsquema(**datos)
 
 
-@pytest.mark.parametrize("fecha_hora", ["2026-11-09T10:30:00Z", "2026-11-09T10:30:00+01:00"])
-def test_rechaza_fecha_hora_con_zona_horaria(fecha_hora: str) -> None:
+@pytest.mark.parametrize("fecha_creacion", ["2026-11-09T10:30:00Z", "2026-11-09T10:30:00+01:00"])
+def test_rechaza_fecha_creacion_con_zona_horaria(fecha_creacion: str) -> None:
     with pytest.raises(ValidationError):
-        TareaCrearEsquema(**_datos(fecha_hora=fecha_hora))
+        TareaCrearEsquema(**_datos(fecha_creacion=fecha_creacion))
 
 
 @pytest.mark.parametrize(
-    "fecha_hora",
+    "fecha_creacion",
     ["", "09/11/2026 10:30:00", "2026-02-30T10:30:00", "2027-02-29T10:30:00", "2026-11-09", 0],
 )
-def test_rechaza_fecha_hora_con_formato_invalido(fecha_hora: object) -> None:
+def test_rechaza_fecha_creacion_con_formato_invalido(fecha_creacion: object) -> None:
     with pytest.raises(ValidationError):
-        TareaCrearEsquema(**_datos(fecha_hora=fecha_hora))
+        TareaCrearEsquema(**_datos(fecha_creacion=fecha_creacion))
 
 
 def test_acepta_el_29_de_febrero_de_un_anio_bisiesto() -> None:
-    esquema = TareaCrearEsquema(**_datos(fecha_hora="2028-02-29T23:59:59"))
+    esquema = TareaCrearEsquema(**_datos(fecha_creacion="2028-02-29T23:59:59"))
 
-    assert esquema.fecha_hora == datetime(2028, 2, 29, 23, 59, 59)
+    assert esquema.fecha_creacion == datetime(2028, 2, 29, 23, 59, 59)
 
 
-def test_descarta_los_microsegundos_de_fecha_hora() -> None:
-    esquema = TareaCrearEsquema(**_datos(fecha_hora="2026-11-09T10:30:15.987654"))
+def test_descarta_los_microsegundos_de_fecha_creacion() -> None:
+    esquema = TareaCrearEsquema(**_datos(fecha_creacion="2026-11-09T10:30:15.987654"))
 
-    assert esquema.fecha_hora == datetime(2026, 11, 9, 10, 30, 15)
+    assert esquema.fecha_creacion == datetime(2026, 11, 9, 10, 30, 15)
 
 
 def test_actualizar_usa_el_mismo_cuerpo_y_validaciones_que_el_alta() -> None:
@@ -136,10 +137,13 @@ def test_actualizar_usa_el_mismo_cuerpo_y_validaciones_que_el_alta() -> None:
         "nombre": "Editada",
         "prioridad": 3,
         "descripcion": "Descripción",
-        "fecha_hora": datetime(2026, 11, 9, 10, 30, 0),
+        "fecha_creacion": datetime(2026, 11, 9, 10, 30, 0),
+        "fecha_vencimiento": None,
+        "etiquetas": [],
+        "asignados": [],
     }
     with pytest.raises(ValidationError):
-        TareaActualizarEsquema(**_datos(fecha_hora="2026-11-09T10:30:00Z"))
+        TareaActualizarEsquema(**_datos(fecha_creacion="2026-11-09T10:30:00Z"))
     with pytest.raises(ValidationError):
         TareaActualizarEsquema(**_datos(nombre="n" * 201))
 
@@ -150,7 +154,10 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         nombre="Tarea",
         prioridad=None,
         descripcion="Texto",
-        fecha_hora=datetime(2026, 11, 9, 10, 30, 0),
+        fecha_creacion=datetime(2026, 11, 9, 10, 30, 0),
+        fecha_vencimiento=datetime(2026, 11, 20, 18, 0, 0),
+        etiquetas=["casa"],
+        asignados=["Ana"],
     )
 
     assert salida.model_dump(mode="json") == {
@@ -158,8 +165,26 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "nombre": "Tarea",
         "prioridad": None,
         "descripcion": "Texto",
-        "fecha_hora": "2026-11-09T10:30:00",
+        "fecha_creacion": "2026-11-09T10:30:00",
+        "fecha_vencimiento": "2026-11-20T18:00:00",
+        "etiquetas": ["casa"],
+        "asignados": ["Ana"],
     }
+
+
+def test_salida_serializa_la_fecha_de_vencimiento_ausente_como_null() -> None:
+    salida = TareaSalidaEsquema(
+        id=1,
+        nombre="Tarea",
+        prioridad=None,
+        descripcion="Texto",
+        fecha_creacion=datetime(2026, 11, 9, 10, 30, 0),
+        fecha_vencimiento=None,
+        etiquetas=[],
+        asignados=[],
+    )
+
+    assert salida.model_dump(mode="json")["fecha_vencimiento"] is None
 
 
 # Regresión: schemathesis generó un nombre "\u00a0" (espacio duro) que cumplía el
@@ -222,3 +247,105 @@ def test_acepta_caracteres_que_json_schema_no_considera_espacio(valor: str) -> N
     esquema = TareaCrearEsquema(**_datos(nombre=valor))
 
     assert esquema.nombre == valor
+
+
+# --- Fecha de vencimiento (S4) ---
+
+
+def test_fecha_vencimiento_es_opcional() -> None:
+    assert TareaCrearEsquema(**_datos()).fecha_vencimiento is None
+    assert TareaCrearEsquema(**_datos(fecha_vencimiento=None)).fecha_vencimiento is None
+
+
+def test_acepta_fecha_vencimiento_con_el_mismo_formato_que_la_de_creacion() -> None:
+    esquema = TareaCrearEsquema(**_datos(fecha_vencimiento="2026-11-20T18:00:00.123"))
+
+    assert esquema.fecha_vencimiento == datetime(2026, 11, 20, 18, 0, 0)
+
+
+@pytest.mark.parametrize(
+    "fecha_vencimiento",
+    ["", "20/11/2026 18:00:00", "2026-11-20T18:00:00Z", "2026-02-30T10:30:00", 0],
+)
+def test_rechaza_fecha_vencimiento_con_formato_invalido(fecha_vencimiento: object) -> None:
+    for esquema in (TareaCrearEsquema, TareaActualizarEsquema):
+        with pytest.raises(ValidationError):
+            esquema(**_datos(fecha_vencimiento=fecha_vencimiento))
+
+
+def test_rechaza_fecha_vencimiento_anterior_a_la_de_creacion() -> None:
+    for esquema in (TareaCrearEsquema, TareaActualizarEsquema):
+        with pytest.raises(ValidationError) as error:
+            esquema(**_datos(fecha_vencimiento="2026-11-09T10:29:59"))
+        assert "La fecha de vencimiento no puede ser anterior a la fecha de creación." in str(
+            error.value
+        )
+
+
+def test_acepta_fecha_vencimiento_igual_a_la_de_creacion() -> None:
+    esquema = TareaCrearEsquema(**_datos(fecha_vencimiento="2026-11-09T10:30:00"))
+
+    assert esquema.fecha_vencimiento == esquema.fecha_creacion
+
+
+def test_el_contrato_publica_la_fecha_de_vencimiento_como_texto_o_null() -> None:
+    for esquema in (TareaCrearEsquema, TareaActualizarEsquema):
+        propiedad = esquema.model_json_schema()["properties"]["fecha_vencimiento"]
+        tipos = {v.get("type") for v in propiedad["anyOf"]}
+        assert tipos == {"string", "null"}
+        texto = next(v for v in propiedad["anyOf"] if v.get("type") == "string")
+        assert texto["pattern"] == PATRON_FECHA_HORA
+        assert "fecha_vencimiento" not in esquema.model_json_schema().get("required", [])
+
+
+# --- Etiquetas (S1) y asignados (S2) ---
+
+_LIMITES = [("etiquetas", 50), ("asignados", 100)]
+
+
+@pytest.mark.parametrize("campo", ["etiquetas", "asignados"])
+def test_etiquetas_y_asignados_son_opcionales_y_por_defecto_vacios(campo: str) -> None:
+    assert getattr(TareaCrearEsquema(**_datos()), campo) == []
+
+
+@pytest.mark.parametrize(("campo", "maximo"), _LIMITES)
+def test_acepta_nombres_en_el_limite_y_los_recorta(campo: str, maximo: int) -> None:
+    esquema = TareaCrearEsquema(**_datos(**{campo: ["\u00a0" + "x" * maximo + " ", "a"]}))
+
+    assert getattr(esquema, campo) == ["x" * maximo, "a"]
+
+
+@pytest.mark.parametrize(("campo", "maximo"), _LIMITES)
+def test_rechaza_nombres_demasiado_largos(campo: str, maximo: int) -> None:
+    for esquema in (TareaCrearEsquema, TareaActualizarEsquema):
+        with pytest.raises(ValidationError):
+            esquema(**_datos(**{campo: ["x" * (maximo + 1)]}))
+
+
+@pytest.mark.parametrize("campo", ["etiquetas", "asignados"])
+@pytest.mark.parametrize("valor", ["", "   ", *ESPACIOS_UNICODE])
+def test_rechaza_nombres_vacios_o_solo_espacios(campo: str, valor: str) -> None:
+    for esquema in (TareaCrearEsquema, TareaActualizarEsquema):
+        with pytest.raises(ValidationError):
+            esquema(**_datos(**{campo: ["valido", valor]}))
+
+
+@pytest.mark.parametrize("campo", ["etiquetas", "asignados"])
+@pytest.mark.parametrize("valor", [None, "casa", [1], [None]])
+def test_rechaza_valores_que_no_son_listas_de_textos(campo: str, valor: object) -> None:
+    with pytest.raises(ValidationError):
+        TareaCrearEsquema(**_datos(**{campo: valor}))
+
+
+@pytest.mark.parametrize(("campo", "maximo"), _LIMITES)
+def test_el_contrato_publica_las_restricciones_de_cada_nombre(campo: str, maximo: int) -> None:
+    for esquema in (TareaCrearEsquema, TareaActualizarEsquema):
+        propiedad = esquema.model_json_schema()["properties"][campo]
+        assert propiedad["type"] == "array"
+        assert propiedad["items"] == {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": maximo,
+            "pattern": r"\S",
+        }
+        assert campo not in esquema.model_json_schema().get("required", [])
