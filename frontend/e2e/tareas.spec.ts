@@ -365,9 +365,17 @@ test('muestra una cuenta atrás hasta el vencimiento que avanza sola, y "Vencida
   page,
 }) => {
   const marca = `${Date.now()}`
+  // Vencimientos relativos a ahora para cubrir los colores de 24 y 48 horas.
+  const dentroDeHoras = (horas: number) => {
+    const fecha = new Date(Date.now() + horas * 3600 * 1000)
+    const dos = (n: number) => String(n).padStart(2, '0')
+    return `${dos(fecha.getDate())}/${dos(fecha.getMonth() + 1)}/${fecha.getFullYear()} ${dos(fecha.getHours())}:${dos(fecha.getMinutes())}:${dos(fecha.getSeconds())}`
+  }
   const tareas = [
     { nombre: `Futura ${marca}`, vencimiento: '31/12/2099 23:59:59' },
     { nombre: `Pasada ${marca}`, vencimiento: '02/01/2026 10:00:00' },
+    { nombre: `En 30 h ${marca}`, vencimiento: dentroDeHoras(30) },
+    { nombre: `En 5 h ${marca}`, vencimiento: dentroDeHoras(5) },
   ]
 
   await page.goto('/tareas')
@@ -390,6 +398,16 @@ test('muestra una cuenta atrás hasta el vencimiento que avanza sola, y "Vencida
   const pasada = page.locator('tr', { hasText: tareas[1].nombre }).getByRole('timer')
   await expect(pasada).toHaveText(/^Vencida hace \d+ d \d{2} h \d{2} min$/)
   await expect(pasada).toHaveClass(/text-destructive/)
+
+  // Colores según lo que falta: verde (≥ 48 h), naranja (24–48 h), rojo (< 24 h).
+  await expect(futura).toHaveAttribute('data-nivel', 'holgada')
+  await expect(futura).toHaveClass(/text-green-700/)
+  const en30 = page.locator('tr', { hasText: tareas[2].nombre }).getByRole('timer')
+  await expect(en30).toHaveAttribute('data-nivel', 'menos-de-48h')
+  await expect(en30).toHaveClass(/text-orange-700/)
+  const en5 = page.locator('tr', { hasText: tareas[3].nombre }).getByRole('timer')
+  await expect(en5).toHaveAttribute('data-nivel', 'menos-de-24h')
+  await expect(en5).toHaveClass(/text-destructive/)
   await page.screenshot({ path: 'e2e/capturas/tareas-08-cuenta-atras.png' })
 
   // En el detalle también aparece la cuenta atrás.

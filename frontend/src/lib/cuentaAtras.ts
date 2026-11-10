@@ -1,9 +1,19 @@
 import { dosCifras, isoAFechaLocal } from '@/lib/fechas'
 
 /** Texto de la cuenta atrás hasta el vencimiento y si la tarea ya venció. */
+/**
+ * Urgencia según lo que falta para vencer:
+ * - `vencida`: ya venció (desde el instante exacto del vencimiento).
+ * - `menos-de-24h`: quedan menos de 24 horas.
+ * - `menos-de-48h`: quedan 24 horas o más y menos de 48.
+ * - `holgada`: quedan 48 horas o más.
+ */
+export type NivelCuentaAtras = 'vencida' | 'menos-de-24h' | 'menos-de-48h' | 'holgada'
+
 export interface CuentaAtras {
   texto: string
   vencida: boolean
+  nivel: NivelCuentaAtras
 }
 
 const SEGUNDOS_POR_MINUTO = 60
@@ -22,7 +32,7 @@ const SEGUNDOS_POR_DIA = 24 * SEGUNDOS_POR_HORA
  */
 export function calcularCuentaAtras(vencimientoIso: string, ahora: Date): CuentaAtras {
   const vencimiento = isoAFechaLocal(vencimientoIso)
-  if (vencimiento === null) return { texto: vencimientoIso, vencida: false }
+  if (vencimiento === null) return { texto: vencimientoIso, vencida: false, nivel: 'holgada' }
 
   // Se trabaja en segundos completos: las milésimas de `ahora` no cuentan
   // como un segundo más pendiente.
@@ -37,6 +47,18 @@ export function calcularCuentaAtras(vencimientoIso: string, ahora: Date): Cuenta
 
   const prefijoDias = dias >= 1 ? `${dias} d ` : ''
   const horasYMinutos = `${dosCifras(horas)} h ${dosCifras(minutos)} min`
-  if (vencida) return { texto: `Vencida hace ${prefijoDias}${horasYMinutos}`, vencida }
-  return { texto: `Vence en ${prefijoDias}${horasYMinutos} ${dosCifras(segundos)} s`, vencida }
+  if (vencida) {
+    return { texto: `Vencida hace ${prefijoDias}${horasYMinutos}`, vencida, nivel: 'vencida' }
+  }
+  const nivel: NivelCuentaAtras =
+    restantes < SEGUNDOS_POR_DIA
+      ? 'menos-de-24h'
+      : restantes < 2 * SEGUNDOS_POR_DIA
+        ? 'menos-de-48h'
+        : 'holgada'
+  return {
+    texto: `Vence en ${prefijoDias}${horasYMinutos} ${dosCifras(segundos)} s`,
+    vencida,
+    nivel,
+  }
 }

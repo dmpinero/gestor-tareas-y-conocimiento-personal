@@ -239,7 +239,8 @@ describe('VistaTareas', () => {
       const contador = celdaVencimiento(envoltorio, 0).get('[data-testid="contador-vencimiento"]')
       expect(contador.text()).toBe('Vence en 10 d 23 h 14 min 30 s')
       expect(contador.classes()).toEqual(
-        expect.arrayContaining(['block', 'text-xs', 'text-muted-foreground']),
+        // Faltan más de 48 horas: en verde.
+        expect.arrayContaining(['block', 'text-xs', 'text-green-700']),
       )
       expect(contador.classes()).not.toContain('text-destructive')
       expect(celdaVencimiento(envoltorio, 1).text()).toBe('—')
