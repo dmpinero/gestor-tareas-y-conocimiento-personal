@@ -29,9 +29,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   revision-dependencias:
-    # dependency-review-action requiere GitHub Advanced Security, que en repos
-    # privados es una función de pago. En un repo privado nos apoyamos en las
-    # alertas de Dependabot (ya activadas) para las CVEs conocidas.
+    # dependency-review-action necesita el grafo de dependencias del repositorio,
+    # que se activa junto con las alertas de Dependabot (Settings → Code security).
+    # En repos privados además requiere GitHub Advanced Security (de pago), por
+    # eso solo se ejecuta si el repositorio es público; en uno privado nos
+    # apoyaríamos solo en las alertas de Dependabot para las CVEs conocidas.
     if: github.event_name == 'pull_request' && github.event.repository.private == false
     runs-on: ubuntu-latest
     steps:
