@@ -35,6 +35,7 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         asignados=ordenar_nombres(p.nombre for p in modelo.asignados),
         tipo=TipoTarea(modelo.tipo) if modelo.tipo is not None else None,
         oportunidad=_a_oportunidad(modelo.oportunidad),
+        completada=modelo.completada,
     )
 
 
@@ -91,7 +92,7 @@ class RepositorioTareasSqlAlchemy:
 
     def crear(self, tarea: Tarea) -> Tarea:
         with traducir_conflictos(self._sesion):
-            modelo = TareaModelo()
+            modelo = TareaModelo(completada=tarea.completada)
             self._asignar_datos(modelo, tarea)
             self._sesion.add(modelo)
             self._sesion.commit()
@@ -109,5 +110,14 @@ class RepositorioTareasSqlAlchemy:
         with traducir_conflictos(self._sesion):
             modelo = self._sesion.get(TareaModelo, tarea.id)
             self._asignar_datos(modelo, tarea)
+            self._sesion.commit()
+        return _a_entidad(modelo)
+
+    def cambiar_completada(self, id_tarea: int, completada: bool) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            modelo = self._sesion.get(TareaModelo, id_tarea)
+            if modelo is None:
+                return None
+            modelo.completada = completada
             self._sesion.commit()
         return _a_entidad(modelo)

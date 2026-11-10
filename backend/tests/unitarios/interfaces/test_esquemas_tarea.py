@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     PATRON_FECHA_HORA,
     TareaActualizarEsquema,
+    TareaCompletadaEsquema,
     TareaCrearEsquema,
     TareaSalidaEsquema,
 )
@@ -162,6 +163,7 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         asignados=["Ana"],
         tipo=None,
         oportunidad=None,
+        completada=False,
     )
 
     assert salida.model_dump(mode="json") == {
@@ -175,6 +177,7 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "asignados": ["Ana"],
         "tipo": None,
         "oportunidad": None,
+        "completada": False,
     }
 
 
@@ -190,6 +193,7 @@ def test_salida_serializa_la_fecha_de_vencimiento_ausente_como_null() -> None:
         asignados=[],
         tipo=None,
         oportunidad=None,
+        completada=False,
     )
 
     assert salida.model_dump(mode="json")["fecha_vencimiento"] is None
@@ -357,3 +361,36 @@ def test_el_contrato_publica_las_restricciones_de_cada_nombre(campo: str, maximo
             "pattern": r"\S",
         }
         assert campo not in esquema.model_json_schema().get("required", [])
+
+
+def test_la_salida_exige_el_estado_completada() -> None:
+    assert "completada" in TareaSalidaEsquema.model_json_schema()["required"]
+    assert TareaSalidaEsquema.model_json_schema()["properties"]["completada"]["type"] == ("boolean")
+
+
+@pytest.mark.parametrize("esquema", [TareaCrearEsquema, TareaActualizarEsquema])
+def test_el_alta_y_la_edicion_no_reciben_el_estado_completada(esquema) -> None:
+    # El estado solo se cambia con PATCH /completada: el campo no forma parte del
+    # cuerpo y, como cualquier otro campo desconocido, se descarta.
+    assert "completada" not in esquema.model_json_schema()["properties"]
+    assert "completada" not in esquema(**_datos(completada=True)).model_dump()
+
+
+@pytest.mark.parametrize("valor", [True, False])
+def test_el_cambio_de_estado_acepta_booleanos(valor: bool) -> None:
+    assert TareaCompletadaEsquema(completada=valor).completada is valor
+
+
+@pytest.mark.parametrize("valor", ["true", "false", 1, 0, None, "si", 1.0])
+def test_el_cambio_de_estado_rechaza_lo_que_no_es_booleano(valor: object) -> None:
+    with pytest.raises(ValidationError):
+        TareaCompletadaEsquema(completada=valor)
+
+
+def test_el_cambio_de_estado_exige_el_campo_completada() -> None:
+    with pytest.raises(ValidationError):
+        TareaCompletadaEsquema()
+
+    contrato = TareaCompletadaEsquema.model_json_schema()
+    assert contrato["properties"] == {"completada": {"title": "Completada", "type": "boolean"}}
+    assert contrato["required"] == ["completada"]

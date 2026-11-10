@@ -262,7 +262,18 @@ class TareaCrearEsquema(BaseModel):
 
 
 class TareaActualizarEsquema(TareaCrearEsquema):
-    """Cuerpo de la edición: los mismos campos y validaciones que el alta."""
+    """Cuerpo de la edición: los mismos campos y validaciones que el alta.
+
+    Ni el alta ni la edición reciben ``completada``: como cualquier campo
+    desconocido, se descarta, y el estado solo cambia con ``TareaCompletadaEsquema``.
+    """
+
+
+class TareaCompletadaEsquema(BaseModel):
+    """Cuerpo del cambio de estado. Solo admite ``true`` o ``false`` de JSON: una
+    cadena como ``"true"``, un número o ``null`` se rechazan con 422."""
+
+    completada: bool = Field(strict=True)
 
 
 class TareaSalidaEsquema(BaseModel):
@@ -276,3 +287,4 @@ class TareaSalidaEsquema(BaseModel):
     asignados: list[str]
     tipo: TipoTareaEsquema | None
     oportunidad: OportunidadSalidaEsquema | None
+    completada: bool

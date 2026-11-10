@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 from pytest_bdd import given, parsers, scenarios, then, when
 
@@ -52,6 +54,7 @@ _OPCIONALES_POR_DEFECTO = {
     "asignados": [],
     "tipo": None,
     "oportunidad": None,
+    "completada": False,
 }
 
 
@@ -520,3 +523,126 @@ def el_listado_muestra_solo_esa_tarea(cliente: TestClient, peticion: dict) -> No
 @then("el listado muestra la tarea de tipo oportunidad sin cambios")
 def el_listado_muestra_la_oportunidad_sin_cambios(cliente: TestClient, tarea_previa: dict) -> None:
     assert cliente.get("/api/v1/tareas").json() == [tarea_previa]
+
+
+_ESTADOS = {"completada": True, "pendiente": False}
+
+
+def _cambiar_estado(cliente: TestClient, id_tarea: int, cuerpo: object):
+    return cliente.patch(f"/api/v1/tareas/{id_tarea}/completada", json=cuerpo)
+
+
+@then("ninguna tarea del listado está completada")
+def ninguna_tarea_esta_completada(respuesta) -> None:
+    assert respuesta.status_code == 200
+    tareas = respuesta.json()
+    assert tareas
+    assert all(t["completada"] is False for t in tareas)
+
+
+@given(parsers.parse('la tarea "{nombre}" está completada'))
+def la_tarea_esta_completada(cliente: TestClient, tareas_previas: list[dict], nombre: str) -> None:
+    respuesta = _cambiar_estado(cliente, _id_de(cliente, nombre), {"completada": True})
+    assert respuesta.status_code == 200
+    for tarea in tareas_previas:
+        if tarea["nombre"] == nombre:
+            tarea["completada"] = True
+
+
+@when(
+    parsers.re(r'marco la tarea "(?P<nombre>[^"]+)" como (?P<estado>completada|pendiente)'),
+    target_fixture="respuesta",
+)
+def marcar_tarea(cliente: TestClient, nombre: str, estado: str):
+    return _cambiar_estado(cliente, _id_de(cliente, nombre), {"completada": _ESTADOS[estado]})
+
+
+@when(
+    parsers.parse("intento marcar como completada la tarea con id {id_tarea:d}"),
+    target_fixture="respuesta",
+)
+def marcar_tarea_inexistente(cliente: TestClient, id_tarea: int):
+    return _cambiar_estado(cliente, id_tarea, {"completada": True})
+
+
+@when(
+    parsers.parse('intento cambiar el estado de la tarea "{nombre}" con el cuerpo {cuerpo}'),
+    target_fixture="respuesta",
+)
+def cambiar_estado_invalido(cliente: TestClient, nombre: str, cuerpo: str):
+    return _cambiar_estado(cliente, _id_de(cliente, nombre), json.loads(cuerpo))
+
+
+@then(
+    parsers.re(
+        r'la API responde con la tarea "(?P<nombre>[^"]+)" (?P<estado>completada|pendiente) '
+        r"y el resto de sus datos sin cambios"
+    )
+)
+def la_api_responde_con_el_estado(
+    respuesta, tareas_previas: list[dict], nombre: str, estado: str
+) -> None:
+    assert respuesta.status_code == 200
+    previa = next(t for t in tareas_previas if t["nombre"] == nombre)
+    assert respuesta.json() == {**previa, "completada": _ESTADOS[estado]}
+
+
+@then(
+    parsers.re(
+        r'en el listado "(?P<primera>[^"]+)" está (?P<estado_primera>completada|pendiente) '
+        r'y "(?P<segunda>[^"]+)" (?P<estado_segunda>completada|pendiente)'
+    )
+)
+def el_listado_muestra_los_estados(
+    cliente: TestClient,
+    tareas_previas: list[dict],
+    primera: str,
+    estado_primera: str,
+    segunda: str,
+    estado_segunda: str,
+) -> None:
+    estados = {primera: _ESTADOS[estado_primera], segunda: _ESTADOS[estado_segunda]}
+    esperado = [{**t, "completada": estados[t["nombre"]]} for t in tareas_previas]
+    listado = cliente.get("/api/v1/tareas").json()
+    # Si la tarea se editó, el resto de sus datos los comprueba el paso anterior.
+    assert [t["completada"] for t in listado] == [t["completada"] for t in esperado]
+    assert [t["id"] for t in listado] == [t["id"] for t in esperado]
+
+
+@when("creo una tarea indicando que está completada", target_fixture="peticion")
+def crear_tarea_completada(cliente: TestClient) -> dict:
+    datos = {**_DATOS_VALIDOS, "completada": True}
+    return {"datos": datos, "respuesta": cliente.post("/api/v1/tareas", json=datos)}
+
+
+@then("la API responde que la tarea se ha creado pendiente")
+def la_tarea_se_ha_creado_pendiente(peticion: dict) -> None:
+    respuesta = peticion["respuesta"]
+    assert respuesta.status_code == 201
+    cuerpo = respuesta.json()
+    sin_estado = {k: v for k, v in peticion["datos"].items() if k != "completada"}
+    assert cuerpo == {"id": cuerpo["id"], **_OPCIONALES_POR_DEFECTO, **sin_estado}
+
+
+@when(
+    parsers.parse('edito la tarea "{nombre}" indicando que está pendiente'),
+    target_fixture="peticion",
+)
+def editar_tarea_indicando_pendiente(cliente: TestClient, nombre: str) -> dict:
+    id_tarea = _id_de(cliente, nombre)
+    datos = {**_DATOS_VALIDOS, "nombre": nombre, "descripcion": "Editada", "completada": False}
+    respuesta = cliente.put(f"/api/v1/tareas/{id_tarea}", json=datos)
+    return {"id": id_tarea, "datos": datos, "respuesta": respuesta}
+
+
+@then(parsers.parse('la API responde con la tarea "{nombre}" completada y los datos editados'))
+def la_tarea_editada_sigue_completada(peticion: dict, nombre: str) -> None:
+    respuesta = peticion["respuesta"]
+    assert respuesta.status_code == 200
+    sin_estado = {k: v for k, v in peticion["datos"].items() if k != "completada"}
+    assert respuesta.json() == {
+        "id": peticion["id"],
+        **_OPCIONALES_POR_DEFECTO,
+        **sin_estado,
+        "completada": True,
+    }

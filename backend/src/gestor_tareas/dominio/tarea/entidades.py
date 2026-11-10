@@ -39,6 +39,8 @@ class Tarea:
 
     ``tipo`` es opcional. Los datos del tipo van en el campo con su nombre
     (``oportunidad``), que solo tiene valor cuando la tarea es de ese tipo.
+
+    ``completada`` indica si la tarea está hecha; una tarea nueva está pendiente.
     """
 
     nombre: str
@@ -50,4 +52,5 @@ class Tarea:
     asignados: list[str] = field(default_factory=list)
     tipo: TipoTarea | None = None
     oportunidad: Oportunidad | None = None
+    completada: bool = False
     id: int | None = None

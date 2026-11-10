@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
+from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
@@ -21,6 +22,7 @@ from gestor_tareas.interfaces.api.respuestas_error import (
 )
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     TareaActualizarEsquema,
+    TareaCompletadaEsquema,
     TareaCrearEsquema,
     TareaSalidaEsquema,
 )
@@ -56,8 +58,8 @@ def listar(sesion: Session = Depends(obtener_sesion)) -> list[TareaSalidaEsquema
 def crear(
     datos: TareaCrearEsquema, sesion: Session = Depends(obtener_sesion)
 ) -> TareaSalidaEsquema:
-    """Crea una tarea con nombre, prioridad opcional (1–5), descripción, fecha de creación,
-    fecha de vencimiento opcional (no anterior a la de creación; si lo es, 422),
+    """Crea una tarea pendiente con nombre, prioridad opcional (1–5), descripción, fecha de
+    creación, fecha de vencimiento opcional (no anterior a la de creación; si lo es, 422),
     etiquetas, personas asignadas y tipo opcional. Con tipo "oportunidad", los
     datos de `oportunidad` son obligatorios; sin tipo, deben ser null (422).
 
@@ -83,10 +85,28 @@ def actualizar(
     """Sustituye todos los datos de una tarea existente, incluidos sus conjuntos de
     etiquetas y personas asignadas, y su tipo con sus datos (sin tipo, se borran
     los datos de oportunidad); 404 si el id no existe y 422 si la fecha de
-    vencimiento es anterior a la de creación o el tipo no casa con sus datos."""
+    vencimiento es anterior a la de creación o el tipo no casa con sus datos.
+    El estado completada no cambia (solo lo cambia `PATCH .../completada`)."""
     tarea = ActualizarTarea(
         RepositorioTareasSqlAlchemy(sesion),
         RepositorioEtiquetasSqlAlchemy(sesion),
         RepositorioPersonasSqlAlchemy(sesion),
     ).ejecutar(id_tarea, **_argumentos(datos))
+    return _a_esquema(tarea)
+
+
+@enrutador.patch(
+    "/{id_tarea:int}/completada",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def marcar_completada(
+    id_tarea: int, datos: TareaCompletadaEsquema, sesion: Session = Depends(obtener_sesion)
+) -> TareaSalidaEsquema:
+    """Marca la tarea como completada (`true`) o la deja pendiente (`false`) y la
+    devuelve con el resto de sus datos sin cambios; 404 si el id no existe y 422
+    si `completada` no es un booleano de JSON."""
+    tarea = MarcarCompletada(RepositorioTareasSqlAlchemy(sesion)).ejecutar(
+        id_tarea, datos.completada
+    )
     return _a_esquema(tarea)

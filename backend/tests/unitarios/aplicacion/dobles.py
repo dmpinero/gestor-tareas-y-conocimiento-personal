@@ -28,8 +28,17 @@ class RepositorioTareasFalso:
 
     def actualizar(self, tarea: Tarea) -> Tarea:
         assert tarea.id in self._tareas
+        # Como el repositorio real, la edición no cambia el estado completada.
+        tarea.completada = self._tareas[tarea.id].completada
         self._tareas[tarea.id] = tarea
         return tarea
+
+    def cambiar_completada(self, id_tarea: int, completada: bool) -> Tarea | None:
+        tarea = self._tareas.get(id_tarea)
+        if tarea is None:
+            return None
+        tarea.completada = completada
+        return replace(tarea)
 
 
 class _RepositorioCatalogoFalso[T: (Etiqueta, Persona)]:
