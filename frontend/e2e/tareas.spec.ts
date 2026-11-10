@@ -442,3 +442,46 @@ test('muestra una cuenta atrás hasta el vencimiento que avanza sola, y "Vencida
   await sinAnimaciones()
   expect((await auditar()).violations).toEqual([])
 })
+
+test('marca una tarea como completada, la tacha, se conserva al recargar y se desmarca', async ({
+  page,
+}) => {
+  const nombre = `Completable ${Date.now()}`
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Crear tarea' }).click()
+  const panel = page.getByRole('dialog', { name: 'Crear tarea' })
+  await panel.getByPlaceholder('Nombre').fill(nombre)
+  await panel.getByPlaceholder('Descripción').fill('Se tacha al completarla')
+  await panel.getByRole('button', { name: 'Guardar' }).click()
+  await expect(panel).toBeHidden()
+
+  const fila = page.locator('tr', { hasText: nombre })
+  const conmutador = fila.getByRole('button', { name: `Marcar como completada la tarea ${nombre}` })
+  const celdaNombre = fila.locator('td').first()
+  await expect(conmutador).toHaveAttribute('aria-pressed', 'false')
+  await expect(celdaNombre).toHaveCSS('text-decoration-line', 'none')
+
+  await conmutador.click()
+  await expect(conmutador).toHaveAttribute('aria-pressed', 'true')
+  await expect(conmutador).toHaveAttribute('title', 'Completada')
+  await expect(celdaNombre).toHaveCSS('text-decoration-line', 'line-through')
+  await expect(fila.locator('td').last()).toHaveCSS('text-decoration-line', 'none')
+  await page.screenshot({ path: 'e2e/capturas/tareas-09-completada.png' })
+
+  // El estado se guarda: sigue tachada al recargar y en el detalle.
+  await page.reload()
+  await expect(conmutador).toHaveAttribute('aria-pressed', 'true')
+  await expect(celdaNombre).toHaveCSS('text-decoration-line', 'line-through')
+  await fila.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: nombre })
+  await expect(detalle).toContainText('Completada')
+  await page.keyboard.press('Escape')
+  await expect(detalle).toBeHidden()
+
+  await conmutador.click()
+  await expect(conmutador).toHaveAttribute('aria-pressed', 'false')
+  await expect(celdaNombre).toHaveCSS('text-decoration-line', 'none')
+  await page.reload()
+  await expect(conmutador).toHaveAttribute('aria-pressed', 'false')
+})
