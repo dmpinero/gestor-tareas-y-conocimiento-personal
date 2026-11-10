@@ -260,3 +260,62 @@ test('filtra la tabla por texto, prioridad y fecha de creación, y limpia los fi
   await expect(page.locator('#filtro-buscar')).toHaveValue('')
   await expect(page.locator('#filtro-creacion-desde')).toHaveValue('')
 })
+
+test('crea una oportunidad, muestra su tipo en la tabla y todos sus campos en el detalle', async ({
+  page,
+}) => {
+  const marca = `${Date.now()}`
+  const nombre = `Oportunidad ${marca}`
+  // Prefijo "OP-" para que el código no aparezca dentro del nombre (que lleva la marca).
+  const codigo = `OP-${marca.slice(-7)}`
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Crear tarea' }).click()
+  const panel = page.getByRole('dialog', { name: /^(Crear|Editar) tarea$/ })
+  await panel.getByPlaceholder('Nombre').fill(nombre)
+  await panel.getByPlaceholder('Descripción').fill('Tarea de tipo oportunidad')
+  await panel.getByLabel('Tipo de tarea').selectOption({ label: 'Oportunidad' })
+  await panel.getByLabel('Código de la oportunidad').fill(codigo)
+  await panel.getByLabel('Descripción de la oportunidad').fill('Cliente interesado')
+  await panel.getByLabel('Observaciones').fill('Primera línea\nSegunda línea')
+  await panel.getByRole('button', { name: 'Guardar' }).click()
+  await expect(panel).toBeHidden()
+
+  // En la tabla solo se ve el tipo, no los campos de la oportunidad.
+  const fila = page.locator('tr', { hasText: nombre })
+  await expect(fila).toContainText('Oportunidad')
+  await expect(fila).not.toContainText(codigo)
+  await expect(fila).not.toContainText('Cliente interesado')
+
+  // El detalle muestra todos los campos en una modal del 90 % del viewport.
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: nombre })
+  await expect(detalle).toBeVisible()
+  await expect(detalle).toContainText('Tarea de tipo oportunidad')
+  await expect(detalle).toContainText(codigo)
+  await expect(detalle).toContainText('Cliente interesado')
+  await expect(detalle).toContainText('Segunda línea')
+  // Se mide al terminar la animación de entrada (arranca al 95 % del tamaño).
+  await detalle.evaluate((elemento) =>
+    Promise.all(elemento.getAnimations().map((animacion) => animacion.finished)),
+  )
+  const caja = await detalle.boundingBox()
+  const ventana = page.viewportSize()!
+  expect(caja!.width).toBeCloseTo(ventana.width * 0.9, -1)
+  expect(caja!.height).toBeCloseTo(ventana.height * 0.9, -1)
+  await page.screenshot({ path: 'e2e/capturas/tareas-07-detalle.png' })
+  await detalle.getByRole('button', { name: 'Cerrar' }).click()
+  await expect(detalle).toBeHidden()
+
+  // Al quitar el tipo, la tarea deja de ser una oportunidad.
+  await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
+  await expect(panel.getByLabel('Código de la oportunidad')).toHaveValue(codigo)
+  await panel.getByLabel('Tipo de tarea').selectOption({ label: 'Sin tipo' })
+  await expect(panel.getByLabel('Código de la oportunidad')).toBeHidden()
+  await panel.getByRole('button', { name: 'Guardar' }).click()
+  await expect(panel).toBeHidden()
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await expect(detalle).not.toContainText(codigo)
+  await page.keyboard.press('Escape')
+  await expect(detalle).toBeHidden()
+})

@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { ChevronRight, Search } from '@lucide/vue'
+import { ChevronRight, Eye, Pencil, Search } from '@lucide/vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
-import type { DatosTarea, Tarea } from '@/api/tipos'
+import {
+  TIPOS_TAREA,
+  etiquetaTipoTarea,
+  type DatosTarea,
+  type Oportunidad,
+  type Tarea,
+  type TipoTarea,
+} from '@/api/tipos'
 import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
 import { useTiendaTareas } from '@/stores/tareas'
 import { useBusquedaTabla } from '@/composables/useBusquedaTabla'
@@ -15,6 +22,7 @@ import {
 } from '@/composables/useOrdenacionTabla'
 import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
+import DetalleTarea from '@/componentes/compartido/DetalleTarea.vue'
 import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import SelectorEtiquetas from '@/componentes/compartido/SelectorEtiquetas.vue'
 import SelectorFechaHora from '@/componentes/compartido/SelectorFechaHora.vue'
@@ -39,6 +47,8 @@ const panelAbierto = ref(false)
 const errorFormulario = ref<string | null>(null)
 // `null` en modo crear; el id de la tarea en modo editar.
 const idEnEdicion = ref<number | null>(null)
+// Tarea abierta en la modal de detalle, o `null` si está cerrada.
+const tareaEnDetalle = ref<Tarea | null>(null)
 
 const ERROR_FECHA_HORA = 'La fecha y hora debe tener el formato dd/mm/aaaa hh:mm:ss y ser válida.'
 const ERROR_FECHA_VENCIMIENTO =
@@ -47,7 +57,8 @@ const ERROR_VENCIMIENTO_ANTERIOR =
   'La fecha de vencimiento no puede ser anterior a la fecha de creación.'
 
 // La prioridad llega como número desde un `<input type="number">`, o como
-// cadena vacía cuando el campo se deja en blanco.
+// cadena vacía cuando el campo se deja en blanco. El tipo vacío es "Sin tipo";
+// los campos de la oportunidad solo se envían si el tipo es "Oportunidad".
 const formulario = reactive<{
   nombre: string
   prioridad: string | number | null
@@ -56,6 +67,8 @@ const formulario = reactive<{
   fechaVencimiento: string
   etiquetas: string[]
   asignados: string[]
+  tipo: TipoTarea | ''
+  oportunidad: { codigo: string; descripcion: string; observaciones: string }
 }>({
   nombre: '',
   prioridad: '',
@@ -64,6 +77,8 @@ const formulario = reactive<{
   fechaVencimiento: '',
   etiquetas: [],
   asignados: [],
+  tipo: '',
+  oportunidad: { codigo: '', descripcion: '', observaciones: '' },
 })
 
 onMounted(() => {
@@ -89,6 +104,7 @@ type CampoOrdenable =
   | 'asignados'
   | 'fechaCreacion'
   | 'fechaVencimiento'
+  | 'tipo'
 
 // --- Filtros (en el navegador; el orden y la exportación usan las filas filtradas) ---
 
@@ -96,10 +112,16 @@ type CampoOrdenable =
 // una prioridad real (1–5) ni con un nombre de catálogo (nunca vacío).
 const SIN_PRIORIDAD = 0
 const SIN_NOMBRE = ''
+const SIN_TIPO = ''
 
 const ITEMS_PRIORIDAD = [
   ...[1, 2, 3, 4, 5].map((valor) => ({ id: valor, nombre: String(valor) })),
   { id: SIN_PRIORIDAD, nombre: 'Sin prioridad' },
+]
+
+const ITEMS_TIPO: { id: TipoTarea | typeof SIN_TIPO; nombre: string }[] = [
+  ...TIPOS_TAREA.map((tipo) => ({ id: tipo.valor, nombre: tipo.etiqueta })),
+  { id: SIN_TIPO, nombre: 'Sin tipo' },
 ]
 
 /**
@@ -137,6 +159,7 @@ const itemsAsignadosFiltro = computed(() =>
 const prioridadesFiltro = ref<number[]>(ITEMS_PRIORIDAD.map((item) => item.id))
 const etiquetasFiltro = ref<string[]>(itemsEtiquetasFiltro.value.map((item) => item.id))
 const asignadosFiltro = ref<string[]>(itemsAsignadosFiltro.value.map((item) => item.id))
+const tiposFiltro = ref<string[]>(ITEMS_TIPO.map((item) => item.id))
 // Fechas de los `<input type="date">` (`YYYY-MM-DD`), o '' sin límite.
 const creacionDesde = ref('')
 const creacionHasta = ref('')
@@ -174,6 +197,7 @@ const tareasConFiltros = computed(() =>
     if (!prioridadesFiltro.value.includes(tarea.prioridad ?? SIN_PRIORIDAD)) return false
     if (!pasaFiltroNombres(tarea.etiquetas, etiquetasFiltro.value)) return false
     if (!pasaFiltroNombres(tarea.asignados, asignadosFiltro.value)) return false
+    if (!tiposFiltro.value.includes(tarea.tipo ?? SIN_TIPO)) return false
     if (!dentroDeRango(tarea.fecha_creacion, creacionDesde.value, creacionHasta.value)) {
       return false
     }
@@ -198,6 +222,7 @@ function limpiarFiltros(): void {
   prioridadesFiltro.value = ITEMS_PRIORIDAD.map((item) => item.id)
   etiquetasFiltro.value = itemsEtiquetasFiltro.value.map((item) => item.id)
   asignadosFiltro.value = itemsAsignadosFiltro.value.map((item) => item.id)
+  tiposFiltro.value = ITEMS_TIPO.map((item) => item.id)
   creacionDesde.value = ''
   creacionHasta.value = ''
   vencimientoDesde.value = ''
@@ -218,6 +243,7 @@ const { campo, direccion, ordenarPor, filasOrdenadas } = useOrdenacionTabla<Tare
     asignados: compararConNulosAlFinal((tarea) => unirNombres(tarea.asignados), compararTexto),
     fechaCreacion: (a, b) => compararIso(a.fecha_creacion, b.fecha_creacion),
     fechaVencimiento: compararConNulosAlFinal((tarea) => tarea.fecha_vencimiento, compararIso),
+    tipo: compararConNulosAlFinal((tarea) => etiquetaTipoTarea(tarea.tipo), compararTexto),
   },
 )
 
@@ -229,13 +255,15 @@ const COLUMNAS_ORDENABLES: { campo: CampoOrdenable; etiqueta: string }[] = [
   { campo: 'asignados', etiqueta: 'Asignado a' },
   { campo: 'fechaCreacion', etiqueta: 'Fecha de creación' },
   { campo: 'fechaVencimiento', etiqueta: 'Fecha de vencimiento' },
+  { campo: 'tipo', etiqueta: 'Tipo' },
 ]
 // Columnas de la tabla que se muestran como chips.
 const CAMPOS_LISTA = ['etiquetas', 'asignados'] as const
 
 const COLUMNAS_EXPORTACION = COLUMNAS_ORDENABLES.map((columna) => columna.etiqueta)
 
-// Se exportan las filas filtradas en el orden actual y con los valores tal como se ven.
+// Se exportan las filas filtradas en el orden actual y con los valores tal como se ven
+// (del tipo, solo su texto: los campos propios de cada tipo no salen en la tabla).
 const filasExportacion = computed<CeldaExportada[][]>(() =>
   filasOrdenadas.value.map((tarea) => [
     tarea.nombre,
@@ -245,6 +273,7 @@ const filasExportacion = computed<CeldaExportada[][]>(() =>
     unirNombres(tarea.asignados) ?? '—',
     formatearFechaHora(tarea.fecha_creacion),
     tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—',
+    etiquetaTipoTarea(tarea.tipo) ?? '—',
   ]),
 )
 
@@ -256,6 +285,8 @@ function limpiarFormulario(): void {
   formulario.fechaVencimiento = ''
   formulario.etiquetas = []
   formulario.asignados = []
+  formulario.tipo = ''
+  formulario.oportunidad = { codigo: '', descripcion: '', observaciones: '' }
   errorFormulario.value = null
   idEnEdicion.value = null
 }
@@ -279,12 +310,35 @@ function abrirParaEditar(tarea: Tarea): void {
   // Copias, para que editar los chips no altere la tarea mostrada en la tabla.
   formulario.etiquetas = [...tarea.etiquetas]
   formulario.asignados = [...tarea.asignados]
+  formulario.tipo = tarea.tipo ?? ''
+  if (tarea.oportunidad) {
+    formulario.oportunidad = {
+      codigo: tarea.oportunidad.codigo,
+      descripcion: tarea.oportunidad.descripcion ?? '',
+      observaciones: tarea.oportunidad.observaciones ?? '',
+    }
+  }
   panelAbierto.value = true
 }
 
 function aPrioridad(valor: string | number | null): number | null {
   if (valor === null || valor === '') return null
   return Number(valor)
+}
+
+/** Texto opcional del formulario: vacío (o solo espacios) se envía como `null`. */
+function aTextoOpcional(valor: string): string | null {
+  return valor.trim() === '' ? null : valor
+}
+
+/** Datos de la oportunidad a enviar, o `null` si el tipo elegido no es "Oportunidad". */
+function datosOportunidad(): Oportunidad | null {
+  if (formulario.tipo !== 'oportunidad') return null
+  return {
+    codigo: formulario.oportunidad.codigo,
+    descripcion: aTextoOpcional(formulario.oportunidad.descripcion),
+    observaciones: aTextoOpcional(formulario.oportunidad.observaciones),
+  }
 }
 
 /**
@@ -317,6 +371,8 @@ async function guardar(): Promise<void> {
     fecha_vencimiento: fechas.vencimiento,
     etiquetas: [...formulario.etiquetas],
     asignados: [...formulario.asignados],
+    tipo: formulario.tipo === '' ? null : formulario.tipo,
+    oportunidad: datosOportunidad(),
   }
   try {
     if (idEnEdicion.value === null) {
@@ -400,6 +456,19 @@ async function guardar(): Promise<void> {
               etiqueta-boton="Filtrar por asignado a"
               nombre-singular="persona"
               nombre-plural="personas"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <Label>Tipo</Label>
+            <FiltroMultiple
+              v-model="tiposFiltro"
+              :items="ITEMS_TIPO"
+              id-base="filtro-tipo"
+              etiqueta-boton="Filtrar por tipo"
+              nombre-singular="tipo"
+              nombre-plural="tipos"
+              genero="masculino"
             />
           </div>
 
@@ -502,6 +571,50 @@ async function guardar(): Promise<void> {
               anulable
             />
           </div>
+          <div class="flex flex-col gap-1.5">
+            <Label for="tarea-tipo">Tipo de tarea</Label>
+            <select
+              id="tarea-tipo"
+              v-model="formulario.tipo"
+              class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
+            >
+              <option value="">Sin tipo</option>
+              <option v-for="tipo in TIPOS_TAREA" :key="tipo.valor" :value="tipo.valor">
+                {{ tipo.etiqueta }}
+              </option>
+            </select>
+          </div>
+          <fieldset
+            v-if="formulario.tipo === 'oportunidad'"
+            class="flex flex-col gap-3 rounded-md border p-3"
+          >
+            <legend class="px-1 text-sm font-medium">Oportunidad</legend>
+            <div class="flex flex-col gap-1.5">
+              <Label for="oportunidad-codigo">Código de la oportunidad</Label>
+              <Input
+                id="oportunidad-codigo"
+                v-model="formulario.oportunidad.codigo"
+                required
+                maxlength="10"
+              />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label for="oportunidad-descripcion">Descripción de la oportunidad</Label>
+              <Input
+                id="oportunidad-descripcion"
+                v-model="formulario.oportunidad.descripcion"
+                maxlength="200"
+              />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label for="oportunidad-observaciones">Observaciones</Label>
+              <Textarea
+                id="oportunidad-observaciones"
+                v-model="formulario.oportunidad.observaciones"
+                maxlength="5000"
+              />
+            </div>
+          </fieldset>
 
           <p v-if="errorFormulario" class="text-sm text-destructive" role="alert">
             {{ errorFormulario }}
@@ -589,17 +702,33 @@ async function guardar(): Promise<void> {
           <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
             tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—'
           }}</TableCell>
+          <TableCell>{{ etiquetaTipoTarea(tarea.tipo) ?? '—' }}</TableCell>
           <TableCell>
-            <Button
-              variant="outline"
-              size="sm"
-              :aria-label="`Editar tarea ${tarea.nombre}`"
-              @click="abrirParaEditar(tarea)"
-              >Editar</Button
-            >
+            <div class="flex gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                :aria-label="`Editar tarea ${tarea.nombre}`"
+                title="Editar"
+                @click="abrirParaEditar(tarea)"
+              >
+                <Pencil />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                :aria-label="`Ver detalle de la tarea ${tarea.nombre}`"
+                title="Detalle"
+                @click="tareaEnDetalle = tarea"
+              >
+                <Eye />
+              </Button>
+            </div>
           </TableCell>
         </TableRow>
       </TableBody>
     </Table>
+
+    <DetalleTarea :tarea="tareaEnDetalle" @cerrar="tareaEnDetalle = null" />
   </section>
 </template>

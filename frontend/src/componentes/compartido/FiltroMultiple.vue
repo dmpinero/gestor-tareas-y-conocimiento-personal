@@ -18,6 +18,8 @@ const props = defineProps<{
   etiquetaBoton: string
   nombreSingular: string
   nombrePlural: string
+  // Género gramatical del nombre, para "Todas las …"/"Ninguna …" o "Todos los …"/"Ningún …".
+  genero?: 'femenino' | 'masculino'
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [ids: T[]] }>()
@@ -27,8 +29,11 @@ const todosSeleccionados = computed(
 )
 
 const textoDisparador = computed(() => {
-  if (props.items.length === 0 || todosSeleccionados.value) return `Todas las ${props.nombrePlural}`
-  if (props.modelValue.length === 0) return `Ninguna ${props.nombreSingular}`
+  const masculino = props.genero === 'masculino'
+  if (props.items.length === 0 || todosSeleccionados.value)
+    return `${masculino ? 'Todos los' : 'Todas las'} ${props.nombrePlural}`
+  if (props.modelValue.length === 0)
+    return `${masculino ? 'Ningún' : 'Ninguna'} ${props.nombreSingular}`
   if (props.modelValue.length === 1) {
     const item = props.items.find((i) => i.id === props.modelValue[0])
     return item ? item.nombre : `1 ${props.nombreSingular}`
