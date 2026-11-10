@@ -2,9 +2,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gestor_tareas.dominio.nombres_catalogo import ordenar_nombres
-from gestor_tareas.dominio.tarea.entidades import Tarea
+from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from gestor_tareas.infraestructura.persistencia.modelos import (
     EtiquetaModelo,
+    OportunidadModelo,
     PersonaModelo,
     TareaModelo,
 )
@@ -12,6 +13,14 @@ from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import t
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     filas_obtenidas,
 )
+
+
+def _a_oportunidad(modelo: OportunidadModelo | None) -> Oportunidad | None:
+    if modelo is None:
+        return None
+    return Oportunidad(
+        codigo=modelo.codigo, descripcion=modelo.descripcion, observaciones=modelo.observaciones
+    )
 
 
 def _a_entidad(modelo: TareaModelo) -> Tarea:
@@ -24,6 +33,8 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         fecha_vencimiento=modelo.fecha_vencimiento,
         etiquetas=ordenar_nombres(e.nombre for e in modelo.etiquetas),
         asignados=ordenar_nombres(p.nombre for p in modelo.asignados),
+        tipo=TipoTarea(modelo.tipo) if modelo.tipo is not None else None,
+        oportunidad=_a_oportunidad(modelo.oportunidad),
     )
 
 
@@ -59,6 +70,24 @@ class RepositorioTareasSqlAlchemy:
         # Asignar la lista completa sustituye el conjunto de enlaces de la tarea.
         modelo.etiquetas = self._filas_catalogo(EtiquetaModelo, tarea.etiquetas)
         modelo.asignados = self._filas_catalogo(PersonaModelo, tarea.asignados)
+        modelo.tipo = tarea.tipo.value if tarea.tipo is not None else None
+        self._asignar_oportunidad(modelo, tarea.oportunidad)
+
+    @staticmethod
+    def _asignar_oportunidad(modelo: TareaModelo, oportunidad: Oportunidad | None) -> None:
+        """Sustituye los datos de oportunidad de la tarea.
+
+        La fila existente se modifica en lugar de reemplazarse: con otra fila con
+        la misma clave, SQLAlchemy insertaría la nueva antes de borrar la vieja.
+        """
+        if oportunidad is None:
+            modelo.oportunidad = None
+            return
+        if modelo.oportunidad is None:
+            modelo.oportunidad = OportunidadModelo()
+        modelo.oportunidad.codigo = oportunidad.codigo
+        modelo.oportunidad.descripcion = oportunidad.descripcion
+        modelo.oportunidad.observaciones = oportunidad.observaciones
 
     def crear(self, tarea: Tarea) -> Tarea:
         with traducir_conflictos(self._sesion):

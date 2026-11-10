@@ -5,14 +5,15 @@ from gestor_tareas.aplicacion.tarea.resolver_catalogos import resolver_nombres
 from gestor_tareas.dominio.etiqueta.repositorio import RepositorioEtiquetas
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.persona.repositorio import RepositorioPersonas
-from gestor_tareas.dominio.tarea.entidades import Tarea
+from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from gestor_tareas.dominio.tarea.repositorio import RepositorioTareas
 
 
 class ActualizarTarea:
     """Sustituye todos los datos editables de una tarea ya existente.
 
-    Las etiquetas y personas asignadas sustituyen por completo a las anteriores.
+    Las etiquetas y personas asignadas sustituyen por completo a las anteriores, y
+    también el tipo y sus datos (sin tipo, la tarea pierde sus datos de oportunidad).
     """
 
     def __init__(
@@ -35,6 +36,8 @@ class ActualizarTarea:
         fecha_vencimiento: datetime | None = None,
         etiquetas: list[str] | None = None,
         asignados: list[str] | None = None,
+        tipo: TipoTarea | None = None,
+        oportunidad: Oportunidad | None = None,
     ) -> Tarea:
         def guardar() -> Tarea:
             tarea = self._repositorio.obtener_por_id(id_tarea)
@@ -48,6 +51,8 @@ class ActualizarTarea:
             tarea.fecha_vencimiento = fecha_vencimiento
             tarea.etiquetas = resolver_nombres(self._repositorio_etiquetas, etiquetas or [])
             tarea.asignados = resolver_nombres(self._repositorio_personas, asignados or [])
+            tarea.tipo = tipo
+            tarea.oportunidad = oportunidad
             return self._repositorio.actualizar(tarea)
 
         # Leer la tarea, dar de alta en los catálogos y guardar es una sola

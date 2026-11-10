@@ -8,6 +8,7 @@ def vaciar_tablas(sesion: Session) -> None:
     for tabla in (
         modelos.tarea_etiquetas,
         modelos.tarea_personas,
+        modelos.OportunidadModelo.__table__,
         modelos.TareaModelo.__table__,
         modelos.EtiquetaModelo.__table__,
         modelos.PersonaModelo.__table__,

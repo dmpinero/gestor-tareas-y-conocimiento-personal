@@ -23,6 +23,8 @@ class RepositorioTareas(Protocol):
     def actualizar(self, tarea: Tarea) -> Tarea:
         """Guarda los datos de una tarea ya existente (``tarea.id`` debe existir).
 
-        Las etiquetas y personas asignadas sustituyen por completo a las anteriores.
+        Las etiquetas y personas asignadas sustituyen por completo a las anteriores,
+        y lo mismo el tipo y sus datos: si ``tarea.oportunidad`` es ``None``, se
+        borran los datos de oportunidad que tuviera.
         """
         ...

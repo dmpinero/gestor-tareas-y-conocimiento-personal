@@ -141,6 +141,8 @@ def test_actualizar_usa_el_mismo_cuerpo_y_validaciones_que_el_alta() -> None:
         "fecha_vencimiento": None,
         "etiquetas": [],
         "asignados": [],
+        "tipo": None,
+        "oportunidad": None,
     }
     with pytest.raises(ValidationError):
         TareaActualizarEsquema(**_datos(fecha_creacion="2026-11-09T10:30:00Z"))
@@ -158,6 +160,8 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         fecha_vencimiento=datetime(2026, 11, 20, 18, 0, 0),
         etiquetas=["casa"],
         asignados=["Ana"],
+        tipo=None,
+        oportunidad=None,
     )
 
     assert salida.model_dump(mode="json") == {
@@ -169,6 +173,8 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "fecha_vencimiento": "2026-11-20T18:00:00",
         "etiquetas": ["casa"],
         "asignados": ["Ana"],
+        "tipo": None,
+        "oportunidad": None,
     }
 
 
@@ -182,6 +188,8 @@ def test_salida_serializa_la_fecha_de_vencimiento_ausente_como_null() -> None:
         fecha_vencimiento=None,
         etiquetas=[],
         asignados=[],
+        tipo=None,
+        oportunidad=None,
     )
 
     assert salida.model_dump(mode="json")["fecha_vencimiento"] is None
