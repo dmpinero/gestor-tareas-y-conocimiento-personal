@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import FiltroMultiple from '../FiltroMultiple.vue'
 
@@ -163,6 +163,19 @@ describe('FiltroMultiple', () => {
       const wrapper = mount(FiltroMultiple, { props: { ...propsMasculino, modelValue: [1, 2] } })
 
       expect(wrapper.get('button').text()).toBe('Todos los tipos')
+    })
+
+    it('la casilla de seleccionar todo dice "Seleccionar todos"', async () => {
+      const wrapper = mount(FiltroMultiple, {
+        props: { ...propsMasculino, modelValue: [1, 2] },
+        attachTo: document.body,
+      })
+      await wrapper.get('button').trigger('click')
+      await flushPromises()
+
+      expect(document.body.textContent).toContain('Seleccionar todos')
+      expect(document.body.textContent).not.toContain('Seleccionar todas')
+      wrapper.unmount()
     })
 
     it('sin selección muestra "Ningún tipo"', () => {

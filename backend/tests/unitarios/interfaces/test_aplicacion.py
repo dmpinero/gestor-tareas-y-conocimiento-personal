@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from gestor_tareas.main import crear_aplicacion
@@ -37,3 +39,19 @@ def test_el_titulo_de_la_api_corresponde_al_proyecto() -> None:
     assert cliente.get("/openapi.json").json()["info"]["title"] == (
         "Gestor de Tareas y Conocimiento Personal"
     )
+
+
+def test_el_contrato_no_publica_esquemas_sin_usar() -> None:
+    # Regresión: el enum de dominio `TipoTarea` aparecía en `components.schemas`
+    # sin que nada lo referenciara, publicando su docstring interno.
+    esquema = cliente.get("/openapi.json").json()
+    componentes = set(esquema.get("components", {}).get("schemas", {}))
+    sin_componentes = {k: v for k, v in esquema.items() if k != "components"}
+    texto = json.dumps(sin_componentes) + json.dumps(
+        esquema.get("components", {}).get("schemas", {})
+    )
+    referenciados = {
+        nombre for nombre in componentes if f'"#/components/schemas/{nombre}"' in texto
+    }
+
+    assert componentes - referenciados == set()

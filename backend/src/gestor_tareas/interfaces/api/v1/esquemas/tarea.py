@@ -164,10 +164,22 @@ class OportunidadSalidaEsquema(BaseModel):
     observaciones: str | None
 
 
-# Se publica en línea con sus valores: así el contrato no incluye la
-# documentación interna de la enumeración del dominio.
+def _validar_tipo_tarea(valor: object) -> TipoTarea:
+    """Solo admite los valores de `TipoTarea` como cadenas (otro valor → 422)."""
+    if not isinstance(valor, str):
+        raise ValueError("El tipo de tarea debe ser una cadena.")
+    return TipoTarea(valor)
+
+
+# Se publica en línea con sus valores. El tipo anotado es `str` (y no el enum)
+# porque FastAPI registra como componente del contrato cualquier `Enum` que
+# encuentre en las anotaciones, aunque nada lo referencie, y con la documentación
+# interna del dominio. El valor validado sí es un `TipoTarea` (un `StrEnum`, que
+# también es `str`).
 TipoTareaEsquema = Annotated[
-    TipoTarea, WithJsonSchema({"type": "string", "enum": [tipo.value for tipo in TipoTarea]})
+    str,
+    PlainValidator(_validar_tipo_tarea),
+    WithJsonSchema({"type": "string", "enum": [tipo.value for tipo in TipoTarea]}),
 ]
 
 
