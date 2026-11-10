@@ -29,6 +29,22 @@ class Oportunidad:
 
 
 @dataclass
+class PasoOportunidad:
+    """Paso de una tarea de tipo ``TipoTarea.OPORTUNIDAD``, con su avance.
+
+    Es una copia del paso del workflow de las oportunidades vigente al crear la
+    tarea (mismo ``numero`` y ``nombre``), sin relación con él: cambiar el workflow
+    después no altera las tareas ya creadas. ``hecho`` indica si el paso está
+    hecho; al copiarlo está pendiente.
+    """
+
+    numero: int
+    nombre: str
+    hecho: bool = False
+    id: int | None = None
+
+
+@dataclass
 class Tarea:
     """Tarea de la persona usuaria. La prioridad va de 1 (más prioritaria) a 5.
 
@@ -41,6 +57,10 @@ class Tarea:
     (``oportunidad``), que solo tiene valor cuando la tarea es de ese tipo.
 
     ``completada`` indica si la tarea está hecha; una tarea nueva está pendiente.
+
+    ``pasos_oportunidad`` son los pasos de una oportunidad, ordenados por número.
+    Solo los tiene una tarea creada como oportunidad (se copian del workflow al
+    darla de alta), y los pierde si deja de serlo.
     """
 
     nombre: str
@@ -53,4 +73,5 @@ class Tarea:
     tipo: TipoTarea | None = None
     oportunidad: Oportunidad | None = None
     completada: bool = False
+    pasos_oportunidad: list[PasoOportunidad] = field(default_factory=list)
     id: int | None = None

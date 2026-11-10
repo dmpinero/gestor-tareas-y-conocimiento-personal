@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -86,6 +87,27 @@ class OportunidadModelo(Base):
     observaciones: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class PasoOportunidadModelo(Base):
+    """Paso de una tarea de tipo oportunidad, copiado del workflow al crearla.
+
+    Es una copia: no tiene clave ajena a ``pasos_workflow_oportunidades``, así que
+    cambiar o borrar los pasos del workflow no altera los de las tareas.
+    """
+
+    __tablename__ = "pasos_tarea"
+    __table_args__ = (UniqueConstraint("tarea_id", "numero", name="uq_pasos_tarea_numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", ondelete="CASCADE"), nullable=False
+    )
+    numero: Mapped[int] = mapped_column(Integer, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(50), nullable=False)
+    hecho: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+
+
 class TareaModelo(Base):
     __tablename__ = "tareas"
     __table_args__ = (
@@ -122,6 +144,14 @@ class TareaModelo(Base):
     completada: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    # Pasos de la oportunidad, por número. Vaciar la lista borra sus filas
+    # ("delete-orphan"); al borrar la tarea las borra el ON DELETE CASCADE.
+    pasos_oportunidad: Mapped[list[PasoOportunidadModelo]] = relationship(
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by=PasoOportunidadModelo.numero,
+    )
 
 
 class PasoWorkflowOportunidadModelo(Base):
@@ -140,6 +170,7 @@ __all__ = [
     "Base",
     "EtiquetaModelo",
     "OportunidadModelo",
+    "PasoOportunidadModelo",
     "PasoWorkflowOportunidadModelo",
     "PersonaModelo",
     "TareaModelo",

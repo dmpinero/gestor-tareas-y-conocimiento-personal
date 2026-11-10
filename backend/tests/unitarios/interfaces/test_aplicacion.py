@@ -15,6 +15,7 @@ def test_la_api_expone_salud_tareas_catalogos_y_workflow_bajo_api_v1() -> None:
         "/api/v1/tareas",
         "/api/v1/tareas/{id_tarea}",
         "/api/v1/tareas/{id_tarea}/completada",
+        "/api/v1/tareas/{id_tarea}/pasos/{id_paso}",
         "/api/v1/etiquetas",
         "/api/v1/personas",
         "/api/v1/workflow-oportunidades/pasos",

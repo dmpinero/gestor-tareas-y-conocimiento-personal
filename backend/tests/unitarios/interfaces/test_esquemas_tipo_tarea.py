@@ -214,8 +214,12 @@ def test_la_salida_incluye_el_tipo_y_la_oportunidad() -> None:
         tipo="oportunidad",
         oportunidad={"codigo": "OP-1", "descripcion": None, "observaciones": None},
         completada=False,
+        pasos_oportunidad=[{"id": 7, "numero": 1, "nombre": "Contacto", "hecho": True}],
     )
 
+    assert salida.model_dump(mode="json")["pasos_oportunidad"] == [
+        {"id": 7, "numero": 1, "nombre": "Contacto", "hecho": True}
+    ]
     assert salida.model_dump(mode="json")["tipo"] == "oportunidad"
     assert salida.model_dump(mode="json")["oportunidad"] == {
         "codigo": "OP-1",

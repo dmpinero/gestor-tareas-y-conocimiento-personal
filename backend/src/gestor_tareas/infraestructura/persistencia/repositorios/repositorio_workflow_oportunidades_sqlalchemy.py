@@ -18,6 +18,16 @@ antes de confirmar, mientras la conexión sigue siendo la de la sesión (al
 confirmar vuelve al pool). Quien lo toma a continuación espera en el paso 2 a que
 se confirme la transacción anterior, que ya no pide ningún otro bloqueo, así que
 no puede haber interbloqueo entre ellas.
+
+La copia de los pasos al crear una oportunidad (``leer_pasos_para_copiar``) no
+toma el bloqueo con nombre, que pondría en fila también a las altas de tareas
+entre sí. Lee los pasos con ``SELECT ... FOR SHARE``, en el mismo orden de clave
+primaria: espera a que se confirme la modificación en curso (que tiene los pasos
+bloqueados en exclusiva), así que nunca ve una reordenación a medias, y retiene
+los pasos hasta el final de su transacción, así que ninguna modificación puede
+colarse antes de que se guarde la copia. Las lecturas compartidas son compatibles
+entre sí y quien copia no pide después ningún bloqueo sobre el workflow, así que
+tampoco hay interbloqueo con las modificaciones.
 """
 
 from collections.abc import Callable, Iterator, Sequence
@@ -97,16 +107,18 @@ class RepositorioWorkflowOportunidadesSqlAlchemy:
             self._sesion.commit()
         return resultado
 
-    def _pasos_bloqueados(self) -> list[PasoWorkflowOportunidadModelo]:
+    def _pasos_bloqueados(self, compartido: bool = False) -> list[PasoWorkflowOportunidadModelo]:
         """Todos los pasos, leídos con bloqueo (lo último confirmado), por número.
 
-        Se bloquean en orden de clave primaria, siempre el mismo. ``populate_existing``
-        sustituye los datos de los objetos que la sesión ya tuviera cargados.
+        Se bloquean en orden de clave primaria, siempre el mismo. Con ``compartido``
+        el bloqueo es de lectura (``FOR SHARE``) y si no, exclusivo (``FOR UPDATE``).
+        ``populate_existing`` sustituye los datos de los objetos que la sesión ya
+        tuviera cargados.
         """
         consulta = (
             select(_Modelo)
             .order_by(_Modelo.id)
-            .with_for_update()
+            .with_for_update(read=compartido)
             .execution_options(populate_existing=True)
         )
         return sorted(self._sesion.scalars(consulta), key=lambda paso: paso.numero)
@@ -117,6 +129,11 @@ class RepositorioWorkflowOportunidadesSqlAlchemy:
     def listar_pasos(self) -> list[PasoWorkflowOportunidad]:
         modelos = self._sesion.scalars(select(_Modelo).order_by(_Modelo.numero)).all()
         return [_a_entidad(m) for m in modelos]
+
+    def leer_pasos_para_copiar(self) -> list[PasoWorkflowOportunidad]:
+        # Sin confirmar: el bloqueo compartido dura hasta que quien copia confirme.
+        with traducir_conflictos(self._sesion):
+            return [_a_entidad(m) for m in self._pasos_bloqueados(compartido=True)]
 
     def anadir_paso(self, nombre: str) -> PasoWorkflowOportunidad:
         def anadir() -> PasoWorkflowOportunidad:
