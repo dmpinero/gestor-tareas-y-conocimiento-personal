@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, toRef } from 'vue'
+import { ChevronRight, Search } from '@lucide/vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 import type { DatosTarea, Tarea } from '@/api/tipos'
 import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
 import { useTiendaTareas } from '@/stores/tareas'
+import { useBusquedaTabla } from '@/composables/useBusquedaTabla'
 import {
   compararConNulosAlFinal,
   compararNumero,
@@ -13,10 +15,12 @@ import {
 } from '@/composables/useOrdenacionTabla'
 import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
+import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import SelectorEtiquetas from '@/componentes/compartido/SelectorEtiquetas.vue'
 import SelectorFechaHora from '@/componentes/compartido/SelectorFechaHora.vue'
 import type { CeldaExportada } from '@/lib/exportarTabla'
 import { Button } from '@/componentes/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/componentes/ui/collapsible'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/componentes/ui/sheet'
@@ -86,10 +90,126 @@ type CampoOrdenable =
   | 'fechaCreacion'
   | 'fechaVencimiento'
 
+// --- Filtros (en el navegador; el orden y la exportación usan las filas filtradas) ---
+
+// Opciones "Sin …" de los filtros múltiples: valores que nunca coinciden con
+// una prioridad real (1–5) ni con un nombre de catálogo (nunca vacío).
+const SIN_PRIORIDAD = 0
+const SIN_NOMBRE = ''
+
+const ITEMS_PRIORIDAD = [
+  ...[1, 2, 3, 4, 5].map((valor) => ({ id: valor, nombre: String(valor) })),
+  { id: SIN_PRIORIDAD, nombre: 'Sin prioridad' },
+]
+
+/**
+ * Opciones de un filtro por nombres: el catálogo más los nombres que ya usan
+ * las tareas (por si el catálogo no se pudo cargar), en orden alfabético, y
+ * al final la opción para las tareas sin ninguno.
+ */
+function itemsDeNombres(
+  catalogo: string[],
+  usados: string[][],
+  textoSinNombre: string,
+): { id: string; nombre: string }[] {
+  const nombres = [...new Set([...catalogo, ...usados.flat()])].sort(compararTexto)
+  return [
+    ...nombres.map((nombre) => ({ id: nombre, nombre })),
+    { id: SIN_NOMBRE, nombre: textoSinNombre },
+  ]
+}
+
+const itemsEtiquetasFiltro = computed(() =>
+  itemsDeNombres(
+    tienda.etiquetas,
+    tienda.tareas.map((tarea) => tarea.etiquetas),
+    'Sin etiquetas',
+  ),
+)
+const itemsAsignadosFiltro = computed(() =>
+  itemsDeNombres(
+    tienda.personas,
+    tienda.tareas.map((tarea) => tarea.asignados),
+    'Sin asignar',
+  ),
+)
+
+const prioridadesFiltro = ref<number[]>(ITEMS_PRIORIDAD.map((item) => item.id))
+const etiquetasFiltro = ref<string[]>(itemsEtiquetasFiltro.value.map((item) => item.id))
+const asignadosFiltro = ref<string[]>(itemsAsignadosFiltro.value.map((item) => item.id))
+// Fechas de los `<input type="date">` (`YYYY-MM-DD`), o '' sin límite.
+const creacionDesde = ref('')
+const creacionHasta = ref('')
+const vencimientoDesde = ref('')
+const vencimientoHasta = ref('')
+
+// Un nombre que aparece en el catálogo (p. ej. creado al guardar una tarea)
+// queda marcado; los que ya existían conservan lo que el usuario marcó.
+function marcarNuevos(seleccion: { value: string[] }) {
+  return (items: { id: string }[], itemsAnteriores: { id: string }[]) => {
+    const conocidos = new Set(itemsAnteriores.map((item) => item.id))
+    const nuevos = items.filter((item) => !conocidos.has(item.id)).map((item) => item.id)
+    if (nuevos.length > 0) seleccion.value = [...seleccion.value, ...nuevos]
+  }
+}
+watch(itemsEtiquetasFiltro, marcarNuevos(etiquetasFiltro))
+watch(itemsAsignadosFiltro, marcarNuevos(asignadosFiltro))
+
+/** Pasa si alguno de sus nombres está marcado o, sin ninguno, si lo está la opción "Sin …". */
+function pasaFiltroNombres(nombres: string[], seleccion: string[]): boolean {
+  if (nombres.length === 0) return seleccion.includes(SIN_NOMBRE)
+  return nombres.some((nombre) => seleccion.includes(nombre))
+}
+
+/** Compara por día (`YYYY-MM-DD`), con ambos extremos incluidos. */
+function dentroDeRango(fechaIso: string, desde: string, hasta: string): boolean {
+  const dia = fechaIso.slice(0, 10)
+  if (desde && dia < desde) return false
+  if (hasta && dia > hasta) return false
+  return true
+}
+
+const tareasConFiltros = computed(() =>
+  tienda.tareas.filter((tarea) => {
+    if (!prioridadesFiltro.value.includes(tarea.prioridad ?? SIN_PRIORIDAD)) return false
+    if (!pasaFiltroNombres(tarea.etiquetas, etiquetasFiltro.value)) return false
+    if (!pasaFiltroNombres(tarea.asignados, asignadosFiltro.value)) return false
+    if (!dentroDeRango(tarea.fecha_creacion, creacionDesde.value, creacionHasta.value)) {
+      return false
+    }
+    // Con un rango de vencimiento activo, las tareas sin vencimiento no pasan.
+    if (vencimientoDesde.value || vencimientoHasta.value) {
+      if (tarea.fecha_vencimiento === null) return false
+      if (!dentroDeRango(tarea.fecha_vencimiento, vencimientoDesde.value, vencimientoHasta.value)) {
+        return false
+      }
+    }
+    return true
+  }),
+)
+
+const { busqueda, filasFiltradas } = useBusquedaTabla(tareasConFiltros, (tarea) => [
+  tarea.nombre,
+  tarea.descripcion,
+])
+
+function limpiarFiltros(): void {
+  busqueda.value = ''
+  prioridadesFiltro.value = ITEMS_PRIORIDAD.map((item) => item.id)
+  etiquetasFiltro.value = itemsEtiquetasFiltro.value.map((item) => item.id)
+  asignadosFiltro.value = itemsAsignadosFiltro.value.map((item) => item.id)
+  creacionDesde.value = ''
+  creacionHasta.value = ''
+  vencimientoDesde.value = ''
+  vencimientoHasta.value = ''
+}
+
+const filtrosAbiertos = ref(true)
+
 // Las fechas llegan en ISO (`YYYY-MM-DDTHH:MM:SS`), que ya ordena bien como texto.
 // Las listas vacías y el vencimiento sin fecha quedan al final en ambos sentidos.
 const { campo, direccion, ordenarPor, filasOrdenadas } = useOrdenacionTabla<Tarea, CampoOrdenable>(
-  toRef(tienda, 'tareas'),
+  filasFiltradas,
   {
     nombre: (a, b) => compararTexto(a.nombre, b.nombre),
     prioridad: compararConNulosAlFinal((tarea) => tarea.prioridad, compararNumero),
@@ -115,7 +235,7 @@ const CAMPOS_LISTA = ['etiquetas', 'asignados'] as const
 
 const COLUMNAS_EXPORTACION = COLUMNAS_ORDENABLES.map((columna) => columna.etiqueta)
 
-// Se exportan todas las filas en el orden actual y con los valores tal como se ven.
+// Se exportan las filas filtradas en el orden actual y con los valores tal como se ven.
 const filasExportacion = computed<CeldaExportada[][]>(() =>
   filasOrdenadas.value.map((tarea) => [
     tarea.nombre,
@@ -219,6 +339,97 @@ async function guardar(): Promise<void> {
       <Button variant="success" @click="abrirParaCrear">Crear tarea</Button>
     </div>
 
+    <div class="bg-muted/40 mt-4 flex flex-col gap-4 rounded-lg border p-4">
+      <Collapsible v-model:open="filtrosAbiertos">
+        <CollapsibleTrigger
+          class="text-muted-foreground flex items-center gap-1 text-sm font-medium"
+          :aria-label="filtrosAbiertos ? 'Contraer filtros' : 'Expandir filtros'"
+        >
+          <ChevronRight
+            class="size-4 transition-transform"
+            :class="filtrosAbiertos ? 'rotate-90' : ''"
+          />
+          Filtros
+        </CollapsibleTrigger>
+        <CollapsibleContent class="mt-4 flex flex-wrap items-end gap-4">
+          <div class="flex max-w-xs flex-col gap-1.5">
+            <Label for="filtro-buscar">Buscar</Label>
+            <div class="relative">
+              <Search
+                class="text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4"
+              />
+              <Input
+                id="filtro-buscar"
+                v-model="busqueda"
+                placeholder="Buscar tareas…"
+                class="pl-8"
+              />
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <Label>Prioridad</Label>
+            <FiltroMultiple
+              v-model="prioridadesFiltro"
+              :items="ITEMS_PRIORIDAD"
+              id-base="filtro-prioridad"
+              etiqueta-boton="Filtrar por prioridad"
+              nombre-singular="prioridad"
+              nombre-plural="prioridades"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <Label>Etiquetas</Label>
+            <FiltroMultiple
+              v-model="etiquetasFiltro"
+              :items="itemsEtiquetasFiltro"
+              id-base="filtro-etiquetas"
+              etiqueta-boton="Filtrar por etiquetas"
+              nombre-singular="etiqueta"
+              nombre-plural="etiquetas"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <Label>Asignado a</Label>
+            <FiltroMultiple
+              v-model="asignadosFiltro"
+              :items="itemsAsignadosFiltro"
+              id-base="filtro-asignados"
+              etiqueta-boton="Filtrar por asignado a"
+              nombre-singular="persona"
+              nombre-plural="personas"
+            />
+          </div>
+
+          <div class="flex flex-wrap items-end gap-4">
+            <div class="flex flex-col gap-1.5">
+              <Label for="filtro-creacion-desde">Fecha de creación desde</Label>
+              <Input id="filtro-creacion-desde" v-model="creacionDesde" type="date" />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label for="filtro-creacion-hasta">Fecha de creación hasta</Label>
+              <Input id="filtro-creacion-hasta" v-model="creacionHasta" type="date" />
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-end gap-4">
+            <div class="flex flex-col gap-1.5">
+              <Label for="filtro-vencimiento-desde">Fecha de vencimiento desde</Label>
+              <Input id="filtro-vencimiento-desde" v-model="vencimientoDesde" type="date" />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label for="filtro-vencimiento-hasta">Fecha de vencimiento hasta</Label>
+              <Input id="filtro-vencimiento-hasta" v-model="vencimientoHasta" type="date" />
+            </div>
+          </div>
+
+          <Button type="button" variant="secondary" @click="limpiarFiltros">Limpiar filtros</Button>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+
     <Sheet v-model:open="panelAbierto">
       <SheetContent>
         <SheetHeader>
@@ -314,7 +525,13 @@ async function guardar(): Promise<void> {
     >
       Todavía no hay tareas.
     </p>
-    <div v-if="tienda.tareas.length > 0" class="mt-4 flex justify-end">
+    <p
+      v-else-if="tienda.tareas.length > 0 && filasFiltradas.length === 0"
+      class="text-muted-foreground mt-4 text-sm"
+    >
+      Ninguna tarea coincide con los filtros.
+    </p>
+    <div v-if="filasFiltradas.length > 0" class="mt-4 flex justify-end">
       <BotonesExportarTabla
         nombre-fichero="Tareas"
         titulo="Tareas"
@@ -322,7 +539,7 @@ async function guardar(): Promise<void> {
         :filas="filasExportacion"
       />
     </div>
-    <Table v-if="tienda.tareas.length > 0" class="mt-2">
+    <Table v-if="filasFiltradas.length > 0" class="mt-2">
       <TableHeader>
         <TableRow>
           <TableHead

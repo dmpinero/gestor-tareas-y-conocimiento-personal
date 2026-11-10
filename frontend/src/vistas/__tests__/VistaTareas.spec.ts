@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clienteApi } from '@/api/cliente'
 import { exportarTablaExcel, exportarTablaPDF } from '@/lib/exportarTabla'
+import { useTiendaTareas } from '@/stores/tareas'
 import VistaTareas from '../VistaTareas.vue'
 
 vi.mock('@/lib/exportarTabla', () => ({
@@ -800,6 +801,300 @@ describe('VistaTareas', () => {
       expect(titulo).toBe('Tareas')
       expect(columnas).toEqual(COLUMNAS)
       expect((filas as unknown[][]).map((f) => f[0])).toEqual(['Leer artículo', 'Escribir informe'])
+    })
+  })
+
+  describe('filtros', () => {
+    const TAREAS_FILTRO = [
+      {
+        id: 1,
+        nombre: 'Preparar reunión',
+        prioridad: 1,
+        descripcion: 'Agenda del lunes',
+        fecha_creacion: '2026-03-10T08:00:00',
+        fecha_vencimiento: '2026-03-15T23:59:59',
+        etiquetas: ['Backend', 'Urgente'],
+        asignados: ['Ana'],
+      },
+      {
+        id: 2,
+        nombre: 'Revisar código',
+        prioridad: 3,
+        descripcion: 'Pull request de Ángela',
+        fecha_creacion: '2026-03-11T23:59:59',
+        fecha_vencimiento: null,
+        etiquetas: ['Backend'],
+        asignados: ['Luis'],
+      },
+      {
+        id: 3,
+        nombre: 'Comprar café',
+        prioridad: null,
+        descripcion: 'Oficina',
+        fecha_creacion: '2026-03-12T00:00:00',
+        fecha_vencimiento: '2026-03-16T00:00:00',
+        etiquetas: [],
+        asignados: [],
+      },
+    ]
+    const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']
+
+    function nombresEnTabla(envoltorio: VueWrapper): string[] {
+      return envoltorio.findAll('tbody tr').map((fila) => fila.findAll('td')[0]!.text())
+    }
+
+    function entrada(envoltorio: VueWrapper, id: string): HTMLInputElement {
+      const elemento = envoltorio.find<HTMLInputElement>(`#${id}`)
+      if (!elemento.exists()) throw new Error(`No se encontró #${id}`)
+      return elemento.element
+    }
+
+    function disparador(envoltorio: VueWrapper, nombre: string) {
+      // Los filtros múltiples se nombran "<etiqueta>: <texto visible>"; el resto, con la etiqueta.
+      const boton = envoltorio.find(
+        `button[aria-label="${nombre}"], button[aria-label^="${nombre}: "]`,
+      )
+      if (!boton.exists()) throw new Error(`No se encontró el botón "${nombre}"`)
+      return boton
+    }
+
+    // Casilla de la lista desplegada (que se teletransporta al `body`) asociada a la etiqueta visible.
+    function casilla(texto: string): HTMLElement {
+      const etiqueta = [
+        ...document.body.querySelectorAll<HTMLLabelElement>('[data-slot="popover-content"] label'),
+      ].find((label) => label.textContent?.trim() === texto)
+      const elemento = etiqueta ? document.getElementById(etiqueta.htmlFor) : null
+      if (!elemento) throw new Error(`No se encontró la casilla "${texto}"`)
+      return elemento
+    }
+
+    async function conDesplegable(
+      envoltorio: VueWrapper,
+      nombre: string,
+      accion: () => Promise<void> | void,
+    ): Promise<void> {
+      await disparador(envoltorio, nombre).trigger('click')
+      await flushPromises()
+      await accion()
+      await disparador(envoltorio, nombre).trigger('click')
+      await flushPromises()
+    }
+
+    async function alternar(envoltorio: VueWrapper, nombre: string, opcion: string): Promise<void> {
+      await conDesplegable(envoltorio, nombre, async () => {
+        casilla(opcion).click()
+        await flushPromises()
+      })
+    }
+
+    it('muestra el panel "Filtros" abierto por defecto y se puede contraer', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      const boton = disparador(envoltorio, 'Contraer filtros')
+      expect(boton.text()).toBe('Filtros')
+      expect(envoltorio.find('#filtro-buscar').exists()).toBe(true)
+
+      await boton.trigger('click')
+      await flushPromises()
+
+      expect(disparador(envoltorio, 'Expandir filtros').exists()).toBe(true)
+      expect(envoltorio.find('#filtro-buscar').exists()).toBe(false)
+      expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+    })
+
+    it('todos los controles del panel tienen nombre accesible', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      const etiquetas = new Map(
+        envoltorio.findAll('label[for]').map((l) => [l.attributes('for'), l.text()]),
+      )
+      expect(etiquetas.get('filtro-buscar')).toBe('Buscar')
+      expect(entrada(envoltorio, 'filtro-buscar').placeholder).toBe('Buscar tareas…')
+      expect(etiquetas.get('filtro-creacion-desde')).toBe('Fecha de creación desde')
+      expect(etiquetas.get('filtro-creacion-hasta')).toBe('Fecha de creación hasta')
+      expect(etiquetas.get('filtro-vencimiento-desde')).toBe('Fecha de vencimiento desde')
+      expect(etiquetas.get('filtro-vencimiento-hasta')).toBe('Fecha de vencimiento hasta')
+      for (const id of [
+        'filtro-creacion-desde',
+        'filtro-creacion-hasta',
+        'filtro-vencimiento-desde',
+        'filtro-vencimiento-hasta',
+      ]) {
+        expect(entrada(envoltorio, id).type).toBe('date')
+      }
+      expect(disparador(envoltorio, 'Filtrar por prioridad').text()).toBe('Todas las prioridades')
+      expect(disparador(envoltorio, 'Filtrar por etiquetas').text()).toBe('Todas las etiquetas')
+      expect(disparador(envoltorio, 'Filtrar por asignado a').text()).toBe('Todas las personas')
+    })
+
+    it('busca en nombre y descripción sin distinguir mayúsculas ni acentos', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      await escribir(entrada(envoltorio, 'filtro-buscar'), 'angela')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código'])
+
+      await escribir(entrada(envoltorio, 'filtro-buscar'), 'REUNION')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión'])
+    })
+
+    it('filtra por prioridad, incluida la opción "Sin prioridad"', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      await conDesplegable(envoltorio, 'Filtrar por prioridad', () => {
+        const opciones = [
+          ...document.body.querySelectorAll('[data-slot="popover-content"] li label'),
+        ].map((label) => label.textContent?.trim())
+        expect(opciones).toEqual(['1', '2', '3', '4', '5', 'Sin prioridad'])
+      })
+      await alternar(envoltorio, 'Filtrar por prioridad', 'Sin prioridad')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Revisar código'])
+
+      await alternar(envoltorio, 'Filtrar por prioridad', '1')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código'])
+    })
+
+    it('filtra por etiquetas: pasa si tiene alguna marcada o, sin etiquetas, si "Sin etiquetas" lo está', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      await alternar(envoltorio, 'Filtrar por etiquetas', 'Urgente')
+      expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+
+      await alternar(envoltorio, 'Filtrar por etiquetas', 'Backend')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Comprar café'])
+
+      await alternar(envoltorio, 'Filtrar por etiquetas', 'Sin etiquetas')
+      expect(nombresEnTabla(envoltorio)).toEqual([])
+    })
+
+    it('filtra por asignado a, incluida la opción "Sin asignar"', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Sin asignar')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Revisar código'])
+
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Ana')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código'])
+    })
+
+    it('filtra por fecha de creación con ambos extremos incluidos por día', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      await escribir(entrada(envoltorio, 'filtro-creacion-desde'), '2026-03-11')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código', 'Comprar café'])
+
+      await escribir(entrada(envoltorio, 'filtro-creacion-hasta'), '2026-03-11')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código'])
+
+      await escribir(entrada(envoltorio, 'filtro-creacion-desde'), '')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Revisar código'])
+    })
+
+    it('filtra por fecha de vencimiento con ambos extremos incluidos y excluye las tareas sin vencimiento', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      await escribir(entrada(envoltorio, 'filtro-vencimiento-desde'), '2026-03-16')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Comprar café'])
+
+      await escribir(entrada(envoltorio, 'filtro-vencimiento-desde'), '')
+      await escribir(entrada(envoltorio, 'filtro-vencimiento-hasta'), '2026-03-15')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión'])
+
+      await escribir(entrada(envoltorio, 'filtro-vencimiento-hasta'), '')
+      expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+    })
+
+    it('"Limpiar filtros" restablece todos los filtros', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+      await escribir(entrada(envoltorio, 'filtro-buscar'), 'zzz')
+      await escribir(entrada(envoltorio, 'filtro-creacion-desde'), '2026-03-11')
+      await escribir(entrada(envoltorio, 'filtro-creacion-hasta'), '2026-03-11')
+      await escribir(entrada(envoltorio, 'filtro-vencimiento-desde'), '2026-03-16')
+      await escribir(entrada(envoltorio, 'filtro-vencimiento-hasta'), '2026-03-16')
+      await alternar(envoltorio, 'Filtrar por prioridad', 'Sin prioridad')
+      await alternar(envoltorio, 'Filtrar por etiquetas', 'Sin etiquetas')
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Sin asignar')
+
+      const boton = envoltorio.findAll('button').find((b) => b.text() === 'Limpiar filtros')!
+      await boton.trigger('click')
+      await flushPromises()
+
+      expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+      for (const id of [
+        'filtro-buscar',
+        'filtro-creacion-desde',
+        'filtro-creacion-hasta',
+        'filtro-vencimiento-desde',
+        'filtro-vencimiento-hasta',
+      ]) {
+        expect(entrada(envoltorio, id).value).toBe('')
+      }
+      expect(disparador(envoltorio, 'Filtrar por prioridad').text()).toBe('Todas las prioridades')
+      expect(disparador(envoltorio, 'Filtrar por etiquetas').text()).toBe('Todas las etiquetas')
+      expect(disparador(envoltorio, 'Filtrar por asignado a').text()).toBe('Todas las personas')
+    })
+
+    it('sin coincidencias muestra "Ninguna tarea coincide con los filtros." en lugar de la tabla', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      await escribir(entrada(envoltorio, 'filtro-buscar'), 'zzz')
+
+      expect(envoltorio.text()).toContain('Ninguna tarea coincide con los filtros.')
+      expect(envoltorio.text()).not.toContain('Todavía no hay tareas.')
+      expect(envoltorio.find('table').exists()).toBe(false)
+    })
+
+    it('sin tareas muestra solo "Todavía no hay tareas."', async () => {
+      const envoltorio = await montar([])
+
+      expect(envoltorio.text()).toContain('Todavía no hay tareas.')
+      expect(envoltorio.text()).not.toContain('Ninguna tarea coincide con los filtros.')
+    })
+
+    it('ordena solo las filas filtradas', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+      await alternar(envoltorio, 'Filtrar por prioridad', '1')
+
+      const cabecera = envoltorio.findAll('th button').find((b) => b.text() === 'Nombre')!
+      await cabecera.trigger('click')
+      await cabecera.trigger('click')
+
+      expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código', 'Comprar café'])
+    })
+
+    it('exporta solo las filas filtradas', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+      await escribir(entrada(envoltorio, 'filtro-buscar'), 'cafe')
+
+      await disparador(envoltorio, 'Exportar a Excel').trigger('click')
+
+      const filas = vi.mocked(exportarTablaExcel).mock.calls[0]![2] as unknown[][]
+      expect(filas.map((fila) => fila[0])).toEqual(['Comprar café'])
+    })
+
+    it('al recargar los catálogos marca los nombres nuevos y conserva los desmarcados', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+      await alternar(envoltorio, 'Filtrar por etiquetas', 'Urgente')
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Luis')
+      vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
+        if (ruta === '/etiquetas')
+          return Promise.resolve([...ETIQUETAS, { id: 3, nombre: 'Nueva' }])
+        if (ruta === '/personas') return Promise.resolve([...PERSONAS, { id: 3, nombre: 'Marta' }])
+        return Promise.resolve(structuredClone(TAREAS_FILTRO))
+      })
+
+      await useTiendaTareas().cargarCatalogos()
+      await flushPromises()
+
+      await conDesplegable(envoltorio, 'Filtrar por etiquetas', () => {
+        expect(casilla('Nueva').getAttribute('aria-checked')).toBe('true')
+        expect(casilla('Urgente').getAttribute('aria-checked')).toBe('false')
+        expect(casilla('Backend').getAttribute('aria-checked')).toBe('true')
+      })
+      await conDesplegable(envoltorio, 'Filtrar por asignado a', () => {
+        expect(casilla('Marta').getAttribute('aria-checked')).toBe('true')
+        expect(casilla('Luis').getAttribute('aria-checked')).toBe('false')
+      })
+      expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Comprar café'])
     })
   })
 })
