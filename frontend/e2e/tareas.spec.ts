@@ -319,3 +319,37 @@ test('crea una oportunidad, muestra su tipo en la tabla y todos sus campos en el
   await page.keyboard.press('Escape')
   await expect(detalle).toBeHidden()
 })
+
+// Regresión: en pantallas bajas el formulario no cabía y no se notaba que se
+// podía desplazar ("Guardar" quedaba fuera de la vista al abrir el panel).
+test.describe('panel de tarea en una pantalla baja', () => {
+  test.use({ viewport: { width: 1280, height: 600 } })
+
+  test('tiene scroll vertical propio y los botones siempre visibles', async ({ page }) => {
+    await page.goto('/tareas')
+    await page.getByRole('button', { name: 'Crear tarea' }).click()
+    const panel = page.getByRole('dialog', { name: 'Crear tarea' })
+    await panel.getByLabel('Tipo de tarea').selectOption({ label: 'Oportunidad' })
+
+    // Los botones se ven sin desplazar nada.
+    const guardar = panel.getByRole('button', { name: 'Guardar' })
+    await expect(guardar).toBeInViewport()
+    await expect(panel.getByRole('button', { name: 'Cancelar' })).toBeInViewport()
+
+    // El cuerpo del formulario tiene su propio scroll vertical...
+    const cuerpo = panel.getByTestId('cuerpo-formulario-tarea')
+    const { desborda, overflowY } = await cuerpo.evaluate((el) => ({
+      desborda: el.scrollHeight > el.clientHeight,
+      overflowY: getComputedStyle(el).overflowY,
+    }))
+    expect(desborda).toBe(true)
+    expect(overflowY).toBe('scroll')
+
+    // ...y con la rueda del ratón se llega hasta el último campo.
+    const caja = await cuerpo.boundingBox()
+    await page.mouse.move(caja!.x + caja!.width / 2, caja!.y + caja!.height / 2)
+    await page.mouse.wheel(0, 3000)
+    await expect(panel.getByLabel('Observaciones')).toBeInViewport()
+    await expect(guardar).toBeInViewport()
+  })
+})

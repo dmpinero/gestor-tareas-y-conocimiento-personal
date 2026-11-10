@@ -500,131 +500,140 @@ async function guardar(): Promise<void> {
     </div>
 
     <Sheet v-model:open="panelAbierto">
-      <SheetContent>
+      <!-- El panel no scrollea entero: la cabecera y el pie con los botones quedan
+           fijos y solo el cuerpo del formulario tiene scroll vertical (visible
+           siempre), para que en pantallas bajas se vea que hay más campos. -->
+      <SheetContent class="gap-0 overflow-hidden">
         <SheetHeader>
           <SheetTitle>{{ idEnEdicion === null ? 'Crear tarea' : 'Editar tarea' }}</SheetTitle>
         </SheetHeader>
 
-        <form class="flex flex-col gap-3 px-4" @submit.prevent="guardar">
-          <div class="flex flex-col gap-1.5">
-            <Label for="tarea-nombre">Nombre</Label>
-            <Input
-              id="tarea-nombre"
-              v-model="formulario.nombre"
-              placeholder="Nombre"
-              required
-              maxlength="200"
-            />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <Label for="tarea-prioridad">Prioridad</Label>
-            <Input
-              id="tarea-prioridad"
-              v-model="formulario.prioridad"
-              type="number"
-              min="1"
-              max="5"
-              placeholder="Prioridad"
-            />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <Label for="tarea-descripcion">Descripción</Label>
-            <Textarea
-              id="tarea-descripcion"
-              v-model="formulario.descripcion"
-              placeholder="Descripción"
-              required
-              maxlength="500"
-            />
-          </div>
-          <SelectorEtiquetas
-            id="etiquetas"
-            v-model="formulario.etiquetas"
-            etiqueta="Etiquetas"
-            :longitud-maxima="50"
-            texto-nuevo='Crear etiqueta "{valor}"'
-            :sugerencias="tienda.etiquetas"
-          />
-          <SelectorEtiquetas
-            id="asignados"
-            v-model="formulario.asignados"
-            etiqueta="Asignado a"
-            :longitud-maxima="100"
-            texto-nuevo='Añadir persona "{valor}"'
-            :sugerencias="tienda.personas"
-          />
-          <div class="flex flex-col gap-1.5">
-            <Label for="fecha-creacion">Fecha de creación</Label>
-            <SelectorFechaHora
-              id="fecha-creacion"
-              v-model="formulario.fechaCreacion"
-              etiqueta="Fecha de creación"
-              required
-            />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <Label for="fecha-vencimiento">Fecha de vencimiento</Label>
-            <SelectorFechaHora
-              id="fecha-vencimiento"
-              v-model="formulario.fechaVencimiento"
-              etiqueta="Fecha de vencimiento"
-              anulable
-            />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <Label for="tarea-tipo">Tipo de tarea</Label>
-            <select
-              id="tarea-tipo"
-              v-model="formulario.tipo"
-              class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
-            >
-              <option value="">Sin tipo</option>
-              <option v-for="tipo in TIPOS_TAREA" :key="tipo.valor" :value="tipo.valor">
-                {{ tipo.etiqueta }}
-              </option>
-            </select>
-          </div>
-          <fieldset
-            v-if="formulario.tipo === 'oportunidad'"
-            class="flex flex-col gap-3 rounded-md border p-3"
+        <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="guardar">
+          <div
+            data-testid="cuerpo-formulario-tarea"
+            class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-scroll px-4 pb-4"
           >
-            <legend class="px-1 text-sm font-medium">Oportunidad</legend>
             <div class="flex flex-col gap-1.5">
-              <Label for="oportunidad-codigo">Código de la oportunidad</Label>
+              <Label for="tarea-nombre">Nombre</Label>
               <Input
-                id="oportunidad-codigo"
-                v-model="formulario.oportunidad.codigo"
+                id="tarea-nombre"
+                v-model="formulario.nombre"
+                placeholder="Nombre"
                 required
-                maxlength="10"
-              />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <Label for="oportunidad-descripcion">Descripción de la oportunidad</Label>
-              <Input
-                id="oportunidad-descripcion"
-                v-model="formulario.oportunidad.descripcion"
                 maxlength="200"
               />
             </div>
             <div class="flex flex-col gap-1.5">
-              <Label for="oportunidad-observaciones">Observaciones</Label>
-              <Textarea
-                id="oportunidad-observaciones"
-                v-model="formulario.oportunidad.observaciones"
-                maxlength="5000"
+              <Label for="tarea-prioridad">Prioridad</Label>
+              <Input
+                id="tarea-prioridad"
+                v-model="formulario.prioridad"
+                type="number"
+                min="1"
+                max="5"
+                placeholder="Prioridad"
               />
             </div>
-          </fieldset>
-
-          <p v-if="errorFormulario" class="text-sm text-destructive" role="alert">
-            {{ errorFormulario }}
-          </p>
-
-          <div class="flex gap-2">
-            <Button type="submit" variant="success">Guardar</Button>
-            <Button type="button" variant="destructive" @click="panelAbierto = false"
-              >Cancelar</Button
+            <div class="flex flex-col gap-1.5">
+              <Label for="tarea-descripcion">Descripción</Label>
+              <Textarea
+                id="tarea-descripcion"
+                v-model="formulario.descripcion"
+                placeholder="Descripción"
+                required
+                maxlength="500"
+              />
+            </div>
+            <SelectorEtiquetas
+              id="etiquetas"
+              v-model="formulario.etiquetas"
+              etiqueta="Etiquetas"
+              :longitud-maxima="50"
+              texto-nuevo='Crear etiqueta "{valor}"'
+              :sugerencias="tienda.etiquetas"
+            />
+            <SelectorEtiquetas
+              id="asignados"
+              v-model="formulario.asignados"
+              etiqueta="Asignado a"
+              :longitud-maxima="100"
+              texto-nuevo='Añadir persona "{valor}"'
+              :sugerencias="tienda.personas"
+            />
+            <div class="flex flex-col gap-1.5">
+              <Label for="fecha-creacion">Fecha de creación</Label>
+              <SelectorFechaHora
+                id="fecha-creacion"
+                v-model="formulario.fechaCreacion"
+                etiqueta="Fecha de creación"
+                required
+              />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label for="fecha-vencimiento">Fecha de vencimiento</Label>
+              <SelectorFechaHora
+                id="fecha-vencimiento"
+                v-model="formulario.fechaVencimiento"
+                etiqueta="Fecha de vencimiento"
+                anulable
+              />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label for="tarea-tipo">Tipo de tarea</Label>
+              <select
+                id="tarea-tipo"
+                v-model="formulario.tipo"
+                class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
+              >
+                <option value="">Sin tipo</option>
+                <option v-for="tipo in TIPOS_TAREA" :key="tipo.valor" :value="tipo.valor">
+                  {{ tipo.etiqueta }}
+                </option>
+              </select>
+            </div>
+            <fieldset
+              v-if="formulario.tipo === 'oportunidad'"
+              class="flex flex-col gap-3 rounded-md border p-3"
             >
+              <legend class="px-1 text-sm font-medium">Oportunidad</legend>
+              <div class="flex flex-col gap-1.5">
+                <Label for="oportunidad-codigo">Código de la oportunidad</Label>
+                <Input
+                  id="oportunidad-codigo"
+                  v-model="formulario.oportunidad.codigo"
+                  required
+                  maxlength="10"
+                />
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <Label for="oportunidad-descripcion">Descripción de la oportunidad</Label>
+                <Input
+                  id="oportunidad-descripcion"
+                  v-model="formulario.oportunidad.descripcion"
+                  maxlength="200"
+                />
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <Label for="oportunidad-observaciones">Observaciones</Label>
+                <Textarea
+                  id="oportunidad-observaciones"
+                  v-model="formulario.oportunidad.observaciones"
+                  maxlength="5000"
+                />
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="bg-background flex flex-col gap-2 border-t px-4 py-3">
+            <p v-if="errorFormulario" class="text-sm text-destructive" role="alert">
+              {{ errorFormulario }}
+            </p>
+            <div class="flex gap-2">
+              <Button type="submit" variant="success">Guardar</Button>
+              <Button type="button" variant="destructive" @click="panelAbierto = false"
+                >Cancelar</Button
+              >
+            </div>
           </div>
         </form>
       </SheetContent>
