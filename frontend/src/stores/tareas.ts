@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { clienteApi } from '@/api/cliente'
-import type { DatosTarea, ElementoCatalogo, Tarea } from '@/api/tipos'
+import type { DatosSubtarea, DatosTarea, ElementoCatalogo, Tarea } from '@/api/tipos'
 
 export const useTiendaTareas = defineStore('tareas', () => {
   const tareas = ref<Tarea[]>([])
@@ -91,6 +91,60 @@ export const useTiendaTareas = defineStore('tareas', () => {
     }
   }
 
+  function reemplazarTarea(tarea: Tarea): void {
+    const indice = tareas.value.findIndex((t) => t.id === tarea.id)
+    if (indice !== -1) tareas.value[indice] = tarea
+  }
+
+  // Las acciones de subtareas se lanzan desde el detalle de la tarea. Como
+  // `alternarPasoTarea`, si la API falla guardan el mensaje en `error` y la
+  // tarea se queda como estaba; devuelven `true` si la operación se hizo, para
+  // que el formulario sepa si limpiarse.
+  async function crearSubtarea(idTarea: number, datos: DatosSubtarea): Promise<boolean> {
+    error.value = null
+    try {
+      reemplazarTarea(await clienteApi.crear<Tarea>(`/tareas/${idTarea}/subtareas`, datos))
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+    // La persona asignada puede ser nueva en el catálogo.
+    await cargarCatalogos()
+    return true
+  }
+
+  async function alternarSubtarea(idTarea: number, idSubtarea: number): Promise<boolean> {
+    const subtarea = tareas.value
+      .find((t) => t.id === idTarea)
+      ?.subtareas.find((s) => s.id === idSubtarea)
+    if (!subtarea) return false
+    error.value = null
+    try {
+      reemplazarTarea(
+        await clienteApi.parchear<Tarea>(`/tareas/${idTarea}/subtareas/${idSubtarea}/resuelta`, {
+          resuelta: !subtarea.resuelta,
+        }),
+      )
+      return true
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+  }
+
+  async function eliminarSubtarea(idTarea: number, idSubtarea: number): Promise<boolean> {
+    error.value = null
+    try {
+      reemplazarTarea(
+        await clienteApi.eliminar<Tarea>(`/tareas/${idTarea}/subtareas/${idSubtarea}`),
+      )
+      return true
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+  }
+
   return {
     tareas,
     cargando,
@@ -103,5 +157,8 @@ export const useTiendaTareas = defineStore('tareas', () => {
     actualizar,
     alternarCompletada,
     alternarPasoTarea,
+    crearSubtarea,
+    alternarSubtarea,
+    eliminarSubtarea,
   }
 })

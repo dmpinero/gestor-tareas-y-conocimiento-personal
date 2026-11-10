@@ -1,8 +1,27 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createPinia, setActivePinia } from 'pinia'
+
+import { clienteApi } from '@/api/cliente'
 import type { Tarea } from '@/api/tipos'
 import DetalleTarea from '../DetalleTarea.vue'
+
+// Los comentarios (columna derecha) se cargan desde la API; las subtareas usan
+// el almacén de tareas.
+vi.mock('@/api/cliente', async (importarOriginal) => {
+  const original = await importarOriginal<typeof import('@/api/cliente')>()
+  return {
+    ...original,
+    clienteApi: {
+      obtener: vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue([]),
+      crear: vi.fn<(...args: unknown[]) => unknown>(),
+      actualizar: vi.fn<(...args: unknown[]) => unknown>(),
+      parchear: vi.fn<(...args: unknown[]) => unknown>(),
+      eliminar: vi.fn<(...args: unknown[]) => unknown>(),
+    },
+  }
+})
 
 const TAREA_SIN_TIPO: Tarea = {
   id: 2,
@@ -17,6 +36,7 @@ const TAREA_SIN_TIPO: Tarea = {
   oportunidad: null,
   completada: false,
   pasos_oportunidad: [],
+  subtareas: [],
 }
 
 const TAREA_OPORTUNIDAD: Tarea = {
@@ -36,6 +56,7 @@ const TAREA_OPORTUNIDAD: Tarea = {
   },
   completada: false,
   pasos_oportunidad: [],
+  subtareas: [],
 }
 
 // Llegan desordenados para comprobar que se muestran por número.
@@ -48,7 +69,13 @@ const PASOS = [
 let contenedor: VueWrapper | null = null
 
 async function montar(tarea: Tarea | null, error: string | null = null): Promise<VueWrapper> {
-  contenedor = mount(DetalleTarea, { props: { tarea, error }, attachTo: document.body })
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  contenedor = mount(DetalleTarea, {
+    props: { tarea, error },
+    attachTo: document.body,
+    global: { plugins: [pinia] },
+  })
   await flushPromises()
   return contenedor
 }
@@ -287,6 +314,28 @@ describe('DetalleTarea', () => {
       await montar({ ...TAREA_OPORTUNIDAD, pasos_oportunidad: PASOS })
 
       expect(modal().querySelector('[role="alert"]')).toBeNull()
+    })
+  })
+
+  describe('subtareas y comentarios', () => {
+    it('muestra las subtareas a la izquierda y los comentarios de la tarea a la derecha', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([
+        { id: 1, texto: 'Primer comentario', creado: new Date(2026, 3, 1, 17, 30).toISOString() },
+      ])
+
+      await montar(TAREA_SIN_TIPO)
+
+      const dialogo = document.body.querySelector('[role="dialog"]')!
+      const contenido = dialogo.querySelector('[data-testid="detalle-contenido"]')!
+      expect(contenido.querySelector('h3')?.textContent).toContain('Subtareas')
+      const comentarios = dialogo.querySelector('[data-testid="columna-comentarios"]')!
+      expect(comentarios.textContent).toContain('Comentarios')
+      expect(comentarios.textContent).toContain('Primer comentario')
+      expect(clienteApi.obtener).toHaveBeenCalledWith(`/tareas/${TAREA_SIN_TIPO.id}/comentarios`)
+      // La columna de comentarios va después del contenido (a la derecha en pantallas anchas).
+      expect(
+        contenido.compareDocumentPosition(comentarios) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
     })
   })
 })

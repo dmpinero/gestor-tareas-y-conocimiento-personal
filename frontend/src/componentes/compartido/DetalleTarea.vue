@@ -3,7 +3,9 @@ import { computed, ref, watch } from 'vue'
 
 import { etiquetaTipoTarea, type PasoTarea, type Tarea } from '@/api/tipos'
 import { formatearFechaHora } from '@/lib/fechas'
+import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
+import SubtareasTarea from '@/componentes/compartido/SubtareasTarea.vue'
 import { Button } from '@/componentes/ui/button'
 import { Checkbox } from '@/componentes/ui/checkbox'
 import {
@@ -111,43 +113,31 @@ function alCambiarApertura(abierta: boolean): void {
         <DialogDescription class="sr-only">Todos los datos de la tarea.</DialogDescription>
       </DialogHeader>
 
+      <!-- Dos columnas: datos y subtareas a la izquierda, comentarios a la derecha.
+           En pantallas estrechas se apilan y desplaza el conjunto. -->
       <div
-        data-testid="detalle-contenido"
-        class="min-h-0 flex-1 overflow-y-auto pr-2"
-        role="region"
-        aria-label="Contenido del detalle"
-        tabindex="0"
+        class="grid min-h-0 flex-1 gap-6 overflow-y-auto md:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)] md:overflow-hidden"
       >
-        <dl data-testid="campos-tarea" class="grid gap-3">
-          <div
-            v-for="campo in camposTarea"
-            :key="campo.termino"
-            class="grid gap-1 sm:grid-cols-[14rem_1fr]"
-          >
-            <dt class="text-muted-foreground text-sm font-medium">{{ campo.termino }}</dt>
-            <dd v-if="campo.cuentaAtras" class="text-sm [overflow-wrap:anywhere]">
-              {{ campo.valor }}
-              <ContadorVencimiento :vencimiento="campo.cuentaAtras" class="ml-2" />
-            </dd>
-            <dd
-              v-else
-              class="text-sm [overflow-wrap:anywhere]"
-              :class="campo.multilinea ? 'whitespace-pre-wrap' : ''"
-              v-text="campo.valor"
-            />
-          </div>
-        </dl>
-
-        <section v-if="camposOportunidad" class="mt-6 border-t pt-4">
-          <h3 class="mb-3 text-base font-semibold">Oportunidad</h3>
-          <dl data-testid="campos-oportunidad" class="grid gap-3">
+        <div
+          data-testid="detalle-contenido"
+          class="min-h-0 overflow-y-auto pr-2"
+          role="region"
+          aria-label="Contenido del detalle"
+          tabindex="0"
+        >
+          <dl data-testid="campos-tarea" class="grid gap-3">
             <div
-              v-for="campo in camposOportunidad"
+              v-for="campo in camposTarea"
               :key="campo.termino"
               class="grid gap-1 sm:grid-cols-[14rem_1fr]"
             >
               <dt class="text-muted-foreground text-sm font-medium">{{ campo.termino }}</dt>
+              <dd v-if="campo.cuentaAtras" class="text-sm [overflow-wrap:anywhere]">
+                {{ campo.valor }}
+                <ContadorVencimiento :vencimiento="campo.cuentaAtras" class="ml-2" />
+              </dd>
               <dd
+                v-else
                 class="text-sm [overflow-wrap:anywhere]"
                 :class="campo.multilinea ? 'whitespace-pre-wrap' : ''"
                 v-text="campo.valor"
@@ -155,27 +145,58 @@ function alCambiarApertura(abierta: boolean): void {
             </div>
           </dl>
 
-          <template v-if="pasosOportunidad">
-            <h4 class="mt-6 mb-3 text-sm font-semibold">Pasos del workflow</h4>
-            <ul
-              v-if="pasosOportunidad.length > 0"
-              data-testid="pasos-oportunidad"
-              class="grid gap-2"
-            >
-              <li v-for="paso in pasosOportunidad" :key="paso.id" class="flex items-center gap-2">
-                <Checkbox
-                  :id="`paso-tarea-${paso.id}`"
-                  :model-value="paso.hecho"
-                  @update:model-value="emit('alternarPaso', paso.id)"
+          <section v-if="camposOportunidad" class="mt-6 border-t pt-4">
+            <h3 class="mb-3 text-base font-semibold">Oportunidad</h3>
+            <dl data-testid="campos-oportunidad" class="grid gap-3">
+              <div
+                v-for="campo in camposOportunidad"
+                :key="campo.termino"
+                class="grid gap-1 sm:grid-cols-[14rem_1fr]"
+              >
+                <dt class="text-muted-foreground text-sm font-medium">{{ campo.termino }}</dt>
+                <dd
+                  class="text-sm [overflow-wrap:anywhere]"
+                  :class="campo.multilinea ? 'whitespace-pre-wrap' : ''"
+                  v-text="campo.valor"
                 />
-                <Label :for="`paso-tarea-${paso.id}`" class="font-normal [overflow-wrap:anywhere]"
-                  >{{ paso.numero }}. {{ paso.nombre }}</Label
-                >
-              </li>
-            </ul>
-            <p v-else class="text-muted-foreground text-sm">Esta oportunidad no tiene pasos.</p>
-          </template>
-        </section>
+              </div>
+            </dl>
+
+            <template v-if="pasosOportunidad">
+              <h4 class="mt-6 mb-3 text-sm font-semibold">Pasos del workflow</h4>
+              <ul
+                v-if="pasosOportunidad.length > 0"
+                data-testid="pasos-oportunidad"
+                class="grid gap-2"
+              >
+                <li v-for="paso in pasosOportunidad" :key="paso.id" class="flex items-center gap-2">
+                  <Checkbox
+                    :id="`paso-tarea-${paso.id}`"
+                    :model-value="paso.hecho"
+                    @update:model-value="emit('alternarPaso', paso.id)"
+                  />
+                  <Label :for="`paso-tarea-${paso.id}`" class="font-normal [overflow-wrap:anywhere]"
+                    >{{ paso.numero }}. {{ paso.nombre }}</Label
+                  >
+                </li>
+              </ul>
+              <p v-else class="text-muted-foreground text-sm">Esta oportunidad no tiene pasos.</p>
+            </template>
+          </section>
+
+          <div v-if="tareaMostrada" class="mt-6 border-t pt-4">
+            <SubtareasTarea :tarea="tareaMostrada" />
+          </div>
+        </div>
+
+        <aside
+          v-if="tareaMostrada"
+          data-testid="columna-comentarios"
+          aria-label="Comentarios de la tarea"
+          class="flex min-h-0 flex-col border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6"
+        >
+          <ComentariosTarea :id-tarea="tareaMostrada.id" />
+        </aside>
       </div>
 
       <p v-if="props.error" class="text-sm text-destructive" role="alert">{{ props.error }}</p>
