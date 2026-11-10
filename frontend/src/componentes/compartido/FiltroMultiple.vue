@@ -77,7 +77,9 @@ function alternarTodos(marcado: boolean): void {
           :model-value="todosSeleccionados"
           @update:model-value="(valor) => alternarTodos(valor === true)"
         />
-        <Label :for="`${idBase}-todos`" class="font-medium">Seleccionar todas</Label>
+        <Label :for="`${idBase}-todos`" class="font-medium">{{
+          genero === 'masculino' ? 'Seleccionar todos' : 'Seleccionar todas'
+        }}</Label>
       </div>
       <Separator class="my-1" />
       <ul class="max-h-64 space-y-1 overflow-y-auto">
