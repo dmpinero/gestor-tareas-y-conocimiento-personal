@@ -22,6 +22,7 @@ import {
 } from '@/composables/useOrdenacionTabla'
 import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
+import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import DetalleTarea from '@/componentes/compartido/DetalleTarea.vue'
 import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import SelectorEtiquetas from '@/componentes/compartido/SelectorEtiquetas.vue'
@@ -708,9 +709,13 @@ async function guardar(): Promise<void> {
           <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
             formatearFechaHora(tarea.fecha_creacion)
           }}</TableCell>
-          <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
-            tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—'
-          }}</TableCell>
+          <TableCell class="whitespace-normal [overflow-wrap:anywhere]">
+            <template v-if="tarea.fecha_vencimiento">
+              {{ formatearFechaHora(tarea.fecha_vencimiento) }}
+              <ContadorVencimiento :vencimiento="tarea.fecha_vencimiento" class="block text-xs" />
+            </template>
+            <template v-else>—</template>
+          </TableCell>
           <TableCell>{{ etiquetaTipoTarea(tarea.tipo) ?? '—' }}</TableCell>
           <TableCell>
             <div class="flex gap-1">

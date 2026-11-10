@@ -345,11 +345,82 @@ test.describe('panel de tarea en una pantalla baja', () => {
     expect(desborda).toBe(true)
     expect(overflowY).toBe('scroll')
 
-    // ...y con la rueda del ratón se llega hasta el último campo.
+    // ...y con la rueda del ratón se llega hasta el último campo. Se espera a que
+    // acabe la animación de entrada del panel (en CI la rueda llegaba antes).
+    await panel.evaluate((elemento) =>
+      Promise.all(elemento.getAnimations().map((animacion) => animacion.finished)),
+    )
     const caja = await cuerpo.boundingBox()
     await page.mouse.move(caja!.x + caja!.width / 2, caja!.y + caja!.height / 2)
-    await page.mouse.wheel(0, 3000)
-    await expect(panel.getByLabel('Observaciones')).toBeInViewport()
+    const observaciones = panel.getByLabel('Observaciones')
+    await expect(async () => {
+      await page.mouse.wheel(0, 1000)
+      await expect(observaciones).toBeInViewport({ timeout: 500 })
+    }).toPass()
     await expect(guardar).toBeInViewport()
   })
+})
+
+test('muestra una cuenta atrás hasta el vencimiento que avanza sola, y "Vencida" en rojo', async ({
+  page,
+}) => {
+  const marca = `${Date.now()}`
+  const tareas = [
+    { nombre: `Futura ${marca}`, vencimiento: '31/12/2099 23:59:59' },
+    { nombre: `Pasada ${marca}`, vencimiento: '02/01/2026 10:00:00' },
+  ]
+
+  await page.goto('/tareas')
+  const panel = page.getByRole('dialog', { name: /^(Crear|Editar) tarea$/ })
+  for (const tarea of tareas) {
+    await page.getByRole('button', { name: 'Crear tarea' }).click()
+    await panel.getByPlaceholder('Nombre').fill(tarea.nombre)
+    await panel.getByPlaceholder('Descripción').fill('Con vencimiento')
+    await panel.locator('#fecha-creacion').fill('01/01/2026 09:00:00')
+    await panel.locator('#fecha-vencimiento').fill(tarea.vencimiento)
+    await panel.getByRole('button', { name: 'Guardar' }).click()
+    await expect(panel).toBeHidden()
+  }
+
+  const futura = page.locator('tr', { hasText: tareas[0].nombre }).getByRole('timer')
+  await expect(futura).toHaveText(/^Vence en \d+ d \d{2} h \d{2} min \d{2} s$/)
+  const antes = await futura.textContent()
+  await expect(futura).not.toHaveText(antes!, { timeout: 3000 })
+
+  const pasada = page.locator('tr', { hasText: tareas[1].nombre }).getByRole('timer')
+  await expect(pasada).toHaveText(/^Vencida hace \d+ d \d{2} h \d{2} min$/)
+  await expect(pasada).toHaveClass(/text-destructive/)
+  await page.screenshot({ path: 'e2e/capturas/tareas-08-cuenta-atras.png' })
+
+  // En el detalle también aparece la cuenta atrás.
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${tareas[0].nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: tareas[0].nombre })
+  await expect(detalle.getByRole('timer')).toHaveText(/^Vence en /)
+  await page.keyboard.press('Escape')
+  await expect(detalle).toBeHidden()
+  // Se audita cuando han terminado todas las animaciones (el fondo de la modal
+  // se desvanece al cerrarla y, a medias, daba falsos fallos de contraste).
+  const sinAnimaciones = () =>
+    page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          // Las infinitas (indicadores de carga) no terminan nunca.
+          .filter((animacion) => animacion.effect?.getTiming().iterations !== Infinity)
+          .map((animacion) => animacion.finished),
+      ),
+    )
+  await sinAnimaciones()
+
+  // Accesibilidad con contadores en pantalla, en claro y en oscuro.
+  const auditar = () =>
+    new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .exclude('.vue-devtools__anchor-btn')
+      .analyze()
+  expect((await auditar()).violations).toEqual([])
+  await page.getByRole('switch', { name: 'Cambiar a modo oscuro' }).click()
+  await expect(page.locator('html')).toHaveClass(/\bdark\b/)
+  await sinAnimaciones()
+  expect((await auditar()).violations).toEqual([])
 })

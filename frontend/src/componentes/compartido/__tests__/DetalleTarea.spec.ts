@@ -1,5 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Tarea } from '@/api/tipos'
 import DetalleTarea from '../DetalleTarea.vue'
@@ -71,7 +71,15 @@ function botonCerrar(): HTMLButtonElement {
 }
 
 describe('DetalleTarea', () => {
+  beforeEach(() => {
+    // Hora fija para que la cuenta atrás sea determinista. Solo se simulan
+    // `Date` y el intervalo del reloj: `flushPromises` usa temporizadores reales.
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date(2026, 10, 18, 14, 44, 40))
+  })
+
   afterEach(() => {
+    vi.useRealTimers()
     contenedor?.unmount()
     contenedor = null
     document.body.innerHTML = ''
@@ -111,7 +119,7 @@ describe('DetalleTarea', () => {
       ['Etiquetas', 'Backend, Urgente'],
       ['Asignado a', 'Ana, Luis'],
       ['Fecha de creación', '10/11/2026 09:30:00'],
-      ['Fecha de vencimiento', '20/11/2026 18:00:00'],
+      ['Fecha de vencimiento', '20/11/2026 18:00:00 Vence en 2 d 03 h 15 min 20 s'],
       ['Tipo', 'Oportunidad'],
     ])
     const seccion = listaDe('campos-oportunidad')
@@ -124,6 +132,34 @@ describe('DetalleTarea', () => {
     // Los textos largos conservan sus saltos de línea.
     const observaciones = [...seccion.querySelectorAll('dd')][2]!
     expect(observaciones.className).toContain('whitespace-pre-wrap')
+  })
+
+  it('junto a la fecha de vencimiento muestra la cuenta atrás, que avanza cada segundo', async () => {
+    await montar(TAREA_OPORTUNIDAD)
+
+    const contador = modal().querySelector('[data-testid="contador-vencimiento"]')
+    expect(contador?.textContent?.trim()).toBe('Vence en 2 d 03 h 15 min 20 s')
+    expect(contador?.getAttribute('role')).toBe('timer')
+
+    vi.advanceTimersByTime(1000)
+    await flushPromises()
+
+    expect(contador?.textContent?.trim()).toBe('Vence en 2 d 03 h 15 min 19 s')
+  })
+
+  it('con el vencimiento pasado muestra cuánto hace que venció en rojo', async () => {
+    vi.setSystemTime(new Date(2026, 10, 21, 20, 5, 59))
+    await montar(TAREA_OPORTUNIDAD)
+
+    const contador = modal().querySelector('[data-testid="contador-vencimiento"]')
+    expect(contador?.textContent?.trim()).toBe('Vencida hace 1 d 02 h 05 min')
+    expect(contador?.classList.contains('text-destructive')).toBe(true)
+  })
+
+  it('sin fecha de vencimiento no muestra cuenta atrás', async () => {
+    await montar(TAREA_SIN_TIPO)
+
+    expect(modal().querySelector('[data-testid="contador-vencimiento"]')).toBeNull()
   })
 
   it('ocupa el 90 % del ancho y del alto del viewport con scroll interno', async () => {
