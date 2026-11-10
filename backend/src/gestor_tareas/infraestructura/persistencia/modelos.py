@@ -8,6 +8,7 @@ generar migraciones con ``--autogenerate``.
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -114,6 +116,11 @@ class TareaModelo(Base):
     # la tarea la borra el ON DELETE CASCADE de la base de datos.
     oportunidad: Mapped[OportunidadModelo | None] = relationship(
         lazy="selectin", cascade="all, delete-orphan", passive_deletes=True
+    )
+    # El valor por defecto de la base de datos deja pendientes las filas que no lo
+    # indican, como las que ya existían al añadir la columna.
+    completada: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
 
 

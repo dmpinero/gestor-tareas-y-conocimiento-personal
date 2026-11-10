@@ -375,3 +375,86 @@ def test_borrar_una_tarea_borra_su_oportunidad_en_cascada(sesion_bd) -> None:
     sesion_bd.commit()
 
     assert _filas_oportunidades(sesion_bd) == []
+
+
+def test_crear_guarda_la_tarea_pendiente_por_defecto(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+
+    creada = repositorio.crear(
+        Tarea(nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION)
+    )
+
+    assert creada.completada is False
+    sesion_bd.expire_all()
+    assert sesion_bd.get(TareaModelo, creada.id).completada is False
+
+
+def test_la_base_de_datos_pone_pendientes_las_filas_sin_estado(sesion_bd) -> None:
+    # Las filas que no indican el estado (como las que ya existían al añadir la
+    # columna) quedan pendientes por el valor por defecto de la columna.
+    sesion_bd.execute(
+        insert(TareaModelo.__table__).values(
+            nombre="Antigua", descripcion="Sin estado", fecha_creacion=_FECHA_CREACION
+        )
+    )
+    sesion_bd.commit()
+
+    [tarea] = RepositorioTareasSqlAlchemy(sesion_bd).listar()
+
+    assert tarea.completada is False
+
+
+def test_cambiar_completada_persiste_el_estado_y_devuelve_la_tarea(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+    creada = repositorio.crear(
+        Tarea(nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION)
+    )
+    otra = repositorio.crear(
+        Tarea(nombre="Dos", descripcion="Segunda", fecha_creacion=_FECHA_CREACION)
+    )
+
+    completada = repositorio.cambiar_completada(creada.id, True)
+
+    assert completada == Tarea(
+        id=creada.id,
+        nombre="Uno",
+        descripcion="Primera",
+        fecha_creacion=_FECHA_CREACION,
+        completada=True,
+    )
+    sesion_bd.expire_all()
+    assert sesion_bd.get(TareaModelo, creada.id).completada is True
+    assert repositorio.obtener_por_id(otra.id).completada is False
+
+    assert repositorio.cambiar_completada(creada.id, False).completada is False
+    sesion_bd.expire_all()
+    assert sesion_bd.get(TareaModelo, creada.id).completada is False
+
+
+def test_cambiar_completada_de_una_tarea_inexistente_devuelve_none(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+
+    assert repositorio.cambiar_completada(999999, True) is None
+
+
+def test_actualizar_conserva_el_estado_completada(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+    creada = repositorio.crear(
+        Tarea(nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION)
+    )
+    repositorio.cambiar_completada(creada.id, True)
+
+    # La entidad que llega a la edición dice "pendiente": la edición no cambia el estado.
+    actualizada = repositorio.actualizar(
+        Tarea(
+            id=creada.id,
+            nombre="Uno editada",
+            descripcion="Primera",
+            fecha_creacion=_FECHA_CREACION,
+            completada=False,
+        )
+    )
+
+    assert actualizada.completada is True
+    sesion_bd.expire_all()
+    assert sesion_bd.get(TareaModelo, creada.id).completada is True

@@ -213,6 +213,7 @@ def test_la_salida_incluye_el_tipo_y_la_oportunidad() -> None:
         asignados=[],
         tipo="oportunidad",
         oportunidad={"codigo": "OP-1", "descripcion": None, "observaciones": None},
+        completada=False,
     )
 
     assert salida.model_dump(mode="json")["tipo"] == "oportunidad"

@@ -155,3 +155,49 @@ Característica: Creación, listado y edición de tareas
     Cuando intento editar esa tarea sin tipo pero con los datos de una oportunidad
     Entonces la API rechaza la operación con el mensaje "Los datos de la oportunidad solo se admiten si el tipo es «oportunidad»."
     Y el listado muestra la tarea de tipo oportunidad sin cambios
+
+  Escenario: Las tareas se crean pendientes
+    Dado que existen las tareas "Primera" y "Segunda"
+    Cuando consulto el listado de tareas
+    Entonces ninguna tarea del listado está completada
+
+  Escenario: Marcar una tarea como completada y volver a dejarla pendiente
+    Dado que existen las tareas "Primera" y "Segunda"
+    Cuando marco la tarea "Primera" como completada
+    Entonces la API responde con la tarea "Primera" completada y el resto de sus datos sin cambios
+    Y en el listado "Primera" está completada y "Segunda" pendiente
+    Cuando marco la tarea "Primera" como pendiente
+    Entonces la API responde con la tarea "Primera" pendiente y el resto de sus datos sin cambios
+    Y en el listado "Primera" está pendiente y "Segunda" pendiente
+
+  Escenario: Se rechaza cambiar el estado de una tarea que no existe
+    Dado que no existe ninguna tarea
+    Cuando intento marcar como completada la tarea con id 999999
+    Entonces la API responde que la tarea no existe
+    Y el listado de tareas sigue vacío
+
+  Esquema del escenario: Se rechaza un estado que no es un booleano
+    Dado que existen las tareas "Primera" y "Segunda"
+    Cuando intento cambiar el estado de la tarea "Primera" con el cuerpo <cuerpo>
+    Entonces la API rechaza la operación por datos inválidos
+    Y el listado contiene "Primera" y "Segunda" sin cambios
+
+    Ejemplos:
+      | cuerpo                  |
+      | {"completada": "true"}  |
+      | {"completada": 1}       |
+      | {"completada": null}    |
+      | {}                      |
+
+  Escenario: El alta no permite crear una tarea completada
+    Dado que no existe ninguna tarea
+    Cuando creo una tarea indicando que está completada
+    Entonces la API responde que la tarea se ha creado pendiente
+    Y la tarea aparece en el listado de tareas
+
+  Escenario: La edición conserva el estado de la tarea
+    Dado que existen las tareas "Primera" y "Segunda"
+    Y la tarea "Primera" está completada
+    Cuando edito la tarea "Primera" indicando que está pendiente
+    Entonces la API responde con la tarea "Primera" completada y los datos editados
+    Y en el listado "Primera" está completada y "Segunda" pendiente

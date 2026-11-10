@@ -5,6 +5,7 @@ import pytest
 from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
+from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from tests.unitarios.aplicacion.dobles import (
@@ -28,6 +29,9 @@ class _Repositorios:
 
     def actualizar(self) -> ActualizarTarea:
         return ActualizarTarea(self.tareas, self.etiquetas, self.personas)
+
+    def marcar_completada(self) -> MarcarCompletada:
+        return MarcarCompletada(self.tareas)
 
 
 def test_crear_tarea_la_guarda_y_le_asigna_id() -> None:
@@ -288,3 +292,60 @@ def test_actualizar_tarea_sin_tipo_quita_la_oportunidad() -> None:
 
     assert (actualizada.tipo, actualizada.oportunidad) == (None, None)
     assert repos.tareas.listar()[0].oportunidad is None
+
+
+def test_crear_tarea_la_guarda_pendiente() -> None:
+    repos = _Repositorios()
+
+    tarea = repos.crear().ejecutar(
+        nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION
+    )
+
+    assert tarea.completada is False
+    assert repos.tareas.listar()[0].completada is False
+
+
+def test_marcar_completada_cambia_el_estado_y_lo_guarda() -> None:
+    repos = _Repositorios()
+    creada = repos.crear().ejecutar(
+        nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION
+    )
+
+    completada = repos.marcar_completada().ejecutar(creada.id, completada=True)
+
+    assert completada == Tarea(
+        id=creada.id,
+        nombre="Uno",
+        descripcion="Primera",
+        fecha_creacion=_FECHA_CREACION,
+        completada=True,
+    )
+    assert repos.tareas.listar()[0].completada is True
+
+    pendiente = repos.marcar_completada().ejecutar(creada.id, completada=False)
+
+    assert pendiente.completada is False
+    assert repos.tareas.listar()[0].completada is False
+
+
+def test_marcar_completada_una_tarea_inexistente_lanza_entidad_no_encontrada() -> None:
+    repos = _Repositorios()
+
+    with pytest.raises(EntidadNoEncontradaError):
+        repos.marcar_completada().ejecutar(99, completada=True)
+    assert repos.tareas.listar() == []
+
+
+def test_actualizar_tarea_conserva_el_estado_completada() -> None:
+    repos = _Repositorios()
+    creada = repos.crear().ejecutar(
+        nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION
+    )
+    repos.marcar_completada().ejecutar(creada.id, completada=True)
+
+    actualizada = repos.actualizar().ejecutar(
+        creada.id, nombre="Otro", descripcion="Segunda", fecha_creacion=_FECHA_CREACION
+    )
+
+    assert actualizada.completada is True
+    assert repos.tareas.listar()[0].completada is True
