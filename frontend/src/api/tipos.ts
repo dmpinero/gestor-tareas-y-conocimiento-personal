@@ -26,6 +26,18 @@ export interface Oportunidad {
 }
 
 /**
+ * Paso del workflow copiado en una oportunidad al crearla. Es una copia fija:
+ * cambiar el workflow después no lo altera. Solo `hecho` cambia, con
+ * `PATCH /tareas/{id}/pasos/{id_paso}`.
+ */
+export interface PasoTarea {
+  id: number
+  numero: number
+  nombre: string
+  hecho: boolean
+}
+
+/**
  * Tarea tal como la devuelve la API (`GET`/`POST /tareas`, `PUT /tareas/{id}`,
  * `PATCH /tareas/{id}/completada`).
  */
@@ -49,6 +61,9 @@ export interface Tarea {
   /** `true` si la tarea está completada. Solo cambia con
    * `PATCH /tareas/{id}/completada`; `POST` y `PUT` no lo reciben. */
   completada: boolean
+  /** Pasos del workflow de la oportunidad, por número; vacía si la tarea no
+   * es una oportunidad o no tiene pasos. */
+  pasos_oportunidad: PasoTarea[]
 }
 
 /**

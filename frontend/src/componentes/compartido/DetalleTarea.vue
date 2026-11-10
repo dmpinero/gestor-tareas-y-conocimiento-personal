@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
+import { etiquetaTipoTarea, type PasoTarea, type Tarea } from '@/api/tipos'
 import { formatearFechaHora } from '@/lib/fechas'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import { Button } from '@/componentes/ui/button'
+import { Checkbox } from '@/componentes/ui/checkbox'
 import {
   Dialog,
   DialogClose,
@@ -14,11 +15,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/componentes/ui/dialog'
+import { Label } from '@/componentes/ui/label'
 
 // Modal con todos los campos de una tarea. Está abierta mientras `tarea` no
-// sea `null`; al cerrarla (botón, Escape o clic fuera) emite `cerrar`.
-const props = defineProps<{ tarea: Tarea | null }>()
-const emit = defineEmits<{ cerrar: [] }>()
+// sea `null`; al cerrarla (botón, Escape o clic fuera) emite `cerrar`. Al
+// pulsar la casilla de un paso del workflow emite `alternarPaso` con su id; la
+// tarea actualizada llega de vuelta por `tarea`. `error` se muestra dentro de
+// la modal porque, mientras está abierta, el resto de la página queda oculto.
+const props = defineProps<{ tarea: Tarea | null; error?: string | null }>()
+const emit = defineEmits<{ cerrar: []; alternarPaso: [idPaso: number] }>()
 
 // Se conserva la última tarea mostrada para que el contenido no desaparezca
 // mientras dura la animación de cierre.
@@ -86,6 +91,13 @@ const camposOportunidad = computed<Campo[] | null>(() => {
   ]
 })
 
+// Pasos del workflow por número, o `null` si la tarea no es una oportunidad.
+const pasosOportunidad = computed<PasoTarea[] | null>(() => {
+  const tarea = tareaMostrada.value
+  if (tarea?.tipo !== 'oportunidad') return null
+  return [...tarea.pasos_oportunidad].sort((a, b) => a.numero - b.numero)
+})
+
 function alCambiarApertura(abierta: boolean): void {
   if (!abierta) emit('cerrar')
 }
@@ -142,8 +154,31 @@ function alCambiarApertura(abierta: boolean): void {
               />
             </div>
           </dl>
+
+          <template v-if="pasosOportunidad">
+            <h4 class="mt-6 mb-3 text-sm font-semibold">Pasos del workflow</h4>
+            <ul
+              v-if="pasosOportunidad.length > 0"
+              data-testid="pasos-oportunidad"
+              class="grid gap-2"
+            >
+              <li v-for="paso in pasosOportunidad" :key="paso.id" class="flex items-center gap-2">
+                <Checkbox
+                  :id="`paso-tarea-${paso.id}`"
+                  :model-value="paso.hecho"
+                  @update:model-value="emit('alternarPaso', paso.id)"
+                />
+                <Label :for="`paso-tarea-${paso.id}`" class="font-normal [overflow-wrap:anywhere]"
+                  >{{ paso.numero }}. {{ paso.nombre }}</Label
+                >
+              </li>
+            </ul>
+            <p v-else class="text-muted-foreground text-sm">Esta oportunidad no tiene pasos.</p>
+          </template>
         </section>
       </div>
+
+      <p v-if="props.error" class="text-sm text-destructive" role="alert">{{ props.error }}</p>
 
       <DialogFooter>
         <DialogClose as-child>

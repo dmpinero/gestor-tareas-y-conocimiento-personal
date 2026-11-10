@@ -16,6 +16,7 @@ const TAREA_SIN_TIPO: Tarea = {
   tipo: null,
   oportunidad: null,
   completada: false,
+  pasos_oportunidad: [],
 }
 
 const TAREA_OPORTUNIDAD: Tarea = {
@@ -34,12 +35,20 @@ const TAREA_OPORTUNIDAD: Tarea = {
     observaciones: 'Primera línea\nSegunda línea',
   },
   completada: false,
+  pasos_oportunidad: [],
 }
+
+// Llegan desordenados para comprobar que se muestran por número.
+const PASOS = [
+  { id: 12, numero: 3, nombre: 'Firmar contrato', hecho: false },
+  { id: 10, numero: 1, nombre: 'Contactar', hecho: true },
+  { id: 11, numero: 2, nombre: 'Enviar propuesta', hecho: false },
+]
 
 let contenedor: VueWrapper | null = null
 
-async function montar(tarea: Tarea | null): Promise<VueWrapper> {
-  contenedor = mount(DetalleTarea, { props: { tarea }, attachTo: document.body })
+async function montar(tarea: Tarea | null, error: string | null = null): Promise<VueWrapper> {
+  contenedor = mount(DetalleTarea, { props: { tarea, error }, attachTo: document.body })
   await flushPromises()
   return contenedor
 }
@@ -70,6 +79,20 @@ function botonCerrar(): HTMLButtonElement {
   )
   if (botones.length !== 1) throw new Error(`Se esperaba un botón "Cerrar" y hay ${botones.length}`)
   return botones[0] as HTMLButtonElement
+}
+
+// Casillas de los pasos del workflow con su texto visible y su estado.
+function casillasPasos(): { texto: string; marcada: string | null }[] {
+  const lista = modal().querySelector('[data-testid="pasos-oportunidad"]')
+  if (!lista) throw new Error('No se encontró la lista de pasos')
+  return [...lista.querySelectorAll('li')].map((fila) => {
+    const casilla = fila.querySelector('[role="checkbox"]')!
+    const etiqueta = modal().querySelector(`label[for="${casilla.id}"]`)
+    return {
+      texto: etiqueta?.textContent?.trim() ?? '',
+      marcada: casilla.getAttribute('aria-checked'),
+    }
+  })
 }
 
 describe('DetalleTarea', () => {
@@ -199,5 +222,71 @@ describe('DetalleTarea', () => {
     await flushPromises()
 
     expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+  })
+
+  describe('pasos del workflow', () => {
+    it('lista los pasos por número con una casilla etiquetada "<número>. <nombre>" marcada si están hechos', async () => {
+      await montar({ ...TAREA_OPORTUNIDAD, pasos_oportunidad: PASOS })
+
+      const titulos = [...modal().querySelectorAll('h3, h4')].map((h) => h.textContent?.trim())
+      expect(titulos).toContain('Pasos del workflow')
+      expect(casillasPasos()).toEqual([
+        { texto: '1. Contactar', marcada: 'true' },
+        { texto: '2. Enviar propuesta', marcada: 'false' },
+        { texto: '3. Firmar contrato', marcada: 'false' },
+      ])
+    })
+
+    it('al pulsar una casilla pide alternar ese paso', async () => {
+      const envoltorio = await montar({ ...TAREA_OPORTUNIDAD, pasos_oportunidad: PASOS })
+
+      const casilla = [...modal().querySelectorAll<HTMLElement>('[role="checkbox"]')][1]!
+      casilla.click()
+      await flushPromises()
+
+      expect(envoltorio.emitted('alternarPaso')).toEqual([[11]])
+    })
+
+    it('refleja el nuevo estado cuando llega la tarea actualizada', async () => {
+      const envoltorio = await montar({ ...TAREA_OPORTUNIDAD, pasos_oportunidad: PASOS })
+
+      await envoltorio.setProps({
+        tarea: {
+          ...TAREA_OPORTUNIDAD,
+          pasos_oportunidad: PASOS.map((paso) => ({ ...paso, hecho: paso.id === 11 })),
+        },
+      })
+      await flushPromises()
+
+      expect(casillasPasos().map((casilla) => casilla.marcada)).toEqual(['false', 'true', 'false'])
+    })
+
+    it('una oportunidad sin pasos lo indica en lugar de la lista', async () => {
+      await montar(TAREA_OPORTUNIDAD)
+
+      expect(modal().querySelector('[data-testid="pasos-oportunidad"]')).toBeNull()
+      expect(modal().textContent).toContain('Esta oportunidad no tiene pasos.')
+    })
+
+    it('una tarea sin tipo no muestra pasos', async () => {
+      await montar(TAREA_SIN_TIPO)
+
+      expect(modal().textContent).not.toContain('Pasos del workflow')
+      expect(modal().querySelector('[role="checkbox"]')).toBeNull()
+    })
+
+    it('muestra el error recibido dentro de la modal', async () => {
+      await montar({ ...TAREA_OPORTUNIDAD, pasos_oportunidad: PASOS }, 'Paso no encontrado')
+
+      expect(modal().querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+        'Paso no encontrado',
+      )
+    })
+
+    it('sin error no muestra ninguna alerta', async () => {
+      await montar({ ...TAREA_OPORTUNIDAD, pasos_oportunidad: PASOS })
+
+      expect(modal().querySelector('[role="alert"]')).toBeNull()
+    })
   })
 })
