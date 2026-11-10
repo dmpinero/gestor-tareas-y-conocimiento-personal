@@ -202,3 +202,61 @@ test('asigna etiquetas y personas creadas al vuelo y una fecha de vencimiento co
   await panel.getByRole('combobox', { name: 'Etiquetas' }).fill(etiqueta.toUpperCase())
   await expect(panel.getByRole('option', { name: etiqueta, exact: true })).toBeVisible()
 })
+
+test('filtra la tabla por texto, prioridad y fecha de creación, y limpia los filtros', async ({
+  page,
+}) => {
+  const marca = `${Date.now()}`
+  const tareas = [
+    { nombre: `Revisión ${marca}`, prioridad: '1', fecha: '05/01/2026 10:00:00' },
+    { nombre: `Compra ${marca}`, prioridad: '', fecha: '20/02/2026 10:00:00' },
+  ]
+
+  await page.goto('/tareas')
+  const panel = page.getByRole('dialog', { name: /^(Crear|Editar) tarea$/ })
+  for (const tarea of tareas) {
+    await page.getByRole('button', { name: 'Crear tarea' }).click()
+    await panel.getByPlaceholder('Nombre').fill(tarea.nombre)
+    await panel.getByPlaceholder('Prioridad').fill(tarea.prioridad)
+    await panel.getByPlaceholder('Descripción').fill('Para filtrar')
+    await panel.locator('#fecha-creacion').fill(tarea.fecha)
+    await panel.getByRole('button', { name: 'Guardar' }).click()
+    await expect(panel).toBeHidden()
+  }
+
+  const filas = page.locator('tbody tr', { hasText: marca })
+  await expect(filas).toHaveCount(2)
+
+  // Texto sin acentos ni mayúsculas.
+  await page.locator('#filtro-buscar').fill(`revision ${marca}`)
+  await expect(filas).toHaveCount(1)
+  await expect(filas.first()).toContainText(`Revisión ${marca}`)
+  await page.screenshot({ path: 'e2e/capturas/tareas-06-filtros.png' })
+  await page.locator('#filtro-buscar').fill(marca)
+  await expect(filas).toHaveCount(2)
+
+  // Prioridad: se desmarca "Sin prioridad".
+  await page.getByRole('button', { name: 'Filtrar por prioridad' }).click()
+  await page.getByRole('checkbox', { name: 'Sin prioridad' }).click()
+  await page.keyboard.press('Escape')
+  await expect(filas).toHaveCount(1)
+  await expect(filas.first()).toContainText(`Revisión ${marca}`)
+
+  await page.getByRole('button', { name: 'Limpiar filtros' }).click()
+  await page.locator('#filtro-buscar').fill(marca)
+  await expect(filas).toHaveCount(2)
+
+  // Fecha de creación: solo febrero de 2026.
+  await page.locator('#filtro-creacion-desde').fill('2026-02-01')
+  await page.locator('#filtro-creacion-hasta').fill('2026-02-28')
+  await expect(filas).toHaveCount(1)
+  await expect(filas.first()).toContainText(`Compra ${marca}`)
+
+  // Sin coincidencias.
+  await page.locator('#filtro-buscar').fill(`no-existe-${marca}`)
+  await expect(page.getByText('Ninguna tarea coincide con los filtros.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Limpiar filtros' }).click()
+  await expect(page.locator('#filtro-buscar')).toHaveValue('')
+  await expect(page.locator('#filtro-creacion-desde')).toHaveValue('')
+})
