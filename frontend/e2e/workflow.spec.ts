@@ -125,3 +125,27 @@ test('una oportunidad nueva recibe una copia fija de los pasos y se marca su ava
   await page.goto('/tareas')
   await expect(page.locator('tr', { hasText: nombre })).toContainText('Oportunidad · 1/3')
 })
+
+// Regresión (accesibilidad): al mover con el teclado, el foco se perdía en el
+// <body> porque el botón pulsado se desactiva mientras se guarda.
+test('al reordenar con el teclado el foco se queda en el paso movido', async ({ page }) => {
+  await page.goto('/ajustes/workflow-oportunidades')
+  for (const nombre of ['Uno', 'Dos', 'Tres']) await anadirPaso(page, nombre)
+
+  await page.getByRole('button', { name: 'Bajar paso Uno' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(textosDePasos(page)).toHaveText(['1. Dos', '2. Uno', '3. Tres'])
+  await expect(page.getByRole('button', { name: 'Bajar paso Uno' })).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  await expect(textosDePasos(page)).toHaveText(['1. Dos', '2. Tres', '3. Uno'])
+  // Ya está al final: el foco pasa a su botón "Subir".
+  await expect(page.getByRole('button', { name: 'Subir paso Uno' })).toBeFocused()
+
+  await page.getByRole('button', { name: 'Eliminar paso Uno' }).click()
+  await page
+    .getByRole('dialog', { name: 'Eliminar paso' })
+    .getByRole('button', { name: 'Eliminar' })
+    .click()
+  await expect(page.getByLabel('Nombre del paso')).toBeFocused()
+})
