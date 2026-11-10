@@ -1,12 +1,13 @@
 from datetime import datetime
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import DBAPIError
 
-from gestor_tareas.dominio.tarea.entidades import Tarea
+from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from gestor_tareas.infraestructura.persistencia.modelos import (
     EtiquetaModelo,
+    OportunidadModelo,
     PersonaModelo,
     TareaModelo,
     tarea_etiquetas,
@@ -250,3 +251,127 @@ def test_borrar_una_tarea_borra_sus_enlaces_en_cascada(sesion_bd) -> None:
 
     assert sesion_bd.execute(select(tarea_etiquetas)).all() == []
     assert sesion_bd.execute(select(tarea_personas)).all() == []
+
+
+def _filas_oportunidades(sesion_bd) -> list[tuple]:
+    sesion_bd.expire_all()
+    consulta = select(
+        OportunidadModelo.tarea_id,
+        OportunidadModelo.codigo,
+        OportunidadModelo.descripcion,
+        OportunidadModelo.observaciones,
+    ).order_by(OportunidadModelo.tarea_id)
+    return [tuple(fila) for fila in sesion_bd.execute(consulta)]
+
+
+def _tarea_oportunidad(oportunidad: Oportunidad, **cambios) -> Tarea:
+    datos = {
+        "nombre": "Venta",
+        "descripcion": "Cliente nuevo",
+        "fecha_creacion": _FECHA_CREACION,
+        "tipo": TipoTarea.OPORTUNIDAD,
+        "oportunidad": oportunidad,
+    }
+    datos.update(cambios)
+    return Tarea(**datos)
+
+
+def test_crear_sin_tipo_no_guarda_oportunidad(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+
+    creada = repositorio.crear(
+        Tarea(nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION)
+    )
+
+    assert (creada.tipo, creada.oportunidad) == (None, None)
+    assert sesion_bd.get(TareaModelo, creada.id).tipo is None
+    assert _filas_oportunidades(sesion_bd) == []
+    assert repositorio.obtener_por_id(creada.id) == creada
+
+
+def test_crear_de_tipo_oportunidad_guarda_el_tipo_y_sus_datos(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+    oportunidad = Oportunidad(codigo="OP-1", descripcion="Venta", observaciones="o" * 5000)
+
+    creada = repositorio.crear(_tarea_oportunidad(oportunidad))
+
+    assert (creada.tipo, creada.oportunidad) == (TipoTarea.OPORTUNIDAD, oportunidad)
+    sesion_bd.expire_all()
+    assert sesion_bd.get(TareaModelo, creada.id).tipo == "oportunidad"
+    assert _filas_oportunidades(sesion_bd) == [(creada.id, "OP-1", "Venta", "o" * 5000)]
+    assert repositorio.listar() == [creada]
+
+
+def test_actualizar_modifica_los_datos_de_la_oportunidad(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+    creada = repositorio.crear(
+        _tarea_oportunidad(Oportunidad(codigo="OP-1", descripcion="Venta", observaciones="Notas"))
+    )
+    nueva = Oportunidad(codigo="OP-2", descripcion=None, observaciones="Otras")
+
+    actualizada = repositorio.actualizar(_tarea_oportunidad(nueva, id=creada.id))
+
+    assert actualizada.oportunidad == nueva
+    assert _filas_oportunidades(sesion_bd) == [(creada.id, "OP-2", None, "Otras")]
+    assert repositorio.obtener_por_id(creada.id) == actualizada
+
+
+def test_actualizar_sin_tipo_borra_la_oportunidad(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+    creada = repositorio.crear(_tarea_oportunidad(Oportunidad(codigo="OP-1")))
+    otra = repositorio.crear(_tarea_oportunidad(Oportunidad(codigo="OP-9"), nombre="Otra"))
+
+    actualizada = repositorio.actualizar(
+        Tarea(id=creada.id, nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION)
+    )
+
+    assert (actualizada.tipo, actualizada.oportunidad) == (None, None)
+    assert sesion_bd.get(TareaModelo, creada.id).tipo is None
+    assert _filas_oportunidades(sesion_bd) == [(otra.id, "OP-9", None, None)]
+
+
+def test_actualizar_de_sin_tipo_a_oportunidad_crea_sus_datos(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+    creada = repositorio.crear(
+        Tarea(nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION)
+    )
+
+    actualizada = repositorio.actualizar(
+        _tarea_oportunidad(Oportunidad(codigo="OP-3"), id=creada.id)
+    )
+
+    assert actualizada.tipo is TipoTarea.OPORTUNIDAD
+    assert _filas_oportunidades(sesion_bd) == [(creada.id, "OP-3", None, None)]
+
+
+def test_la_base_de_datos_rechaza_tipos_desconocidos(sesion_bd) -> None:
+    sesion_bd.add(
+        TareaModelo(
+            nombre="Tarea", descripcion="Texto", fecha_creacion=_FECHA_CREACION, tipo="otro"
+        )
+    )
+
+    with pytest.raises(DBAPIError, match="ck_tareas_tipo_valido"):
+        sesion_bd.commit()
+    sesion_bd.rollback()
+    assert sesion_bd.scalars(select(TareaModelo)).all() == []
+
+
+def test_la_base_de_datos_exige_el_codigo_de_la_oportunidad(sesion_bd) -> None:
+    creada = RepositorioTareasSqlAlchemy(sesion_bd).crear(
+        Tarea(nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION)
+    )
+
+    with pytest.raises(DBAPIError, match="codigo"):
+        sesion_bd.execute(insert(OportunidadModelo.__table__).values(tarea_id=creada.id))
+    sesion_bd.rollback()
+
+
+def test_borrar_una_tarea_borra_su_oportunidad_en_cascada(sesion_bd) -> None:
+    repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
+    creada = repositorio.crear(_tarea_oportunidad(Oportunidad(codigo="OP-1")))
+
+    sesion_bd.execute(delete(TareaModelo.__table__).where(TareaModelo.id == creada.id))
+    sesion_bd.commit()
+
+    assert _filas_oportunidades(sesion_bd) == []

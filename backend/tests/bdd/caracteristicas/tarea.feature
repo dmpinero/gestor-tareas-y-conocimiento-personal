@@ -44,6 +44,12 @@ Característica: Creación, listado y edición de tareas
       | etiquetas     | con un nombre de 51 caracteres |
       | asignados     | con un nombre solo de espacios |
       | asignados     | con un nombre de 101 caracteres |
+      | tipo          | desconocido               |
+      | código de la oportunidad | vacío          |
+      | código de la oportunidad | solo espacios  |
+      | código de la oportunidad | de 11 caracteres |
+      | descripción de la oportunidad | de 201 caracteres |
+      | observaciones de la oportunidad | de 5001 caracteres |
 
   Escenario: Edición correcta de una tarea
     Dado que existen las tareas "Primera" y "Segunda"
@@ -102,3 +108,50 @@ Característica: Creación, listado y edición de tareas
     Cuando creo una tarea con fecha de creación "2026-11-09T10:30:00" y fecha de vencimiento "2026-11-09T10:29:59"
     Entonces la API rechaza la operación con el mensaje "La fecha de vencimiento no puede ser anterior a la fecha de creación."
     Y el listado de tareas sigue vacío
+
+  Escenario: Las tareas sin tipo no tienen datos de oportunidad
+    Dado que existen las tareas "Primera" y "Segunda"
+    Cuando consulto el listado de tareas
+    Entonces ninguna tarea del listado tiene tipo ni oportunidad
+
+  Escenario: Alta de una tarea de tipo oportunidad
+    Dado que no existe ninguna tarea
+    Cuando creo una tarea de tipo oportunidad con código "  OP-0001  ", descripción "Cliente nuevo" y observaciones "Llamar el lunes"
+    Entonces la API responde que la tarea se ha creado con la oportunidad de código "OP-0001", descripción "Cliente nuevo" y observaciones "Llamar el lunes"
+    Y la tarea aparece en el listado de tareas
+
+  Escenario: Los textos opcionales vacíos de la oportunidad se guardan como nulos
+    Dado que no existe ninguna tarea
+    Cuando creo una tarea de tipo oportunidad con código "OP-1", descripción "   " y observaciones ""
+    Entonces la API responde que la tarea se ha creado con la oportunidad de código "OP-1", descripción "" y observaciones ""
+    Y la tarea aparece en el listado de tareas
+
+  Escenario: Se rechaza una tarea de tipo oportunidad sin sus datos
+    Dado que no existe ninguna tarea
+    Cuando intento crear una tarea de tipo oportunidad sin sus datos
+    Entonces la API rechaza la operación con el mensaje "Los datos de la oportunidad son obligatorios si el tipo es «oportunidad»."
+    Y el listado de tareas sigue vacío
+
+  Escenario: Se rechaza una tarea sin tipo con datos de oportunidad
+    Dado que no existe ninguna tarea
+    Cuando intento crear una tarea sin tipo con los datos de una oportunidad
+    Entonces la API rechaza la operación con el mensaje "Los datos de la oportunidad solo se admiten si el tipo es «oportunidad»."
+    Y el listado de tareas sigue vacío
+
+  Escenario: La edición sustituye los datos de la oportunidad
+    Dado que existe una tarea de tipo oportunidad con código "OP-1"
+    Cuando edito esa tarea con la oportunidad de código "OP-2", descripción "Renovación" y observaciones ""
+    Entonces la API responde que la tarea se ha actualizado con la oportunidad de código "OP-2", descripción "Renovación" y observaciones ""
+    Y el listado muestra solo esa tarea
+
+  Escenario: Quitar el tipo a una tarea borra sus datos de oportunidad
+    Dado que existe una tarea de tipo oportunidad con código "OP-1"
+    Cuando edito esa tarea sin tipo
+    Entonces la API responde que la tarea se ha actualizado sin tipo ni oportunidad
+    Y el listado muestra solo esa tarea
+
+  Escenario: Se rechaza editar una tarea con datos de oportunidad pero sin tipo
+    Dado que existe una tarea de tipo oportunidad con código "OP-1"
+    Cuando intento editar esa tarea sin tipo pero con los datos de una oportunidad
+    Entonces la API rechaza la operación con el mensaje "Los datos de la oportunidad solo se admiten si el tipo es «oportunidad»."
+    Y el listado muestra la tarea de tipo oportunidad sin cambios

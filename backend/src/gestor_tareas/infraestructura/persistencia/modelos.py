@@ -7,9 +7,19 @@ generar migraciones con ``--autogenerate``.
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Table
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from gestor_tareas.dominio.tarea.entidades import TipoTarea
 from gestor_tareas.infraestructura.persistencia.sesion import Base
 
 # Intercalación de los nombres de los catálogos: sin distinguir mayúsculas pero sí
@@ -54,12 +64,33 @@ tarea_personas = Table(
 )
 
 
+# Valores admitidos en `tareas.tipo`. Al añadir un tipo en `TipoTarea`, la
+# migración que lo añada debe rehacer el CHECK con la nueva lista.
+_TIPOS_TAREA = ", ".join(f"'{tipo.value}'" for tipo in TipoTarea)
+
+
+class OportunidadModelo(Base):
+    """Datos de una tarea de tipo oportunidad: como mucho una fila por tarea."""
+
+    __tablename__ = "oportunidades"
+
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", ondelete="CASCADE"), primary_key=True
+    )
+    codigo: Mapped[str] = mapped_column(String(10), nullable=False)
+    descripcion: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # TEXT admite 65 535 bytes: 5000 caracteres de hasta 4 bytes caben de sobra. El
+    # límite de 5000 caracteres lo valida la API.
+    observaciones: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class TareaModelo(Base):
     __tablename__ = "tareas"
     __table_args__ = (
         CheckConstraint(
             "prioridad IS NULL OR prioridad BETWEEN 1 AND 5", name="ck_tareas_prioridad_rango"
         ),
+        CheckConstraint(f"tipo IS NULL OR tipo IN ({_TIPOS_TAREA})", name="ck_tareas_tipo_valido"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -77,11 +108,19 @@ class TareaModelo(Base):
         secondary=tarea_etiquetas, lazy="selectin"
     )
     asignados: Mapped[list[PersonaModelo]] = relationship(secondary=tarea_personas, lazy="selectin")
+    # Valor de `TipoTarea`, o NULL si la tarea no tiene tipo.
+    tipo: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Quitar la oportunidad (asignar None) borra su fila ("delete-orphan"); al borrar
+    # la tarea la borra el ON DELETE CASCADE de la base de datos.
+    oportunidad: Mapped[OportunidadModelo | None] = relationship(
+        lazy="selectin", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 __all__ = [
     "Base",
     "EtiquetaModelo",
+    "OportunidadModelo",
     "PersonaModelo",
     "TareaModelo",
     "tarea_etiquetas",

@@ -6,7 +6,7 @@ from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
-from gestor_tareas.dominio.tarea.entidades import Tarea
+from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from tests.unitarios.aplicacion.dobles import (
     RepositorioEtiquetasFalso,
     RepositorioPersonasFalso,
@@ -219,3 +219,72 @@ def test_actualizar_tarea_inexistente_lanza_entidad_no_encontrada() -> None:
     assert repos.tareas.listar() == []
     # La tarea no existe: no se da de alta ninguna etiqueta.
     assert repos.etiquetas.listar() == []
+
+
+def test_crear_tarea_sin_tipo_la_guarda_sin_tipo_ni_oportunidad() -> None:
+    repos = _Repositorios()
+
+    tarea = repos.crear().ejecutar(
+        nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION
+    )
+
+    assert (tarea.tipo, tarea.oportunidad) == (None, None)
+    assert repos.tareas.listar() == [tarea]
+
+
+def test_crear_tarea_de_tipo_oportunidad_guarda_sus_datos() -> None:
+    repos = _Repositorios()
+    oportunidad = Oportunidad(codigo="OP-1", descripcion="Venta", observaciones=None)
+
+    tarea = repos.crear().ejecutar(
+        nombre="Uno",
+        descripcion="Primera",
+        fecha_creacion=_FECHA_CREACION,
+        tipo=TipoTarea.OPORTUNIDAD,
+        oportunidad=oportunidad,
+    )
+
+    assert (tarea.tipo, tarea.oportunidad) == (TipoTarea.OPORTUNIDAD, oportunidad)
+    assert repos.tareas.listar() == [tarea]
+
+
+def test_actualizar_tarea_sustituye_los_datos_de_la_oportunidad() -> None:
+    repos = _Repositorios()
+    creada = repos.crear().ejecutar(
+        nombre="Uno",
+        descripcion="Primera",
+        fecha_creacion=_FECHA_CREACION,
+        tipo=TipoTarea.OPORTUNIDAD,
+        oportunidad=Oportunidad(codigo="OP-1", descripcion="Venta", observaciones="Notas"),
+    )
+    nueva = Oportunidad(codigo="OP-2", descripcion=None, observaciones="Otras notas")
+
+    actualizada = repos.actualizar().ejecutar(
+        creada.id,
+        nombre="Uno",
+        descripcion="Primera",
+        fecha_creacion=_FECHA_CREACION,
+        tipo=TipoTarea.OPORTUNIDAD,
+        oportunidad=nueva,
+    )
+
+    assert (actualizada.tipo, actualizada.oportunidad) == (TipoTarea.OPORTUNIDAD, nueva)
+    assert repos.tareas.listar()[0].oportunidad == nueva
+
+
+def test_actualizar_tarea_sin_tipo_quita_la_oportunidad() -> None:
+    repos = _Repositorios()
+    creada = repos.crear().ejecutar(
+        nombre="Uno",
+        descripcion="Primera",
+        fecha_creacion=_FECHA_CREACION,
+        tipo=TipoTarea.OPORTUNIDAD,
+        oportunidad=Oportunidad(codigo="OP-1"),
+    )
+
+    actualizada = repos.actualizar().ejecutar(
+        creada.id, nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION
+    )
+
+    assert (actualizada.tipo, actualizada.oportunidad) == (None, None)
+    assert repos.tareas.listar()[0].oportunidad is None

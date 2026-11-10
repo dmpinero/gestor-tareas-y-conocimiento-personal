@@ -12,6 +12,13 @@ _DATOS_VALIDOS = {
 
 _AUSENTE = object()
 
+
+def _con_oportunidad(**campos) -> dict:
+    """Cambios para una tarea de tipo oportunidad con los campos indicados."""
+    oportunidad = {"codigo": "OP-1", "descripcion": None, "observaciones": None, **campos}
+    return {"tipo": "oportunidad", "oportunidad": oportunidad}
+
+
 _DATOS_INVALIDOS = {
     ("nombre", "vacío"): {"nombre": ""},
     ("nombre", "solo espacios"): {"nombre": "   "},
@@ -28,10 +35,24 @@ _DATOS_INVALIDOS = {
     ("etiquetas", "con un nombre de 51 caracteres"): {"etiquetas": ["e" * 51]},
     ("asignados", "con un nombre solo de espacios"): {"asignados": ["\u00a0 "]},
     ("asignados", "con un nombre de 101 caracteres"): {"asignados": ["p" * 101]},
+    ("tipo", "desconocido"): {"tipo": "otro", "oportunidad": None},
+    ("código de la oportunidad", "vacío"): _con_oportunidad(codigo=""),
+    ("código de la oportunidad", "solo espacios"): _con_oportunidad(codigo="\u00a0 "),
+    ("código de la oportunidad", "de 11 caracteres"): _con_oportunidad(codigo="c" * 11),
+    ("descripción de la oportunidad", "de 201 caracteres"): _con_oportunidad(descripcion="d" * 201),
+    ("observaciones de la oportunidad", "de 5001 caracteres"): _con_oportunidad(
+        observaciones="o" * 5001
+    ),
 }
 
 # Valores que la API devuelve cuando la petición no incluye los campos opcionales.
-_OPCIONALES_POR_DEFECTO = {"fecha_vencimiento": None, "etiquetas": [], "asignados": []}
+_OPCIONALES_POR_DEFECTO = {
+    "fecha_vencimiento": None,
+    "etiquetas": [],
+    "asignados": [],
+    "tipo": None,
+    "oportunidad": None,
+}
 
 
 def _lista(texto: str) -> list[str]:
@@ -107,8 +128,11 @@ def crear_tarea_sin_prioridad(
 @when(
     parsers.re(
         r"intento crear una tarea con "
-        r"(?P<campo>nombre|descripción|prioridad|fecha de creación|fecha de vencimiento"
-        r"|etiquetas|asignados) "
+        # Las alternativas largas van antes: "descripción" también es el principio
+        # de "descripción de la oportunidad".
+        r"(?P<campo>código de la oportunidad|descripción de la oportunidad"
+        r"|observaciones de la oportunidad|nombre|descripción|prioridad"
+        r"|fecha de creación|fecha de vencimiento|etiquetas|asignados|tipo) "
         r"(?P<valor>.+)"
     ),
     target_fixture="respuesta",
@@ -343,3 +367,156 @@ def la_api_rechaza_con_mensaje(peticion: dict, mensaje: str) -> None:
     respuesta = peticion["respuesta"]
     assert respuesta.status_code == 422
     assert mensaje in respuesta.text
+
+
+def _texto_o_nulo(texto: str) -> str | None:
+    """En los pasos, "" significa que la API devuelve ``null``."""
+    return texto or None
+
+
+_OPORTUNIDAD = (
+    r'código "(?P<codigo>[^"]*)", descripción "(?P<descripcion>[^"]*)" '
+    r'y observaciones "(?P<observaciones>[^"]*)"'
+)
+
+
+@then("ninguna tarea del listado tiene tipo ni oportunidad")
+def ninguna_tarea_tiene_tipo(respuesta) -> None:
+    assert respuesta.status_code == 200
+    tareas = respuesta.json()
+    assert tareas
+    assert all(t["tipo"] is None and t["oportunidad"] is None for t in tareas)
+
+
+@when(
+    parsers.re(f"creo una tarea de tipo oportunidad con {_OPORTUNIDAD}"),
+    target_fixture="peticion",
+)
+def crear_tarea_oportunidad(
+    cliente: TestClient, codigo: str, descripcion: str, observaciones: str
+) -> dict:
+    datos = {
+        **_DATOS_VALIDOS,
+        "tipo": "oportunidad",
+        "oportunidad": {
+            "codigo": codigo,
+            "descripcion": descripcion,
+            "observaciones": observaciones,
+        },
+    }
+    return {"datos": datos, "respuesta": cliente.post("/api/v1/tareas", json=datos)}
+
+
+def _comprobar_oportunidad(
+    respuesta, codigo_estado: int, codigo: str, descripcion: str, observaciones: str
+) -> dict:
+    assert respuesta.status_code == codigo_estado
+    cuerpo = respuesta.json()
+    assert cuerpo["tipo"] == "oportunidad"
+    assert cuerpo["oportunidad"] == {
+        "codigo": codigo,
+        "descripcion": _texto_o_nulo(descripcion),
+        "observaciones": _texto_o_nulo(observaciones),
+    }
+    return cuerpo
+
+
+@then(parsers.re(f"la API responde que la tarea se ha creado con la oportunidad de {_OPORTUNIDAD}"))
+def la_tarea_se_ha_creado_con_oportunidad(
+    peticion: dict, codigo: str, descripcion: str, observaciones: str
+) -> None:
+    cuerpo = _comprobar_oportunidad(peticion["respuesta"], 201, codigo, descripcion, observaciones)
+    sin_tipo = {k: v for k, v in peticion["datos"].items() if k not in {"tipo", "oportunidad"}}
+    assert {k: cuerpo[k] for k in sin_tipo} == sin_tipo
+
+
+@then(
+    parsers.re(
+        f"la API responde que la tarea se ha actualizado con la oportunidad de {_OPORTUNIDAD}"
+    )
+)
+def la_tarea_se_ha_actualizado_con_oportunidad(
+    peticion: dict, codigo: str, descripcion: str, observaciones: str
+) -> None:
+    cuerpo = _comprobar_oportunidad(peticion["respuesta"], 200, codigo, descripcion, observaciones)
+    assert cuerpo["id"] == peticion["id"]
+
+
+@when("intento crear una tarea de tipo oportunidad sin sus datos", target_fixture="peticion")
+def crear_oportunidad_sin_datos(cliente: TestClient) -> dict:
+    datos = {**_DATOS_VALIDOS, "tipo": "oportunidad"}
+    return {"datos": datos, "respuesta": cliente.post("/api/v1/tareas", json=datos)}
+
+
+@when(
+    "intento crear una tarea sin tipo con los datos de una oportunidad", target_fixture="peticion"
+)
+def crear_sin_tipo_con_oportunidad(cliente: TestClient) -> dict:
+    datos = {**_DATOS_VALIDOS, **_con_oportunidad(), "tipo": None}
+    return {"datos": datos, "respuesta": cliente.post("/api/v1/tareas", json=datos)}
+
+
+@given(
+    parsers.parse('que existe una tarea de tipo oportunidad con código "{codigo}"'),
+    target_fixture="tarea_previa",
+)
+def existe_una_tarea_oportunidad(cliente: TestClient, codigo: str) -> dict:
+    datos = {**_DATOS_VALIDOS, **_con_oportunidad(codigo=codigo, observaciones="Notas")}
+    respuesta = cliente.post("/api/v1/tareas", json=datos)
+    assert respuesta.status_code == 201
+    return respuesta.json()
+
+
+@when(
+    parsers.re(f"edito esa tarea con la oportunidad de {_OPORTUNIDAD}"),
+    target_fixture="peticion",
+)
+def editar_oportunidad(
+    cliente: TestClient, tarea_previa: dict, codigo: str, descripcion: str, observaciones: str
+) -> dict:
+    datos = {
+        **_DATOS_VALIDOS,
+        **_con_oportunidad(codigo=codigo, descripcion=descripcion, observaciones=observaciones),
+    }
+    respuesta = cliente.put(f"/api/v1/tareas/{tarea_previa['id']}", json=datos)
+    return {"id": tarea_previa["id"], "datos": datos, "respuesta": respuesta}
+
+
+@when("edito esa tarea sin tipo", target_fixture="peticion")
+def editar_sin_tipo(cliente: TestClient, tarea_previa: dict) -> dict:
+    datos = {**_DATOS_VALIDOS, "tipo": None, "oportunidad": None}
+    respuesta = cliente.put(f"/api/v1/tareas/{tarea_previa['id']}", json=datos)
+    return {"id": tarea_previa["id"], "datos": datos, "respuesta": respuesta}
+
+
+@when(
+    "intento editar esa tarea sin tipo pero con los datos de una oportunidad",
+    target_fixture="peticion",
+)
+def editar_sin_tipo_con_oportunidad(cliente: TestClient, tarea_previa: dict) -> dict:
+    datos = {**_DATOS_VALIDOS, **_con_oportunidad(), "tipo": None}
+    respuesta = cliente.put(f"/api/v1/tareas/{tarea_previa['id']}", json=datos)
+    return {"id": tarea_previa["id"], "datos": datos, "respuesta": respuesta}
+
+
+@then("la API responde que la tarea se ha actualizado sin tipo ni oportunidad")
+def la_tarea_se_ha_actualizado_sin_tipo(peticion: dict) -> None:
+    respuesta = peticion["respuesta"]
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {
+        "id": peticion["id"],
+        **_OPCIONALES_POR_DEFECTO,
+        **peticion["datos"],
+    }
+
+
+@then("el listado muestra solo esa tarea")
+def el_listado_muestra_solo_esa_tarea(cliente: TestClient, peticion: dict) -> None:
+    respuesta = cliente.get("/api/v1/tareas")
+    assert respuesta.status_code == 200
+    assert respuesta.json() == [peticion["respuesta"].json()]
+
+
+@then("el listado muestra la tarea de tipo oportunidad sin cambios")
+def el_listado_muestra_la_oportunidad_sin_cambios(cliente: TestClient, tarea_previa: dict) -> None:
+    assert cliente.get("/api/v1/tareas").json() == [tarea_previa]

@@ -4,7 +4,7 @@ from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.resolver_catalogos import resolver_nombres
 from gestor_tareas.dominio.etiqueta.repositorio import RepositorioEtiquetas
 from gestor_tareas.dominio.persona.repositorio import RepositorioPersonas
-from gestor_tareas.dominio.tarea.entidades import Tarea
+from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from gestor_tareas.dominio.tarea.repositorio import RepositorioTareas
 
 
@@ -28,6 +28,8 @@ class CrearTarea:
         fecha_vencimiento: datetime | None = None,
         etiquetas: list[str] | None = None,
         asignados: list[str] | None = None,
+        tipo: TipoTarea | None = None,
+        oportunidad: Oportunidad | None = None,
     ) -> Tarea:
         def guardar() -> Tarea:
             tarea = Tarea(
@@ -38,6 +40,8 @@ class CrearTarea:
                 fecha_vencimiento=fecha_vencimiento,
                 etiquetas=resolver_nombres(self._repositorio_etiquetas, etiquetas or []),
                 asignados=resolver_nombres(self._repositorio_personas, asignados or []),
+                tipo=tipo,
+                oportunidad=oportunidad,
             )
             return self._repositorio.crear(tarea)
 

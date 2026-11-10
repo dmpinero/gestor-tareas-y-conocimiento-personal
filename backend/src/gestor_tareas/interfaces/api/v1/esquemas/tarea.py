@@ -5,12 +5,15 @@ from typing import Annotated, Self
 from pydantic import (
     BaseModel,
     BeforeValidator,
+    ConfigDict,
     Field,
     PlainSerializer,
     PlainValidator,
     WithJsonSchema,
     model_validator,
 )
+
+from gestor_tareas.dominio.tarea.entidades import TipoTarea
 
 # Fecha y hora local en ISO 8601 sin zona horaria: "YYYY-MM-DDTHH:MM:SS", con una
 # fracción de segundo opcional que se descarta. El patrón solo admite fechas reales
@@ -122,7 +125,83 @@ PrioridadEntera = Annotated[
 ]
 
 
+def _texto_opcional(valor: object) -> object:
+    """Recorta el texto como los obligatorios; si queda vacío, se guarda ``None``.
+
+    Así un texto vacío o formado solo por espacios equivale a no indicarlo, y la
+    API no guarda ni devuelve cadenas vacías en los campos opcionales.
+    """
+    recortado = _recortar_espacios(valor)
+    return None if recortado == "" else recortado
+
+
+# El límite se aplica tras recortar y solo al texto; `None` siempre se admite.
+DescripcionOportunidad = Annotated[
+    Annotated[str, Field(max_length=200)] | None, BeforeValidator(_texto_opcional)
+]
+ObservacionesOportunidad = Annotated[
+    Annotated[str, Field(max_length=5000)] | None, BeforeValidator(_texto_opcional)
+]
+
+
+class OportunidadEsquema(BaseModel):
+    """Datos de una tarea de tipo oportunidad."""
+
+    codigo: TextoObligatorio = Field(
+        min_length=1, max_length=10, json_schema_extra=_PATRON_NO_VACIO
+    )
+    descripcion: DescripcionOportunidad = Field(
+        default=None, description="Opcional. Vacía o solo con espacios se guarda como null."
+    )
+    observaciones: ObservacionesOportunidad = Field(
+        default=None, description="Opcional. Vacías o solo con espacios se guardan como null."
+    )
+
+
+class OportunidadSalidaEsquema(BaseModel):
+    codigo: str
+    descripcion: str | None
+    observaciones: str | None
+
+
+# Se publica en línea con sus valores: así el contrato no incluye la
+# documentación interna de la enumeración del dominio.
+TipoTareaEsquema = Annotated[
+    TipoTarea, WithJsonSchema({"type": "string", "enum": [tipo.value for tipo in TipoTarea]})
+]
+
+
+# Campo con los datos de cada tipo de tarea. Un tipo nuevo añade aquí su campo
+# (con su esquema en `TareaCrearEsquema`) y la regla de abajo se aplica sola.
+_CAMPO_DE_DATOS_POR_TIPO: dict[TipoTarea, str] = {TipoTarea.OPORTUNIDAD: "oportunidad"}
+
+
+def _regla_tipo_y_datos_en_el_contrato() -> dict:
+    """Publica en el contrato la regla que valida `_datos_segun_el_tipo`.
+
+    Cada rama del `anyOf` es un caso válido: sin tipo y sin los datos de ningún
+    tipo, o un tipo con sus datos obligatorios (y sin los de los demás tipos).
+    """
+    # `{"type": "null"}` y no `{"const": None}`: FastAPI quita los valores None al
+    # generar el OpenAPI, y `const` desaparecería.
+    nulo = {"type": "null"}
+    campos = _CAMPO_DE_DATOS_POR_TIPO.values()
+    sin_tipo = {"properties": {"tipo": nulo, **{c: nulo for c in campos}}}
+    ramas = [sin_tipo]
+    for tipo, campo in _CAMPO_DE_DATOS_POR_TIPO.items():
+        otros = {otro: nulo for otro in campos if otro != campo}
+        ramas.append(
+            {
+                "properties": {"tipo": {"const": tipo.value}, campo: {"type": "object"}, **otros},
+                "required": ["tipo", campo],
+            }
+        )
+    return {"anyOf": ramas}
+
+
 class TareaCrearEsquema(BaseModel):
+    model_config = ConfigDict(json_schema_extra=_regla_tipo_y_datos_en_el_contrato())
+
     nombre: TextoObligatorio = Field(
         min_length=1, max_length=200, json_schema_extra=_PATRON_NO_VACIO
     )
@@ -137,6 +216,27 @@ class TareaCrearEsquema(BaseModel):
     )
     etiquetas: list[NombreEtiqueta] = Field(default_factory=list)
     asignados: list[NombrePersona] = Field(default_factory=list)
+    tipo: TipoTareaEsquema | None = Field(
+        default=None, description="Opcional. Con un tipo, sus datos son obligatorios (422)."
+    )
+    oportunidad: OportunidadEsquema | None = Field(
+        default=None,
+        description='Obligatoria si tipo es "oportunidad"; si no, debe ser null (422).',
+    )
+
+    @model_validator(mode="after")
+    def _datos_segun_el_tipo(self) -> Self:
+        for tipo, campo in _CAMPO_DE_DATOS_POR_TIPO.items():
+            tiene_datos = getattr(self, campo) is not None
+            if self.tipo is tipo and not tiene_datos:
+                raise ValueError(
+                    f"Los datos de la {campo} son obligatorios si el tipo es «{tipo.value}»."
+                )
+            if self.tipo is not tipo and tiene_datos:
+                raise ValueError(
+                    f"Los datos de la {campo} solo se admiten si el tipo es «{tipo.value}»."
+                )
+        return self
 
     @model_validator(mode="after")
     def _vencimiento_no_anterior_a_creacion(self) -> Self:
@@ -162,3 +262,5 @@ class TareaSalidaEsquema(BaseModel):
     fecha_vencimiento: FechaHoraLocal | None
     etiquetas: list[str]
     asignados: list[str]
+    tipo: TipoTareaEsquema | None
+    oportunidad: OportunidadSalidaEsquema | None
