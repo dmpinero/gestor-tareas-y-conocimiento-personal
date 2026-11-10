@@ -345,11 +345,18 @@ test.describe('panel de tarea en una pantalla baja', () => {
     expect(desborda).toBe(true)
     expect(overflowY).toBe('scroll')
 
-    // ...y con la rueda del ratón se llega hasta el último campo.
+    // ...y con la rueda del ratón se llega hasta el último campo. Se espera a que
+    // acabe la animación de entrada del panel (en CI la rueda llegaba antes).
+    await panel.evaluate((elemento) =>
+      Promise.all(elemento.getAnimations().map((animacion) => animacion.finished)),
+    )
     const caja = await cuerpo.boundingBox()
     await page.mouse.move(caja!.x + caja!.width / 2, caja!.y + caja!.height / 2)
-    await page.mouse.wheel(0, 3000)
-    await expect(panel.getByLabel('Observaciones')).toBeInViewport()
+    const observaciones = panel.getByLabel('Observaciones')
+    await expect(async () => {
+      await page.mouse.wheel(0, 1000)
+      await expect(observaciones).toBeInViewport({ timeout: 500 })
+    }).toPass()
     await expect(guardar).toBeInViewport()
   })
 })
@@ -390,6 +397,20 @@ test('muestra una cuenta atrás hasta el vencimiento que avanza sola, y "Vencida
   const detalle = page.getByRole('dialog', { name: tareas[0].nombre })
   await expect(detalle.getByRole('timer')).toHaveText(/^Vence en /)
   await page.keyboard.press('Escape')
+  await expect(detalle).toBeHidden()
+  // Se audita cuando han terminado todas las animaciones (el fondo de la modal
+  // se desvanece al cerrarla y, a medias, daba falsos fallos de contraste).
+  const sinAnimaciones = () =>
+    page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          // Las infinitas (indicadores de carga) no terminan nunca.
+          .filter((animacion) => animacion.effect?.getTiming().iterations !== Infinity)
+          .map((animacion) => animacion.finished),
+      ),
+    )
+  await sinAnimaciones()
 
   // Accesibilidad con contadores en pantalla, en claro y en oscuro.
   const auditar = () =>
@@ -400,5 +421,6 @@ test('muestra una cuenta atrás hasta el vencimiento que avanza sola, y "Vencida
   expect((await auditar()).violations).toEqual([])
   await page.getByRole('switch', { name: 'Cambiar a modo oscuro' }).click()
   await expect(page.locator('html')).toHaveClass(/\bdark\b/)
+  await sinAnimaciones()
   expect((await auditar()).violations).toEqual([])
 })
