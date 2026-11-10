@@ -16,12 +16,14 @@ Rama: `feature/tarea-completada` (desde `main` v1.13.0) · Entrega: `stacked-to-
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S2 (backend: columna, migración, PATCH, respuestas, tests) | delegada (writer A, paralelo) | pendiente | — |
-| T2 | S1, S3 (frontend: icono, tachado, store `alternarCompletada`, detalle, specs) | delegada (writer B, paralelo) | pendiente | — |
-| T3 | S1–S3 (e2e contra pila aislada) | inline | pendiente | — |
-| T4 | S1–S3 (verificador independiente: migración y contrato, items 1 y 3) | delegada (verificador) | pendiente | — |
+| T1 | S2 (backend: columna, migración, PATCH, respuestas, tests) | delegada (writer A, paralelo) | hecha | `eaf28ed` |
+| T2 | S1, S3 (frontend: icono, tachado, store `alternarCompletada`, detalle, specs) | delegada (writer B, paralelo) | hecha | `d898f6a` |
+| T3 | S1–S3 (e2e contra pila aislada) | inline | hecha | `e28fe48` |
+| T4 | S1–S3 (verificador independiente: migración y contrato, items 1 y 3) | delegada (verificador) | hecha (sin blockers) | — |
 
 ## Log
 
 - **L1** (2026-11-10) Pedido original del usuario:
   > Quiero un icono junto al de detalle de una tarea, este icono debe tener estados, de forma que al pulsarlo, la tarea aparecerá como tachada y al volverlo a pulsar, aparecerá sin estar tachada.
+- **L2** (2026-11-10) T1 (backend): columna `completada` (migración `a7c3e9f2b4d8`, por defecto `false`), `PATCH /api/v1/tareas/{id}/completada` con booleano estricto; `PUT` no escribe el campo (no pisa un `PATCH` concurrente). 324 tests, 97,63 %, contrato 10/10. T2 (frontend): conmutador `Circle`/`CircleCheck` con `aria-pressed`, celdas tachadas, "Estado" en el detalle; 262 tests. T3: e2e de tachar, recargar y destachar; Playwright 30/30 dos veces.
+- **L3** (2026-11-10) T4, verificador: S1–S3 en verde, sin blockers. Migración con hash idéntico y esquema idéntico tras downgrade; 12 cuerpos inválidos → 422 sin cambios; 60 carreras PUT/PATCH sin pérdidas; OpenAPI solo con añadidos; axe sin violaciones en claro y oscuro. Advisories: con más de mil tareas la auditoría axe de `/tareas` supera los 30 s (también en la base); comentario de documentación descolocado en `VistaTareas.vue` (corregido); sin protección ante doble clic (inocuo).

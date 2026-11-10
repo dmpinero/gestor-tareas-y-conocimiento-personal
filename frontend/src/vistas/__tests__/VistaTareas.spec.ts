@@ -17,6 +17,7 @@ vi.mock('@/api/cliente', () => ({
     obtener: vi.fn<(...args: unknown[]) => unknown>(),
     crear: vi.fn<(...args: unknown[]) => unknown>(),
     actualizar: vi.fn<(...args: unknown[]) => unknown>(),
+    parchear: vi.fn<(...args: unknown[]) => unknown>(),
   },
 }))
 
@@ -32,6 +33,7 @@ const TAREAS = [
     asignados: ['Ana'],
     tipo: null,
     oportunidad: null,
+    completada: false,
   },
   {
     id: 2,
@@ -44,6 +46,7 @@ const TAREAS = [
     asignados: [],
     tipo: null,
     oportunidad: null,
+    completada: false,
   },
 ]
 
@@ -898,6 +901,122 @@ describe('VistaTareas', () => {
       await flushPromises()
       expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     })
+
+    describe('completar tarea', () => {
+      function botonCompletar(envoltorio: VueWrapper, nombre: string) {
+        return envoltorio.get(`button[aria-label="Marcar como completada la tarea ${nombre}"]`)
+      }
+
+      function celdasDatos(envoltorio: VueWrapper, fila: number) {
+        const celdas = envoltorio.findAll('tbody tr')[fila]!.findAll('td')
+        return celdas.slice(0, celdas.length - 1)
+      }
+
+      function celdaAcciones(envoltorio: VueWrapper, fila: number) {
+        const celdas = envoltorio.findAll('tbody tr')[fila]!.findAll('td')
+        return celdas[celdas.length - 1]!
+      }
+
+      it('junto a "Detalle" hay un icono sin pulsar con nombre accesible y title "Pendiente"', async () => {
+        const envoltorio = await montar()
+
+        const botones = celdaAcciones(envoltorio, 0).findAll('button')
+        expect(botones.map((boton) => boton.attributes('aria-label'))).toEqual([
+          'Editar tarea Escribir informe',
+          'Ver detalle de la tarea Escribir informe',
+          'Marcar como completada la tarea Escribir informe',
+        ])
+        const completar = botonCompletar(envoltorio, 'Escribir informe')
+        expect(completar.attributes('aria-pressed')).toBe('false')
+        expect(completar.attributes('title')).toBe('Pendiente')
+        expect(completar.text()).toBe('')
+        expect(completar.find('svg').classes()).toContain('lucide-circle')
+      })
+
+      it('una tarea completada muestra el icono pulsado con title "Completada"', async () => {
+        const envoltorio = await montar([{ ...TAREAS[0], completada: true }])
+
+        const completar = botonCompletar(envoltorio, 'Escribir informe')
+        expect(completar.attributes('aria-pressed')).toBe('true')
+        expect(completar.attributes('title')).toBe('Completada')
+        expect(completar.find('svg').classes()).toContain('lucide-circle-check')
+      })
+
+      it('tacha las celdas de datos solo de las tareas completadas, cuenta atrás incluida, y nunca los botones', async () => {
+        const envoltorio = await montar([{ ...TAREAS[0], completada: true }, TAREAS[1]])
+
+        for (const celda of celdasDatos(envoltorio, 0)) {
+          expect(celda.classes()).toContain('line-through')
+        }
+        expect(
+          envoltorio.findAll('tbody tr')[0]!.get('[data-testid="contador-vencimiento"]').classes(),
+        ).toContain('line-through')
+        expect(celdaAcciones(envoltorio, 0).classes()).not.toContain('line-through')
+        expect(celdaAcciones(envoltorio, 0).find('.line-through').exists()).toBe(false)
+        for (const celda of celdasDatos(envoltorio, 1)) {
+          expect(celda.classes()).not.toContain('line-through')
+        }
+        expect(envoltorio.findAll('tbody tr')[1]!.find('.line-through').exists()).toBe(false)
+      })
+
+      it('al pulsarlo la marca como completada y al volver a pulsarlo vuelve a pendiente', async () => {
+        vi.mocked(clienteApi.parchear).mockImplementation((_ruta, cuerpo) =>
+          Promise.resolve({
+            ...structuredClone(TAREAS[0]),
+            completada: (cuerpo as { completada: boolean }).completada,
+          }),
+        )
+        const envoltorio = await montar()
+
+        await botonCompletar(envoltorio, 'Escribir informe').trigger('click')
+        await flushPromises()
+
+        expect(clienteApi.parchear).toHaveBeenLastCalledWith('/tareas/1/completada', {
+          completada: true,
+        })
+        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-pressed')).toBe(
+          'true',
+        )
+        expect(celdasDatos(envoltorio, 0)[0]!.classes()).toContain('line-through')
+
+        await botonCompletar(envoltorio, 'Escribir informe').trigger('click')
+        await flushPromises()
+
+        expect(clienteApi.parchear).toHaveBeenLastCalledWith('/tareas/1/completada', {
+          completada: false,
+        })
+        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-pressed')).toBe(
+          'false',
+        )
+        expect(celdasDatos(envoltorio, 0)[0]!.classes()).not.toContain('line-through')
+        expect(clienteApi.parchear).toHaveBeenCalledTimes(2)
+      })
+
+      it('si la API falla muestra el error y la tarea sigue pendiente', async () => {
+        vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('Tarea no encontrada'))
+        const envoltorio = await montar()
+
+        await botonCompletar(envoltorio, 'Escribir informe').trigger('click')
+        await flushPromises()
+
+        expect(envoltorio.get('[role="alert"]').text()).toBe('Tarea no encontrada')
+        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-pressed')).toBe(
+          'false',
+        )
+        expect(celdasDatos(envoltorio, 0)[0]!.classes()).not.toContain('line-through')
+      })
+
+      it('la modal de detalle muestra el estado de la tarea', async () => {
+        const envoltorio = await montar([{ ...TAREAS[0], completada: true }])
+
+        await envoltorio
+          .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
+          .trigger('click')
+        await flushPromises()
+
+        expect(panelActual().textContent).toContain('EstadoCompletada')
+      })
+    })
   })
 
   describe('ordenación', () => {
@@ -913,6 +1032,7 @@ describe('VistaTareas', () => {
         asignados: [],
         tipo: null,
         oportunidad: null,
+        completada: false,
       },
       {
         id: 2,
@@ -925,6 +1045,7 @@ describe('VistaTareas', () => {
         asignados: ['Luis'],
         tipo: null,
         oportunidad: null,
+        completada: false,
       },
       {
         id: 3,
@@ -938,6 +1059,7 @@ describe('VistaTareas', () => {
         asignados: ['Luis', 'Ana'],
         tipo: null,
         oportunidad: null,
+        completada: false,
       },
     ]
 
@@ -1157,6 +1279,7 @@ describe('VistaTareas', () => {
         asignados: ['Ana'],
         tipo: null,
         oportunidad: null,
+        completada: false,
       },
       {
         id: 2,
@@ -1169,6 +1292,7 @@ describe('VistaTareas', () => {
         asignados: ['Luis'],
         tipo: null,
         oportunidad: null,
+        completada: false,
       },
       {
         id: 3,
@@ -1181,6 +1305,7 @@ describe('VistaTareas', () => {
         asignados: [],
         tipo: null,
         oportunidad: null,
+        completada: false,
       },
     ]
     const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']

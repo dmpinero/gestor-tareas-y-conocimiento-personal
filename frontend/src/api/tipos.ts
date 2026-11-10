@@ -25,7 +25,10 @@ export interface Oportunidad {
   observaciones: string | null
 }
 
-/** Tarea tal como la devuelve la API (`GET`/`POST /tareas`, `PUT /tareas/{id}`). */
+/**
+ * Tarea tal como la devuelve la API (`GET`/`POST /tareas`, `PUT /tareas/{id}`,
+ * `PATCH /tareas/{id}/completada`).
+ */
 export interface Tarea {
   id: number
   nombre: string
@@ -43,6 +46,9 @@ export interface Tarea {
   tipo: TipoTarea | null
   /** Datos de la oportunidad si `tipo` es `"oportunidad"`; si no, `null`. */
   oportunidad: Oportunidad | null
+  /** `true` si la tarea está completada. Solo cambia con
+   * `PATCH /tareas/{id}/completada`; `POST` y `PUT` no lo reciben. */
+  completada: boolean
 }
 
 /**

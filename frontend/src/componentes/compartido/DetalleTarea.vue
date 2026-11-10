@@ -66,6 +66,7 @@ const camposTarea = computed<Campo[]>(() => {
       cuentaAtras: tarea.fecha_vencimiento ?? undefined,
     },
     { termino: 'Tipo', valor: textoOVacio(etiquetaTipoTarea(tarea.tipo)) },
+    { termino: 'Estado', valor: tarea.completada ? 'Completada' : 'Pendiente' },
   ]
 })
 
