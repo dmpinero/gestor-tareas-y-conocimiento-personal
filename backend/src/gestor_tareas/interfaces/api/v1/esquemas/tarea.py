@@ -269,6 +269,35 @@ class PasoOportunidadSalidaEsquema(BaseModel):
     hecho: bool
 
 
+class SubtareaCrearEsquema(BaseModel):
+    """Cuerpo del alta de una subtarea. ``asignado`` sigue las mismas reglas que
+    cada elemento de ``asignados`` de una tarea."""
+
+    nombre: TextoObligatorio = Field(
+        min_length=1, max_length=200, json_schema_extra=PATRON_NO_VACIO
+    )
+    asignado: NombrePersona | None = Field(
+        default=None,
+        description="Opcional. Persona del catálogo; si no existe, se da de alta.",
+    )
+    prioridad: PrioridadEntera | None = None
+
+
+class SubtareaResueltaEsquema(BaseModel):
+    """Cuerpo del cambio de estado de una subtarea. Solo admite ``true`` o
+    ``false`` de JSON: una cadena, un número o ``null`` se rechazan con 422."""
+
+    resuelta: bool = Field(strict=True)
+
+
+class SubtareaSalidaEsquema(BaseModel):
+    id: int
+    nombre: str
+    asignado: str | None
+    prioridad: int | None
+    resuelta: bool
+
+
 class TareaSalidaEsquema(BaseModel):
     id: int
     nombre: str
@@ -284,4 +313,7 @@ class TareaSalidaEsquema(BaseModel):
     pasos_oportunidad: list[PasoOportunidadSalidaEsquema] = Field(
         description="Pasos de la oportunidad por número; vacía si no es oportunidad "
         "o no tiene pasos."
+    )
+    subtareas: list[SubtareaSalidaEsquema] = Field(
+        description="Subtareas por orden de alta; vacía si no tiene."
     )

@@ -2,12 +2,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gestor_tareas.dominio.nombres_catalogo import ordenar_nombres
-from gestor_tareas.dominio.tarea.entidades import Oportunidad, PasoOportunidad, Tarea, TipoTarea
+from gestor_tareas.dominio.tarea.entidades import (
+    Oportunidad,
+    PasoOportunidad,
+    Subtarea,
+    Tarea,
+    TipoTarea,
+)
 from gestor_tareas.infraestructura.persistencia.modelos import (
     EtiquetaModelo,
     OportunidadModelo,
     PasoOportunidadModelo,
     PersonaModelo,
+    SubtareaModelo,
     TareaModelo,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import traducir_conflictos
@@ -41,6 +48,17 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
             PasoOportunidad(id=p.id, numero=p.numero, nombre=p.nombre, hecho=p.hecho)
             for p in sorted(modelo.pasos_oportunidad, key=lambda p: p.numero)
         ],
+        subtareas=[_a_subtarea(s) for s in sorted(modelo.subtareas, key=lambda s: s.id)],
+    )
+
+
+def _a_subtarea(modelo: SubtareaModelo) -> Subtarea:
+    return Subtarea(
+        id=modelo.id,
+        nombre=modelo.nombre,
+        asignado=modelo.asignado.nombre if modelo.asignado is not None else None,
+        prioridad=modelo.prioridad,
+        resuelta=modelo.resuelta,
     )
 
 
@@ -160,3 +178,75 @@ class RepositorioTareasSqlAlchemy:
             tarea = _a_entidad(self._sesion.get(TareaModelo, id_tarea))
             self._sesion.commit()
         return tarea
+
+    def _subtarea_bloqueada(self, id_tarea: int, id_subtarea: int) -> SubtareaModelo | None:
+        """La subtarea de esa tarea, leída con bloqueo, o ``None`` si no la tiene.
+
+        La lectura con bloqueo ve lo último confirmado y espera a otra operación en
+        curso sobre la misma subtarea (si la borra, ya no la encuentra).
+        """
+        consulta = (
+            select(SubtareaModelo)
+            .where(SubtareaModelo.id == id_subtarea, SubtareaModelo.tarea_id == id_tarea)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return self._sesion.scalars(consulta).one_or_none()
+
+    def _tarea_tras_confirmar(self, id_tarea: int) -> Tarea | None:
+        """Devuelve la tarea leída de nuevo tras confirmar la transacción.
+
+        Se lee después de confirmar, con una instantánea nueva: antes, una lectura
+        normal (REPEATABLE READ) no vería la persona que otra petición dio de alta
+        tras la instantánea, aunque esta sesión ya la haya enlazado. La
+        confirmación caduca además lo cargado en la sesión, así que la lista de
+        subtareas no queda desfasada. Devuelve ``None`` si la tarea ya no existe.
+        """
+        modelo = self._sesion.get(TareaModelo, id_tarea)
+        return _a_entidad(modelo) if modelo is not None else None
+
+    def anadir_subtarea(self, id_tarea: int, subtarea: Subtarea) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            # Lectura compartida con bloqueo: la tarea no puede borrarse mientras se
+            # añade la subtarea, y se ve aunque se haya creado tras la instantánea.
+            consulta = select(TareaModelo.id).where(TareaModelo.id == id_tarea)
+            if self._sesion.scalars(consulta.with_for_update(read=True)).first() is None:
+                # Deshace también las altas en el catálogo hechas para la subtarea.
+                self._sesion.rollback()
+                return None
+            persona = None
+            if subtarea.asignado is not None:
+                (persona,) = self._filas_catalogo(PersonaModelo, [subtarea.asignado])
+            self._sesion.add(
+                SubtareaModelo(
+                    tarea_id=id_tarea,
+                    nombre=subtarea.nombre,
+                    asignado=persona,
+                    prioridad=subtarea.prioridad,
+                    resuelta=False,
+                )
+            )
+            self._sesion.commit()
+        return self._tarea_tras_confirmar(id_tarea)
+
+    def cambiar_resuelta_subtarea(
+        self, id_tarea: int, id_subtarea: int, resuelta: bool
+    ) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            subtarea = self._subtarea_bloqueada(id_tarea, id_subtarea)
+            if subtarea is None:
+                self._sesion.rollback()
+                return None
+            subtarea.resuelta = resuelta
+            self._sesion.commit()
+        return self._tarea_tras_confirmar(id_tarea)
+
+    def eliminar_subtarea(self, id_tarea: int, id_subtarea: int) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            subtarea = self._subtarea_bloqueada(id_tarea, id_subtarea)
+            if subtarea is None:
+                self._sesion.rollback()
+                return None
+            self._sesion.delete(subtarea)
+            self._sesion.commit()
+        return self._tarea_tras_confirmar(id_tarea)

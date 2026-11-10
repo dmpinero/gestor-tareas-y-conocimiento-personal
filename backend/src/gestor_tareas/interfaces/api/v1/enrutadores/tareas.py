@@ -4,10 +4,13 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
+from gestor_tareas.aplicacion.tarea.anadir_subtarea import AnadirSubtarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
+from gestor_tareas.aplicacion.tarea.eliminar_subtarea import EliminarSubtarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
 from gestor_tareas.aplicacion.tarea.marcar_paso_hecho import MarcarPasoHecho
+from gestor_tareas.aplicacion.tarea.marcar_subtarea_resuelta import MarcarSubtareaResuelta
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
@@ -26,6 +29,8 @@ from gestor_tareas.interfaces.api.respuestas_error import (
 )
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     PasoHechoEsquema,
+    SubtareaCrearEsquema,
+    SubtareaResueltaEsquema,
     TareaActualizarEsquema,
     TareaCompletadaEsquema,
     TareaCrearEsquema,
@@ -97,7 +102,7 @@ def actualizar(
     los datos de oportunidad y sus pasos); 404 si el id no existe y 422 si la fecha
     de vencimiento es anterior a la de creación o el tipo no casa con sus datos.
     El estado completada no cambia (solo lo cambia `PATCH .../completada`), ni los
-    pasos de una oportunidad que sigue siéndolo. Una tarea que pasa a ser
+    pasos de una oportunidad que sigue siéndolo, ni las subtareas. Una tarea que pasa a ser
     oportunidad no recibe pasos: solo se copian al crear la oportunidad."""
     tarea = ActualizarTarea(
         RepositorioTareasSqlAlchemy(sesion),
@@ -139,4 +144,60 @@ def marcar_paso_hecho(
     tarea = MarcarPasoHecho(RepositorioTareasSqlAlchemy(sesion)).ejecutar(
         id_tarea, id_paso, datos.hecho
     )
+    return _a_esquema(tarea)
+
+
+@enrutador.post(
+    "/{id_tarea:int}/subtareas",
+    response_model=TareaSalidaEsquema,
+    status_code=status.HTTP_201_CREATED,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def anadir_subtarea(
+    id_tarea: int, datos: SubtareaCrearEsquema, sesion: Session = Depends(obtener_sesion)
+) -> TareaSalidaEsquema:
+    """Añade una subtarea pendiente al final de las de la tarea y devuelve la tarea
+    completa. El nombre es obligatorio (1–200 caracteres tras recortar); la persona
+    asignada (1–100) y la prioridad (1–5) son opcionales. La persona se busca en su
+    catálogo sin distinguir mayúsculas (se conserva la grafía guardada) y se da de
+    alta si no existe. 404 si la tarea no existe."""
+    tarea = AnadirSubtarea(
+        RepositorioTareasSqlAlchemy(sesion), RepositorioPersonasSqlAlchemy(sesion)
+    ).ejecutar(id_tarea, **datos.model_dump())
+    return _a_esquema(tarea)
+
+
+@enrutador.patch(
+    "/{id_tarea:int}/subtareas/{id_subtarea:int}/resuelta",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def marcar_subtarea_resuelta(
+    id_tarea: int,
+    id_subtarea: int,
+    datos: SubtareaResueltaEsquema,
+    sesion: Session = Depends(obtener_sesion),
+) -> TareaSalidaEsquema:
+    """Marca la subtarea como resuelta (`true`) o la reabre (`false`) y devuelve la
+    tarea con el resto de sus datos sin cambios; 404 si la tarea no existe o no
+    tiene una subtarea con ese id (también si la subtarea es de otra tarea) y 422
+    si `resuelta` no es un booleano de JSON."""
+    tarea = MarcarSubtareaResuelta(RepositorioTareasSqlAlchemy(sesion)).ejecutar(
+        id_tarea, id_subtarea, datos.resuelta
+    )
+    return _a_esquema(tarea)
+
+
+@enrutador.delete(
+    "/{id_tarea:int}/subtareas/{id_subtarea:int}",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO},
+)
+def eliminar_subtarea(
+    id_tarea: int, id_subtarea: int, sesion: Session = Depends(obtener_sesion)
+) -> TareaSalidaEsquema:
+    """Borra la subtarea y devuelve la tarea con el resto de sus datos sin cambios;
+    404 si la tarea no existe o no tiene una subtarea con ese id (también si la
+    subtarea es de otra tarea)."""
+    tarea = EliminarSubtarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea, id_subtarea)
     return _a_esquema(tarea)

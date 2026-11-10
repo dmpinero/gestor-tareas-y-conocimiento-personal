@@ -56,6 +56,7 @@ _OPCIONALES_POR_DEFECTO = {
     "oportunidad": None,
     "completada": False,
     "pasos_oportunidad": [],
+    "subtareas": [],
 }
 
 
