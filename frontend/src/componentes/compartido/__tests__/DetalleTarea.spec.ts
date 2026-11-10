@@ -15,6 +15,7 @@ const TAREA_SIN_TIPO: Tarea = {
   asignados: [],
   tipo: null,
   oportunidad: null,
+  completada: false,
 }
 
 const TAREA_OPORTUNIDAD: Tarea = {
@@ -32,6 +33,7 @@ const TAREA_OPORTUNIDAD: Tarea = {
     descripcion: null,
     observaciones: 'Primera línea\nSegunda línea',
   },
+  completada: false,
 }
 
 let contenedor: VueWrapper | null = null
@@ -104,9 +106,17 @@ describe('DetalleTarea', () => {
       ['Fecha de creación', '01/12/2026 17:05:09'],
       ['Fecha de vencimiento', '—'],
       ['Tipo', '—'],
+      ['Estado', 'Pendiente'],
     ])
     expect(modal().querySelector('[data-testid="campos-oportunidad"]')).toBeNull()
     expect(modal().textContent).not.toContain('Código')
+  })
+
+  it('muestra "Estado: Completada" si la tarea está completada', async () => {
+    await montar({ ...TAREA_SIN_TIPO, completada: true })
+
+    expect(paresDe(listaDe('campos-tarea'))).toContainEqual(['Estado', 'Completada'])
+    expect(paresDe(listaDe('campos-tarea'))).not.toContainEqual(['Estado', 'Pendiente'])
   })
 
   it('con tipo Oportunidad muestra su sección con todos sus campos', async () => {
@@ -121,6 +131,7 @@ describe('DetalleTarea', () => {
       ['Fecha de creación', '10/11/2026 09:30:00'],
       ['Fecha de vencimiento', '20/11/2026 18:00:00 Vence en 2 d 03 h 15 min 20 s'],
       ['Tipo', 'Oportunidad'],
+      ['Estado', 'Pendiente'],
     ])
     const seccion = listaDe('campos-oportunidad')
     expect(modal().querySelector('h3')?.textContent?.trim()).toBe('Oportunidad')

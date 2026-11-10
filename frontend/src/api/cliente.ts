@@ -47,7 +47,7 @@ async function extraerDetalleError(respuesta: Response): Promise<DetalleError> {
 }
 
 async function peticion<T>(
-  metodo: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  metodo: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   ruta: string,
   opciones: OpcionesPeticion = {},
 ): Promise<T> {
@@ -111,6 +111,8 @@ export const clienteApi = {
     peticion<T>('POST', ruta, { cuerpo, token }),
   actualizar: <T>(ruta: string, cuerpo: unknown, token?: string | null) =>
     peticion<T>('PUT', ruta, { cuerpo, token }),
+  parchear: <T>(ruta: string, cuerpo: unknown, token?: string | null) =>
+    peticion<T>('PATCH', ruta, { cuerpo, token }),
   eliminar: <T>(ruta: string, token?: string | null) => peticion<T>('DELETE', ruta, { token }),
   subirArchivo,
   descargar,

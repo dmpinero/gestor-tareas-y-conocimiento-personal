@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, Eye, Pencil, Search } from '@lucide/vue'
+import { ChevronRight, Circle, CircleCheck, Eye, Pencil, Search } from '@lucide/vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 import {
@@ -88,6 +88,13 @@ onMounted(() => {
 })
 
 /** Nombres en orden alfabético unidos por ", ", o `null` si no hay ninguno. */
+// Clases de las celdas de datos: las tareas completadas se muestran tachadas.
+// Se devuelve una cadena porque `TableCell` declara `class` como `string`.
+const TEXTO_AJUSTABLE = 'whitespace-normal [overflow-wrap:anywhere]'
+function claseCelda(tarea: Tarea, base = ''): string {
+  return tarea.completada ? `${base} line-through`.trim() : base
+}
+
 function unirNombres(nombres: string[]): string | null {
   if (nombres.length === 0) return null
   return [...nombres].sort(compararTexto).join(', ')
@@ -682,17 +689,13 @@ async function guardar(): Promise<void> {
       </TableHeader>
       <TableBody>
         <TableRow v-for="tarea in filasOrdenadas" :key="tarea.id">
-          <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
-            tarea.nombre
-          }}</TableCell>
-          <TableCell>{{ tarea.prioridad ?? '—' }}</TableCell>
-          <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
-            tarea.descripcion
-          }}</TableCell>
+          <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{ tarea.nombre }}</TableCell>
+          <TableCell :class="claseCelda(tarea)">{{ tarea.prioridad ?? '—' }}</TableCell>
+          <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{ tarea.descripcion }}</TableCell>
           <TableCell
             v-for="campoLista in CAMPOS_LISTA"
             :key="campoLista"
-            class="whitespace-normal [overflow-wrap:anywhere]"
+            :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
           >
             <ul v-if="tarea[campoLista].length > 0" class="flex flex-wrap gap-1">
               <li
@@ -706,17 +709,22 @@ async function guardar(): Promise<void> {
             </ul>
             <template v-else>—</template>
           </TableCell>
-          <TableCell class="whitespace-normal [overflow-wrap:anywhere]">{{
+          <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{
             formatearFechaHora(tarea.fecha_creacion)
           }}</TableCell>
-          <TableCell class="whitespace-normal [overflow-wrap:anywhere]">
+          <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">
             <template v-if="tarea.fecha_vencimiento">
               {{ formatearFechaHora(tarea.fecha_vencimiento) }}
-              <ContadorVencimiento :vencimiento="tarea.fecha_vencimiento" class="block text-xs" />
+              <ContadorVencimiento
+                :vencimiento="tarea.fecha_vencimiento"
+                :class="claseCelda(tarea, 'block text-xs')"
+              />
             </template>
             <template v-else>—</template>
           </TableCell>
-          <TableCell>{{ etiquetaTipoTarea(tarea.tipo) ?? '—' }}</TableCell>
+          <TableCell :class="claseCelda(tarea)">{{
+            etiquetaTipoTarea(tarea.tipo) ?? '—'
+          }}</TableCell>
           <TableCell>
             <div class="flex gap-1">
               <Button
@@ -736,6 +744,17 @@ async function guardar(): Promise<void> {
                 @click="tareaEnDetalle = tarea"
               >
                 <Eye />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
+                :aria-pressed="tarea.completada"
+                :title="tarea.completada ? 'Completada' : 'Pendiente'"
+                @click="tienda.alternarCompletada(tarea.id)"
+              >
+                <CircleCheck v-if="tarea.completada" />
+                <Circle v-else />
               </Button>
             </div>
           </TableCell>

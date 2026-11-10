@@ -9,6 +9,7 @@ vi.mock('@/api/cliente', () => ({
     obtener: vi.fn<(...args: unknown[]) => unknown>(),
     crear: vi.fn<(...args: unknown[]) => unknown>(),
     actualizar: vi.fn<(...args: unknown[]) => unknown>(),
+    parchear: vi.fn<(...args: unknown[]) => unknown>(),
   },
 }))
 
@@ -23,6 +24,7 @@ const tareaEjemplo = {
   asignados: ['Ana'],
   tipo: null,
   oportunidad: null,
+  completada: false,
 }
 
 const ETIQUETAS = [
@@ -268,5 +270,62 @@ describe('useTiendaTareas', () => {
       }),
     ).rejects.toThrow('datos inválidos')
     expect(clienteApi.obtener).not.toHaveBeenCalled()
+  })
+
+  describe('alternarCompletada', () => {
+    it('marca como completada una tarea pendiente con PATCH /tareas/{id}/completada y la reemplaza', async () => {
+      const otra = { ...tareaEjemplo, id: 2, nombre: 'Otra' }
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo, otra])
+      const completada = { ...tareaEjemplo, completada: true }
+      vi.mocked(clienteApi.parchear).mockResolvedValue(completada)
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.alternarCompletada(1)
+
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/completada', {
+        completada: true,
+      })
+      expect(tienda.tareas).toEqual([completada, otra])
+      expect(tienda.error).toBeNull()
+    })
+
+    it('vuelve a pendiente una tarea completada enviando el valor negado', async () => {
+      const completada = { ...tareaEjemplo, completada: true }
+      vi.mocked(clienteApi.obtener).mockResolvedValue([completada])
+      vi.mocked(clienteApi.parchear).mockResolvedValue(tareaEjemplo)
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.alternarCompletada(1)
+
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/completada', {
+        completada: false,
+      })
+      expect(tienda.tareas).toEqual([tareaEjemplo])
+    })
+
+    it('si la API falla guarda el mensaje de error y no altera la lista', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo])
+      vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('Tarea no encontrada'))
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.alternarCompletada(1)
+
+      expect(tienda.error).toBe('Tarea no encontrada')
+      expect(tienda.tareas).toEqual([tareaEjemplo])
+    })
+
+    it('con un id que no está en la lista no llama a la API', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo])
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.alternarCompletada(99)
+
+      expect(clienteApi.parchear).not.toHaveBeenCalled()
+      expect(tienda.tareas).toEqual([tareaEjemplo])
+    })
   })
 })

@@ -53,6 +53,24 @@ export const useTiendaTareas = defineStore('tareas', () => {
     await cargarCatalogos()
   }
 
+  // Cambia la tarea entre pendiente y completada. Se invoca desde un botón de
+  // la tabla, sin formulario donde mostrar el fallo: si la API falla se guarda
+  // el mensaje en `error` y la lista se queda como estaba.
+  async function alternarCompletada(id: number): Promise<void> {
+    const actual = tareas.value.find((t) => t.id === id)
+    if (!actual) return
+    error.value = null
+    try {
+      const tarea = await clienteApi.parchear<Tarea>(`/tareas/${id}/completada`, {
+        completada: !actual.completada,
+      })
+      const indice = tareas.value.findIndex((t) => t.id === id)
+      if (indice !== -1) tareas.value[indice] = tarea
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+    }
+  }
+
   return {
     tareas,
     cargando,
@@ -63,5 +81,6 @@ export const useTiendaTareas = defineStore('tareas', () => {
     cargarCatalogos,
     crear,
     actualizar,
+    alternarCompletada,
   }
 })
