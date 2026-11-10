@@ -50,6 +50,18 @@ describe('cliente API - respuestas correctas', () => {
     await expect(clienteApi.eliminar('/algo/1')).resolves.toBeUndefined()
   })
 
+  it('eliminar devuelve el JSON de la respuesta cuando el DELETE trae cuerpo', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ id: 1, subtareas: [] }), { status: 200 }),
+    )
+
+    await expect(clienteApi.eliminar('/tareas/1/subtareas/2')).resolves.toEqual({
+      id: 1,
+      subtareas: [],
+    })
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.method).toBe('DELETE')
+  })
+
   it('parchear envía un PATCH con el cuerpo JSON y devuelve la respuesta', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ id: 1, completada: true }), { status: 200 }),

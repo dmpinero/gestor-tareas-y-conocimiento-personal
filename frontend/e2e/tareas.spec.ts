@@ -485,3 +485,69 @@ test('marca una tarea como completada, la tacha, se conserva al recargar y se de
   await page.reload()
   await expect(conmutador).toHaveAttribute('aria-pressed', 'false')
 })
+
+test('crea subtareas y comentarios desde el detalle de la tarea', async ({ page }) => {
+  const nombre = `Con subtareas ${Date.now()}`
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Crear tarea' }).click()
+  const panel = page.getByRole('dialog', { name: 'Crear tarea' })
+  await panel.getByPlaceholder('Nombre').fill(nombre)
+  await panel.getByPlaceholder('Descripción').fill('Para subtareas y comentarios')
+  await panel.getByRole('button', { name: 'Guardar' }).click()
+  await expect(panel).toBeHidden()
+
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: nombre })
+  await expect(detalle.getByText('Esta tarea no tiene subtareas.')).toBeVisible()
+  await expect(detalle.getByText('Todavía no hay comentarios.')).toBeVisible()
+
+  // Subtareas: dos altas seguidas (la fila queda abierta tras guardar).
+  await detalle.getByRole('button', { name: 'Añadir subtarea' }).click()
+  await detalle.getByLabel('Nombre de la subtarea').fill('Subtarea 1')
+  await detalle.getByLabel('Persona asignada').fill(`Ana ${nombre}`)
+  await detalle.getByLabel('Prioridad de la subtarea').fill('2')
+  await detalle.getByRole('button', { name: 'Guardar' }).click()
+  await expect(detalle.getByTestId('contador-subtareas')).toHaveText('1 sin resolver')
+  await detalle.getByLabel('Nombre de la subtarea').fill('Subtarea 2')
+  await detalle.getByRole('button', { name: 'Guardar' }).click()
+  await expect(detalle.getByTestId('contador-subtareas')).toHaveText('2 sin resolver')
+
+  const resolver = detalle.getByRole('button', {
+    name: 'Marcar como resuelta la subtarea Subtarea 1',
+  })
+  await resolver.click()
+  await expect(resolver).toHaveAttribute('aria-pressed', 'true')
+  await expect(detalle.getByTestId('contador-subtareas')).toHaveText('1 sin resolver')
+
+  await detalle.getByRole('button', { name: 'Eliminar subtarea Subtarea 2' }).click()
+  await detalle
+    .getByRole('group', { name: '¿Eliminar la subtarea Subtarea 2?' })
+    .getByRole('button', { name: 'Eliminar' })
+    .click()
+  await expect(detalle.getByText('Subtarea 2')).toHaveCount(0)
+
+  // Comentarios: con el botón y con Ctrl+Enter, respetando saltos de línea.
+  const campo = detalle.getByRole('textbox', { name: 'Escribe un comentario' })
+  await campo.fill('Primer comentario\ncon dos líneas')
+  await detalle.getByRole('button', { name: 'Enviar comentario' }).click()
+  await expect(campo).toHaveValue('')
+  await campo.fill('Segundo comentario')
+  await campo.press('Control+Enter')
+  const historial = detalle.getByRole('list', { name: 'Historial de comentarios' })
+  await expect(historial).toContainText('Primer comentario')
+  await expect(historial).toContainText('Segundo comentario')
+  await expect(historial.locator('time').first()).toHaveText(/^\d{2}:\d{2}$/)
+  await page.screenshot({ path: 'e2e/capturas/tareas-10-subtareas-comentarios.png' })
+
+  // Todo se guarda: sigue igual al cerrar y volver a abrir.
+  await page.keyboard.press('Escape')
+  await expect(detalle).toBeHidden()
+  await page.reload()
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await expect(detalle.getByTestId('contador-subtareas')).toHaveText('0 sin resolver')
+  await expect(
+    detalle.getByRole('button', { name: 'Marcar como resuelta la subtarea Subtarea 1' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+  await expect(historial).toContainText('Segundo comentario')
+})

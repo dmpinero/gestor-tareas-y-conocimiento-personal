@@ -38,6 +38,33 @@ export interface PasoTarea {
 }
 
 /**
+ * Subtarea de una tarea. Solo existe dentro de su tarea: se crea con
+ * `POST /tareas/{id}/subtareas`, cambia de estado con
+ * `PATCH /tareas/{id}/subtareas/{id_subtarea}/resuelta` y se borra con
+ * `DELETE /tareas/{id}/subtareas/{id_subtarea}`; las tres devuelven la tarea
+ * completa.
+ */
+export interface Subtarea {
+  id: number
+  /** Entre 1 y 200 caracteres, sin espacios al principio ni al final. */
+  nombre: string
+  /** Nombre de la persona asignada (del catálogo de personas); `null` si no
+   * tiene. */
+  asignado: string | null
+  /** De 1 (más prioritaria) a 5; `null` si no tiene. */
+  prioridad: number | null
+  resuelta: boolean
+}
+
+/** Cuerpo de `POST /tareas/{id}/subtareas`. Si `asignado` no existe en el
+ * catálogo de personas, se crea al guardar. */
+export interface DatosSubtarea {
+  nombre: string
+  asignado?: string
+  prioridad?: number
+}
+
+/**
  * Tarea tal como la devuelve la API (`GET`/`POST /tareas`, `PUT /tareas/{id}`,
  * `PATCH /tareas/{id}/completada`).
  */
@@ -64,6 +91,8 @@ export interface Tarea {
   /** Pasos del workflow de la oportunidad, por número; vacía si la tarea no
    * es una oportunidad o no tiene pasos. */
   pasos_oportunidad: PasoTarea[]
+  /** Subtareas por orden de alta; vacía si no tiene. */
+  subtareas: Subtarea[]
 }
 
 /**

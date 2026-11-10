@@ -35,6 +35,7 @@ const TAREAS = [
     oportunidad: null,
     completada: false,
     pasos_oportunidad: [],
+    subtareas: [],
   },
   {
     id: 2,
@@ -49,6 +50,7 @@ const TAREAS = [
     oportunidad: null,
     completada: false,
     pasos_oportunidad: [],
+    subtareas: [],
   },
 ]
 
@@ -99,6 +101,8 @@ async function montar(tareas: unknown[] = TAREAS): Promise<VueWrapper> {
   vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
     if (ruta === '/etiquetas') return Promise.resolve(structuredClone(ETIQUETAS))
     if (ruta === '/personas') return Promise.resolve(structuredClone(PERSONAS))
+    // El detalle carga los comentarios de la tarea abierta.
+    if (String(ruta).endsWith('/comentarios')) return Promise.resolve([])
     return Promise.resolve(structuredClone(tareas))
   })
   const pinia = createPinia()
@@ -740,6 +744,7 @@ describe('VistaTareas', () => {
         tipo: 'oportunidad',
         oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
         pasos_oportunidad: [],
+        subtareas: [],
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -776,6 +781,7 @@ describe('VistaTareas', () => {
         tipo: 'oportunidad',
         oportunidad: OPORTUNIDAD,
         pasos_oportunidad: [],
+        subtareas: [],
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -1115,6 +1121,7 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         pasos_oportunidad: [],
+        subtareas: [],
       },
       {
         id: 2,
@@ -1129,6 +1136,7 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         pasos_oportunidad: [],
+        subtareas: [],
       },
       {
         id: 3,
@@ -1144,6 +1152,7 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         pasos_oportunidad: [],
+        subtareas: [],
       },
     ]
 
@@ -1395,6 +1404,7 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         pasos_oportunidad: [],
+        subtareas: [],
       },
       {
         id: 2,
@@ -1409,6 +1419,7 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         pasos_oportunidad: [],
+        subtareas: [],
       },
       {
         id: 3,
@@ -1423,6 +1434,7 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         pasos_oportunidad: [],
+        subtareas: [],
       },
     ]
     const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']
@@ -1667,6 +1679,7 @@ describe('VistaTareas', () => {
         if (ruta === '/etiquetas')
           return Promise.resolve([...ETIQUETAS, { id: 3, nombre: 'Nueva' }])
         if (ruta === '/personas') return Promise.resolve([...PERSONAS, { id: 3, nombre: 'Marta' }])
+        if (String(ruta).endsWith('/comentarios')) return Promise.resolve([])
         return Promise.resolve(structuredClone(TAREAS_FILTRO))
       })
 
