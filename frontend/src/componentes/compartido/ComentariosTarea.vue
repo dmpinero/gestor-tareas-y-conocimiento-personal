@@ -23,6 +23,7 @@ const props = defineProps<{
 const idBase = useId()
 const idTitulo = `${idBase}-titulo`
 const idContador = `${idBase}-contador`
+const idCampo = `${idBase}-campo`
 
 const comentarios = ref<Comentario[]>([])
 const cargando = ref(false)
@@ -93,6 +94,9 @@ async function enviar(): Promise<void> {
     texto.value = ''
     anuncio.value = 'Comentario añadido'
     await desplazarAlFinal()
+    // Al vaciarse el campo el botón se desactiva y, si tenía el foco, este caía
+    // en el <body>: se devuelve al campo para seguir escribiendo.
+    document.getElementById(idCampo)?.focus()
   } catch (error) {
     if (idTarea !== props.idTarea) return
     errorEnvio.value = mensajeDe(error)
@@ -119,7 +123,16 @@ function alPulsarTecla(evento: KeyboardEvent): void {
     <p v-else-if="comentarios.length === 0" class="text-muted-foreground text-sm">
       Todavía no hay comentarios.
     </p>
-    <div v-else ref="contenedorHistorial" class="max-h-96 overflow-y-auto pr-1">
+    <!-- Enfocable y con nombre: con muchos comentarios se desplaza y debe poder
+         recorrerse con el teclado (axe `scrollable-region-focusable`). -->
+    <div
+      v-else
+      ref="contenedorHistorial"
+      class="max-h-96 overflow-y-auto pr-1"
+      role="region"
+      aria-label="Comentarios anteriores"
+      tabindex="0"
+    >
       <ol aria-label="Historial de comentarios" class="flex flex-col gap-4">
         <li v-for="grupo in grupos" :key="grupo.clave" class="flex flex-col gap-2">
           <h4
@@ -147,6 +160,7 @@ function alPulsarTecla(evento: KeyboardEvent): void {
     <form class="flex flex-col gap-1" @submit.prevent="enviar">
       <div class="flex items-end gap-2">
         <Textarea
+          :id="idCampo"
           v-model="texto"
           aria-label="Escribe un comentario"
           placeholder="Escribe un comentario"

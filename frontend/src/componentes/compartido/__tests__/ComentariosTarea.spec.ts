@@ -183,7 +183,9 @@ describe('ComentariosTarea: historial', () => {
     Object.defineProperty(Element.prototype, 'scrollTop', {
       configurable: true,
       get: () => 0,
-      set: (valor: number) => asignaciones.push(valor),
+      set: (valor: number) => {
+        asignaciones.push(valor)
+      },
     })
 
     try {
@@ -246,6 +248,34 @@ describe('ComentariosTarea: envío', () => {
     expect(envoltorio.text()).toContain('0/500')
     expect(document.activeElement).toBe(campoTexto(envoltorio).element)
     expect(envoltorio.get('[aria-live="polite"]').text()).toBe('Comentario añadido')
+  })
+
+  // Regresión (accesibilidad): al enviar con el botón, este se desactiva al
+  // vaciarse el campo y el foco caía en el <body>.
+  it('tras enviar con el botón enfocado, el foco vuelve al campo de texto', async () => {
+    obtener.mockResolvedValue([])
+    crear.mockResolvedValue({ id: 9, texto: 'Hola', creado: isoUtcDesdeLocal(11, 10, 11, 45) })
+    const envoltorio = await montar(7)
+    await escribir(envoltorio, 'Hola')
+    ;(botonEnviar(envoltorio).element as HTMLButtonElement).focus()
+
+    await botonEnviar(envoltorio).trigger('click')
+    await flushPromises()
+
+    expect(document.activeElement).toBe(campoTexto(envoltorio).element)
+  })
+
+  // Regresión (axe `scrollable-region-focusable`): con muchos comentarios el
+  // historial se desplaza y debe poder enfocarse con el teclado.
+  it('el contenedor desplazable del historial se puede enfocar y tiene nombre', async () => {
+    obtener.mockResolvedValue([COMENTARIOS[0]])
+    const envoltorio = await montar(7)
+
+    const contenedor = historial(envoltorio).parentElement!
+    expect(contenedor.className).toContain('overflow-y-auto')
+    expect(contenedor.getAttribute('tabindex')).toBe('0')
+    expect(contenedor.getAttribute('role')).toBe('region')
+    expect(contenedor.getAttribute('aria-label')).toBe('Comentarios anteriores')
   })
 
   it('el primer comentario sustituye al estado vacío', async () => {

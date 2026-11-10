@@ -551,3 +551,45 @@ test('crea subtareas y comentarios desde el detalle de la tarea', async ({ page 
   ).toHaveAttribute('aria-pressed', 'true')
   await expect(historial).toContainText('Segundo comentario')
 })
+
+// Regresiones de accesibilidad de los comentarios: con muchos comentarios el
+// historial desplazable debe poder enfocarse, y al enviar con el botón el foco
+// no debe perderse.
+test('el historial de comentarios largo es accesible y enviar con el botón mantiene el foco', async ({
+  page,
+  request,
+}) => {
+  const nombre = `Muchos comentarios ${Date.now()}`
+  const creada = await request.post('/api/v1/tareas', {
+    data: { nombre, descripcion: 'Con historial largo', fecha_creacion: '2026-01-01T09:00:00' },
+  })
+  expect(creada.status()).toBe(201)
+  const { id } = (await creada.json()) as { id: number }
+  for (let i = 1; i <= 17; i += 1) {
+    const respuesta = await request.post(`/api/v1/tareas/${id}/comentarios`, {
+      data: { texto: `Comentario número ${i}` },
+    })
+    expect(respuesta.status()).toBe(201)
+  }
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: nombre })
+  await expect(detalle.getByText('Comentario número 17')).toBeVisible()
+  await detalle.evaluate((elemento) =>
+    Promise.all(elemento.getAnimations().map((animacion) => animacion.finished)),
+  )
+
+  const resultado = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .exclude('.vue-devtools__anchor-btn')
+    .analyze()
+  expect(resultado.violations).toEqual([])
+
+  const campo = detalle.getByRole('textbox', { name: 'Escribe un comentario' })
+  await campo.fill('Enviado con el botón')
+  await detalle.getByRole('button', { name: 'Enviar comentario' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(detalle.getByText('Enviado con el botón')).toBeVisible()
+  await expect(campo).toBeFocused()
+})
