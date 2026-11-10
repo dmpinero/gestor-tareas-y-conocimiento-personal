@@ -220,12 +220,49 @@ describe('VistaTareas', () => {
         'Backend | Urgente',
         'Ana',
         '10/11/2026 09:30:00',
-        '20/11/2026 18:00:00',
+        '20/11/2026 18:00:00 Vence en 10 d 23 h 14 min 30 s',
         '—',
         '',
       ],
       ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', '—', ''],
     ])
+  })
+
+  describe('cuenta atrás del vencimiento', () => {
+    function celdaVencimiento(envoltorio: VueWrapper, fila: number) {
+      return envoltorio.findAll('tbody tr')[fila]!.findAll('td')[6]!
+    }
+
+    it('muestra bajo la fecha de vencimiento cuánto falta, solo en las tareas con vencimiento', async () => {
+      const envoltorio = await montar()
+
+      const contador = celdaVencimiento(envoltorio, 0).get('[data-testid="contador-vencimiento"]')
+      expect(contador.text()).toBe('Vence en 10 d 23 h 14 min 30 s')
+      expect(contador.classes()).toEqual(
+        expect.arrayContaining(['block', 'text-xs', 'text-muted-foreground']),
+      )
+      expect(contador.classes()).not.toContain('text-destructive')
+      expect(celdaVencimiento(envoltorio, 1).text()).toBe('—')
+      expect(
+        celdaVencimiento(envoltorio, 1).find('[data-testid="contador-vencimiento"]').exists(),
+      ).toBe(false)
+    })
+
+    it('con el vencimiento pasado muestra cuánto hace que venció en rojo', async () => {
+      const envoltorio = await montar([{ ...TAREAS[0], fecha_vencimiento: '2026-11-08T16:40:00' }])
+
+      const contador = celdaVencimiento(envoltorio, 0).get('[data-testid="contador-vencimiento"]')
+      expect(contador.text()).toBe('Vencida hace 1 d 02 h 05 min')
+      expect(contador.classes()).toContain('text-destructive')
+    })
+
+    it('usa un único intervalo para todas las filas', async () => {
+      const espiaIntervalo = vi.spyOn(globalThis, 'setInterval')
+      await montar([TAREAS[0], { ...TAREAS[1], fecha_vencimiento: '2026-11-25T10:00:00' }])
+
+      expect(espiaIntervalo.mock.calls.filter(([, ms]) => ms === 1000)).toHaveLength(1)
+      espiaIntervalo.mockRestore()
+    })
   })
 
   it('muestra un mensaje cuando no hay tareas', async () => {
@@ -402,7 +439,7 @@ describe('VistaTareas', () => {
         'Frontend | Urgente',
         'Luis',
         AHORA_TEXTO,
-        '30/11/2026 12:00:00',
+        '30/11/2026 12:00:00 Vence en 20 d 17 h 14 min 30 s',
         '—',
         '',
       ],

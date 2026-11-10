@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
 import { formatearFechaHora } from '@/lib/fechas'
+import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import { Button } from '@/componentes/ui/button'
 import {
   Dialog,
@@ -45,6 +46,8 @@ interface Campo {
   valor: string
   // Textos largos que pueden traer saltos de línea.
   multilinea?: boolean
+  // Fecha ISO de la que mostrar la cuenta atrás junto al valor.
+  cuentaAtras?: string
 }
 
 const camposTarea = computed<Campo[]>(() => {
@@ -60,6 +63,7 @@ const camposTarea = computed<Campo[]>(() => {
     {
       termino: 'Fecha de vencimiento',
       valor: tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : VACIO,
+      cuentaAtras: tarea.fecha_vencimiento ?? undefined,
     },
     { termino: 'Tipo', valor: textoOVacio(etiquetaTipoTarea(tarea.tipo)) },
   ]
@@ -108,7 +112,12 @@ function alCambiarApertura(abierta: boolean): void {
             class="grid gap-1 sm:grid-cols-[14rem_1fr]"
           >
             <dt class="text-muted-foreground text-sm font-medium">{{ campo.termino }}</dt>
+            <dd v-if="campo.cuentaAtras" class="text-sm [overflow-wrap:anywhere]">
+              {{ campo.valor }}
+              <ContadorVencimiento :vencimiento="campo.cuentaAtras" class="ml-2" />
+            </dd>
             <dd
+              v-else
               class="text-sm [overflow-wrap:anywhere]"
               :class="campo.multilinea ? 'whitespace-pre-wrap' : ''"
               v-text="campo.valor"

@@ -11,7 +11,7 @@ export const PATRON_FECHA_HORA = '\\d{2}/\\d{2}/\\d{4} \\d{2}:\\d{2}:\\d{2}'
 const EXPRESION_ISO = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/
 const EXPRESION_FECHA_HORA = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/
 
-function dosCifras(numero: number): string {
+export function dosCifras(numero: number): string {
   return String(numero).padStart(2, '0')
 }
 
@@ -30,6 +30,24 @@ export function formatearFechaHora(valor: Date | string): string {
   const fecha = `${dosCifras(valor.getDate())}/${dosCifras(valor.getMonth() + 1)}/${valor.getFullYear()}`
   const hora = `${dosCifras(valor.getHours())}:${dosCifras(valor.getMinutes())}:${dosCifras(valor.getSeconds())}`
   return `${fecha} ${hora}`
+}
+
+/**
+ * Lee una cadena ISO sin zona horaria (`YYYY-MM-DDTHH:MM:SS`) como un `Date`
+ * en hora local, sin convertir de zona. Devuelve `null` si no es ISO.
+ */
+export function isoAFechaLocal(valor: string): Date | null {
+  const partes = EXPRESION_ISO.exec(valor)
+  if (!partes) return null
+  const [anio, mes, dia, hora, minuto, segundo] = partes.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ]
+  return new Date(anio, mes - 1, dia, hora, minuto, segundo)
 }
 
 /**
