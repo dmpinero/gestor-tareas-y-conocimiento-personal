@@ -87,7 +87,6 @@ onMounted(() => {
   void tienda.cargarCatalogos()
 })
 
-/** Nombres en orden alfabético unidos por ", ", o `null` si no hay ninguno. */
 // Clases de las celdas de datos: las tareas completadas se muestran tachadas.
 // Se devuelve una cadena porque `TableCell` declara `class` como `string`.
 const TEXTO_AJUSTABLE = 'whitespace-normal [overflow-wrap:anywhere]'
@@ -95,6 +94,7 @@ function claseCelda(tarea: Tarea, base = ''): string {
   return tarea.completada ? `${base} line-through`.trim() : base
 }
 
+/** Nombres en orden alfabético unidos por ", ", o `null` si no hay ninguno. */
 function unirNombres(nombres: string[]): string | null {
   if (nombres.length === 0) return null
   return [...nombres].sort(compararTexto).join(', ')
