@@ -43,6 +43,9 @@ class RepositorioTareas(Protocol):
 
         Las subtareas no cambian nunca (se ignora ``tarea.subtareas``), tampoco al
         cambiar el tipo de la tarea.
+
+        Lanza ``EntidadNoEncontradaError`` si otra petición ha borrado la tarea
+        mientras tanto.
         """
         ...
 

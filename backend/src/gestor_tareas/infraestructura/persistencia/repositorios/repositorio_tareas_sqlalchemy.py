@@ -1,6 +1,7 @@
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.nombres_catalogo import ordenar_nombres
 from gestor_tareas.dominio.tarea.entidades import (
     Oportunidad,
@@ -140,17 +141,36 @@ class RepositorioTareasSqlAlchemy:
         modelo = self._sesion.get(TareaModelo, id_tarea)
         return _a_entidad(modelo) if modelo is not None else None
 
+    def _tarea_bloqueada(self, id_tarea: int) -> TareaModelo | None:
+        """La tarea leída con bloqueo, o ``None`` si ya no existe.
+
+        La lectura con bloqueo ve lo último confirmado y espera a un borrado en
+        curso: si otra petición borra la tarea entre la lectura del caso de uso y
+        esta escritura, se detecta aquí en lugar de fallar el UPDATE.
+        """
+        consulta = (
+            select(TareaModelo)
+            .where(TareaModelo.id == id_tarea)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return self._sesion.scalars(consulta).one_or_none()
+
     def actualizar(self, tarea: Tarea) -> Tarea:
         with traducir_conflictos(self._sesion):
-            modelo = self._sesion.get(TareaModelo, tarea.id)
+            modelo = self._tarea_bloqueada(tarea.id)
+            if modelo is None:
+                self._sesion.rollback()
+                raise EntidadNoEncontradaError(f"No existe la tarea con id {tarea.id}")
             self._asignar_datos(modelo, tarea)
             self._sesion.commit()
         return _a_entidad(modelo)
 
     def cambiar_completada(self, id_tarea: int, completada: bool) -> Tarea | None:
         with traducir_conflictos(self._sesion):
-            modelo = self._sesion.get(TareaModelo, id_tarea)
+            modelo = self._tarea_bloqueada(id_tarea)
             if modelo is None:
+                self._sesion.rollback()
                 return None
             modelo.completada = completada
             self._sesion.commit()
