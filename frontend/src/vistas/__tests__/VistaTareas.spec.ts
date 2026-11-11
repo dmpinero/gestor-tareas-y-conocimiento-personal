@@ -1896,5 +1896,77 @@ describe('VistaTareas', () => {
       expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
       expect(disparador(envoltorio, 'Filtrar por tipo').text()).toBe('Todos los tipos')
     })
+
+    describe('estado', () => {
+      // "Revisar código" está completada; las otras dos, no.
+      const CON_COMPLETADA = TAREAS_FILTRO.map((tarea) =>
+        tarea.id === 2 ? { ...tarea, completada: true } : tarea,
+      )
+
+      function opcionEstado(envoltorio: VueWrapper, etiqueta: string) {
+        const grupo = envoltorio.get('[role="radiogroup"][aria-labelledby="filtro-estado-titulo"]')
+        const opcion = grupo
+          .findAll('input[type="radio"]')
+          .find(
+            (radio) => envoltorio.get(`label[for="${radio.attributes('id')}"]`).text() === etiqueta,
+          )
+        if (!opcion) throw new Error(`No hay opción de estado «${etiqueta}»`)
+        return opcion
+      }
+
+      it('por defecto muestra todas las tareas, completadas o no', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+
+        expect(envoltorio.get('#filtro-estado-titulo').text()).toBe('Estado')
+        expect((opcionEstado(envoltorio, 'Todas').element as HTMLInputElement).checked).toBe(true)
+        expect((opcionEstado(envoltorio, 'Completadas').element as HTMLInputElement).checked).toBe(
+          false,
+        )
+        expect(
+          (opcionEstado(envoltorio, 'No completadas').element as HTMLInputElement).checked,
+        ).toBe(false)
+        expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+      })
+
+      it('"Completadas" muestra solo las tareas completadas', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+
+        await opcionEstado(envoltorio, 'Completadas').setValue(true)
+        await flushPromises()
+
+        expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código'])
+      })
+
+      it('"No completadas" muestra solo las tareas sin completar', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+
+        await opcionEstado(envoltorio, 'No completadas').setValue(true)
+        await flushPromises()
+
+        expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Comprar café'])
+      })
+
+      it('se combina con los demás filtros', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+
+        await opcionEstado(envoltorio, 'No completadas').setValue(true)
+        await escribir(entrada(envoltorio, 'filtro-buscar'), 'café')
+
+        expect(nombresEnTabla(envoltorio)).toEqual(['Comprar café'])
+      })
+
+      it('"Limpiar filtros" vuelve a "Todas"', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+        await opcionEstado(envoltorio, 'Completadas').setValue(true)
+        await flushPromises()
+
+        const boton = envoltorio.findAll('button').find((b) => b.text() === 'Limpiar filtros')!
+        await boton.trigger('click')
+        await flushPromises()
+
+        expect((opcionEstado(envoltorio, 'Todas').element as HTMLInputElement).checked).toBe(true)
+        expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+      })
+    })
   })
 })

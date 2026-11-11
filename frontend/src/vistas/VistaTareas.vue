@@ -252,6 +252,16 @@ const prioridadesFiltro = ref<number[]>(ITEMS_PRIORIDAD.map((item) => item.id))
 const etiquetasFiltro = ref<string[]>(itemsEtiquetasFiltro.value.map((item) => item.id))
 const asignadosFiltro = ref<string[]>(itemsAsignadosFiltro.value.map((item) => item.id))
 const tiposFiltro = ref<string[]>(ITEMS_TIPO.map((item) => item.id))
+
+// Estado de las tareas que se muestran: todas, solo las completadas o solo las
+// pendientes.
+type EstadoFiltro = 'todas' | 'completadas' | 'pendientes'
+const OPCIONES_ESTADO: { valor: EstadoFiltro; etiqueta: string }[] = [
+  { valor: 'todas', etiqueta: 'Todas' },
+  { valor: 'completadas', etiqueta: 'Completadas' },
+  { valor: 'pendientes', etiqueta: 'No completadas' },
+]
+const estadoFiltro = ref<EstadoFiltro>('todas')
 // Fechas de los `<input type="date">` (`YYYY-MM-DD`), o '' sin límite.
 const creacionDesde = ref('')
 const creacionHasta = ref('')
@@ -290,6 +300,8 @@ const tareasConFiltros = computed(() =>
     if (!pasaFiltroNombres(tarea.etiquetas, etiquetasFiltro.value)) return false
     if (!pasaFiltroNombres(tarea.asignados, asignadosFiltro.value)) return false
     if (!tiposFiltro.value.includes(tarea.tipo ?? SIN_TIPO)) return false
+    if (estadoFiltro.value === 'completadas' && !tarea.completada) return false
+    if (estadoFiltro.value === 'pendientes' && tarea.completada) return false
     if (!dentroDeRango(tarea.fecha_creacion, creacionDesde.value, creacionHasta.value)) {
       return false
     }
@@ -315,6 +327,7 @@ function limpiarFiltros(): void {
   etiquetasFiltro.value = itemsEtiquetasFiltro.value.map((item) => item.id)
   asignadosFiltro.value = itemsAsignadosFiltro.value.map((item) => item.id)
   tiposFiltro.value = ITEMS_TIPO.map((item) => item.id)
+  estadoFiltro.value = 'todas'
   creacionDesde.value = ''
   creacionHasta.value = ''
   vencimientoDesde.value = ''
@@ -567,6 +580,35 @@ async function guardar(): Promise<void> {
               nombre-plural="tipos"
               genero="masculino"
             />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <span id="filtro-estado-titulo" class="text-sm leading-none font-medium select-none"
+              >Estado</span
+            >
+            <div
+              role="radiogroup"
+              aria-labelledby="filtro-estado-titulo"
+              class="flex flex-wrap items-center gap-4"
+            >
+              <div
+                v-for="opcion in OPCIONES_ESTADO"
+                :key="opcion.valor"
+                class="flex items-center gap-2"
+              >
+                <input
+                  :id="`filtro-estado-${opcion.valor}`"
+                  v-model="estadoFiltro"
+                  type="radio"
+                  name="filtro-estado"
+                  :value="opcion.valor"
+                  class="accent-primary size-4"
+                />
+                <Label :for="`filtro-estado-${opcion.valor}`" class="font-normal">{{
+                  opcion.etiqueta
+                }}</Label>
+              </div>
+            </div>
           </div>
 
           <div class="flex flex-wrap items-end gap-4">

@@ -790,3 +790,41 @@ test('crea la tarea en una ventana modal y la borra desde la lista', async ({ pa
     .click()
   await expect(fila).toHaveCount(0)
 })
+
+test('filtra por estado: todas, completadas o no completadas', async ({ page, request }) => {
+  const marca = Date.now()
+  const hecha = `Hecha ${marca}`
+  const pendiente = `Pendiente ${marca}`
+  const crear = (nombre: string) =>
+    request.post('/api/v1/tareas', {
+      data: { nombre, descripcion: 'Filtro de estado', fecha_creacion: '2026-01-01T09:00:00' },
+    })
+  const respuestaHecha = await crear(hecha)
+  expect(respuestaHecha.status()).toBe(201)
+  expect((await crear(pendiente)).status()).toBe(201)
+  const { id } = (await respuestaHecha.json()) as { id: number }
+  const completar = await request.patch(`/api/v1/tareas/${id}/completada`, {
+    data: { completada: true },
+  })
+  expect(completar.status()).toBe(200)
+
+  await page.goto('/tareas')
+  await page.getByLabel('Buscar').fill(String(marca))
+  const estado = page.getByRole('radiogroup', { name: 'Estado' })
+  const fila = (nombre: string) => page.locator('tr', { hasText: nombre })
+  await expect(estado.getByRole('radio', { name: 'Todas', exact: true })).toBeChecked()
+  await expect(fila(hecha)).toHaveCount(1)
+  await expect(fila(pendiente)).toHaveCount(1)
+
+  await estado.getByRole('radio', { name: 'Completadas', exact: true }).check()
+  await expect(fila(hecha)).toHaveCount(1)
+  await expect(fila(pendiente)).toHaveCount(0)
+
+  await estado.getByRole('radio', { name: 'No completadas', exact: true }).check()
+  await expect(fila(hecha)).toHaveCount(0)
+  await expect(fila(pendiente)).toHaveCount(1)
+  await page.screenshot({ path: 'e2e/capturas/tareas-15-filtro-estado.png' })
+
+  await page.getByRole('button', { name: 'Limpiar filtros' }).click()
+  await expect(estado.getByRole('radio', { name: 'Todas', exact: true })).toBeChecked()
+})
