@@ -593,3 +593,83 @@ test('el historial de comentarios largo es accesible y enviar con el botón mant
   await expect(detalle.getByText('Enviado con el botón')).toBeVisible()
   await expect(campo).toBeFocused()
 })
+
+test('edita y borra subtareas y comentarios pidiendo confirmación', async ({ page, request }) => {
+  const nombre = `Editable ${Date.now()}`
+  const creada = await request.post('/api/v1/tareas', {
+    data: { nombre, descripcion: 'Para editar y borrar', fecha_creacion: '2026-01-01T09:00:00' },
+  })
+  const { id } = (await creada.json()) as { id: number }
+  expect(
+    (
+      await request.post(`/api/v1/tareas/${id}/subtareas`, { data: { nombre: 'Original' } })
+    ).status(),
+  ).toBe(201)
+  expect(
+    (
+      await request.post(`/api/v1/tareas/${id}/comentarios`, {
+        data: { texto: 'Comentario original' },
+      })
+    ).status(),
+  ).toBe(201)
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: nombre })
+
+  // Subtarea: editar exige confirmar; cancelar la confirmación no guarda.
+  await detalle.getByRole('button', { name: 'Editar subtarea Original' }).click()
+  await detalle.getByLabel('Nuevo nombre de la subtarea Original').fill('Renombrada')
+  await detalle.getByLabel('Nueva prioridad de la subtarea Original').fill('3')
+  await detalle.getByRole('button', { name: 'Guardar', exact: true }).click()
+  const confirmarSubtarea = detalle.getByRole('group', {
+    name: '¿Guardar los cambios de la subtarea Original?',
+  })
+  await expect(confirmarSubtarea).toBeVisible()
+  await confirmarSubtarea.getByRole('button', { name: 'Guardar' }).click()
+  await expect(detalle.getByRole('button', { name: 'Editar subtarea Renombrada' })).toBeVisible()
+  await expect(detalle.getByText('Original', { exact: true })).toHaveCount(0)
+
+  // Comentario: editar con confirmación y marca "(editado)".
+  await detalle.getByRole('button', { name: /^Editar comentario de las / }).click()
+  await detalle
+    .getByRole('textbox', { name: 'Nuevo texto del comentario' })
+    .fill('Comentario corregido')
+  await detalle
+    .getByRole('form', { name: 'Editar comentario' })
+    .getByRole('button', { name: 'Guardar' })
+    .click()
+  const confirmarComentario = detalle.getByRole('group', {
+    name: '¿Guardar los cambios del comentario?',
+  })
+  await confirmarComentario.getByRole('button', { name: 'Guardar' }).click()
+  await expect(detalle.getByText('Comentario corregido')).toBeVisible()
+  // Visible: "(editado)"; el texto completo incluye la fecha para lectores de pantalla.
+  await expect(detalle.getByTestId('marca-editado')).toHaveText(
+    /^\(editado( el .+ a las \d{2}:\d{2})?\)$/,
+  )
+  await page.screenshot({ path: 'e2e/capturas/tareas-11-editar-borrar.png' })
+
+  // Borrar con confirmación: cancelar conserva, eliminar borra.
+  await detalle.getByRole('button', { name: /^Eliminar comentario de las / }).click()
+  const confirmarBorrado = detalle.getByRole('group', { name: '¿Eliminar el comentario?' })
+  await confirmarBorrado.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(detalle.getByText('Comentario corregido')).toBeVisible()
+  await detalle.getByRole('button', { name: /^Eliminar comentario de las / }).click()
+  await confirmarBorrado.getByRole('button', { name: 'Eliminar' }).click()
+  await expect(detalle.getByText('Todavía no hay comentarios.')).toBeVisible()
+
+  await detalle.getByRole('button', { name: 'Eliminar subtarea Renombrada' }).click()
+  await detalle
+    .getByRole('group', { name: '¿Eliminar la subtarea Renombrada?' })
+    .getByRole('button', { name: 'Eliminar' })
+    .click()
+  await expect(detalle.getByText('Esta tarea no tiene subtareas.')).toBeVisible()
+
+  // Se guarda: tras recargar sigue igual.
+  await page.keyboard.press('Escape')
+  await page.reload()
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await expect(detalle.getByText('Esta tarea no tiene subtareas.')).toBeVisible()
+  await expect(detalle.getByText('Todavía no hay comentarios.')).toBeVisible()
+})

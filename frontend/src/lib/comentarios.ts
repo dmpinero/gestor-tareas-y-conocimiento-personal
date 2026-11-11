@@ -10,13 +10,22 @@ import { dosCifras } from '@/lib/fechas'
 export interface Comentario {
   id: number
   texto: string
-  /** Fecha y hora de alta en UTC ISO 8601 con `Z`. */
+  /** Fecha y hora de alta en UTC ISO 8601 con `Z`. No cambia al editarlo. */
   creado: string
+  /** Fecha y hora de la última edición en UTC ISO 8601 con `Z`; `null` si
+   * nunca se ha editado. */
+  editado: string | null
 }
 
 export interface ComentarioMostrado extends Comentario {
   /** Hora local `HH:MM`. */
   hora: string
+  /**
+   * Referencia legible y única dentro del historial, para los nombres
+   * accesibles de sus botones: `de las 18:30 del miércoles, 1 de abril`, con
+   * ` (2)`, ` (3)`… si varios coinciden en día y hora.
+   */
+  referencia: string
 }
 
 export interface GrupoDiaComentarios {
@@ -51,6 +60,11 @@ export function formatearDiaComentario(fecha: Date, hoy: Date = new Date()): str
   return new Intl.DateTimeFormat('es-ES', opciones).format(fecha)
 }
 
+/** Día y hora local de la edición: `martes, 10 de noviembre a las 17:45`. */
+export function formatearEdicionComentario(editado: string, hoy: Date = new Date()): string {
+  return `${formatearDiaComentario(new Date(editado), hoy)} a las ${formatearHoraComentario(editado)}`
+}
+
 /** Agrupa los comentarios por día local, en orden cronológico (el más antiguo primero). */
 export function agruparComentariosPorDia(
   comentarios: readonly Comentario[],
@@ -61,6 +75,7 @@ export function agruparComentariosPorDia(
     .sort((a, b) => a.fecha.getTime() - b.fecha.getTime() || a.indice - b.indice)
 
   const grupos: GrupoDiaComentarios[] = []
+  const repeticiones = new Map<string, number>()
   for (const { comentario, fecha } of ordenados) {
     const clave = claveDiaLocal(fecha)
     let grupo = grupos[grupos.length - 1]
@@ -68,7 +83,12 @@ export function agruparComentariosPorDia(
       grupo = { clave, etiqueta: formatearDiaComentario(fecha, hoy), comentarios: [] }
       grupos.push(grupo)
     }
-    grupo.comentarios.push({ ...comentario, hora: formatearHoraComentario(comentario.creado) })
+    const hora = formatearHoraComentario(comentario.creado)
+    const base = `de las ${hora} del ${grupo.etiqueta}`
+    const repeticion = (repeticiones.get(base) ?? 0) + 1
+    repeticiones.set(base, repeticion)
+    const referencia = repeticion === 1 ? base : `${base} (${repeticion})`
+    grupo.comentarios.push({ ...comentario, hora, referencia })
   }
   return grupos
 }

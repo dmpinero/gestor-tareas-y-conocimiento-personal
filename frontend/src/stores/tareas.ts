@@ -2,7 +2,13 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { clienteApi } from '@/api/cliente'
-import type { DatosSubtarea, DatosTarea, ElementoCatalogo, Tarea } from '@/api/tipos'
+import type {
+  DatosEdicionSubtarea,
+  DatosSubtarea,
+  DatosTarea,
+  ElementoCatalogo,
+  Tarea,
+} from '@/api/tipos'
 
 export const useTiendaTareas = defineStore('tareas', () => {
   const tareas = ref<Tarea[]>([])
@@ -113,6 +119,25 @@ export const useTiendaTareas = defineStore('tareas', () => {
     return true
   }
 
+  async function editarSubtarea(
+    idTarea: number,
+    idSubtarea: number,
+    datos: DatosEdicionSubtarea,
+  ): Promise<boolean> {
+    error.value = null
+    try {
+      reemplazarTarea(
+        await clienteApi.actualizar<Tarea>(`/tareas/${idTarea}/subtareas/${idSubtarea}`, datos),
+      )
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+    // Como al crearla, la persona asignada puede ser nueva en el catálogo.
+    await cargarCatalogos()
+    return true
+  }
+
   async function alternarSubtarea(idTarea: number, idSubtarea: number): Promise<boolean> {
     const subtarea = tareas.value
       .find((t) => t.id === idTarea)
@@ -158,6 +183,7 @@ export const useTiendaTareas = defineStore('tareas', () => {
     alternarCompletada,
     alternarPasoTarea,
     crearSubtarea,
+    editarSubtarea,
     alternarSubtarea,
     eliminarSubtarea,
   }
