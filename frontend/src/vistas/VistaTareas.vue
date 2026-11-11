@@ -57,7 +57,6 @@ import {
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/componentes/ui/sheet'
 import {
   Table,
   TableBody,
@@ -69,8 +68,8 @@ import {
 
 const tienda = useTiendaTareas()
 const tiendaGrupos = useTiendaGruposEstados()
-// El alta se hace en una ventana modal y la edición en el panel lateral; las
-// dos comparten el formulario y su estado.
+// El alta y la edición se hacen en ventanas modales; las dos comparten el
+// formulario y su estado.
 const modalAltaAbierta = ref(false)
 const panelEdicionAbierto = ref(false)
 const errorFormulario = ref<string | null>(null)
@@ -808,8 +807,8 @@ async function guardar(): Promise<void> {
       </Collapsible>
     </div>
 
-    <!-- Alta en una ventana modal centrada, como el detalle; la edición sigue
-         en el panel lateral. Ambas usan el mismo formulario. -->
+    <!-- Alta y edición en ventanas modales centradas, como el detalle. Ambas
+         usan el mismo formulario. -->
     <Dialog v-model:open="modalAltaAbierta">
       <DialogContent
         sin-aspa
@@ -828,19 +827,23 @@ async function guardar(): Promise<void> {
       </DialogContent>
     </Dialog>
 
-    <Sheet v-model:open="panelEdicionAbierto">
-      <SheetContent class="gap-0 overflow-hidden">
-        <SheetHeader>
-          <SheetTitle>Editar tarea</SheetTitle>
-        </SheetHeader>
+    <Dialog v-model:open="panelEdicionAbierto">
+      <DialogContent
+        sin-aspa
+        class="flex max-h-[90vh] w-[90vw] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+      >
+        <DialogHeader class="p-4">
+          <DialogTitle>Editar tarea</DialogTitle>
+          <DialogDescription class="sr-only">Datos de la tarea que se edita.</DialogDescription>
+        </DialogHeader>
         <FormularioTarea
           v-model:valores="formulario"
           :error="errorFormulario"
           @guardar="guardar"
           @cancelar="cerrarFormulario"
         />
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
 
     <p v-if="tienda.error" class="mt-2 text-sm text-destructive" role="alert">{{ tienda.error }}</p>
 
