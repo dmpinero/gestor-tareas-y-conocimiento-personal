@@ -39,9 +39,10 @@ export interface PasoTarea {
 
 /**
  * Subtarea de una tarea. Solo existe dentro de su tarea: se crea con
- * `POST /tareas/{id}/subtareas`, cambia de estado con
+ * `POST /tareas/{id}/subtareas`, se edita con
+ * `PUT /tareas/{id}/subtareas/{id_subtarea}`, cambia de estado con
  * `PATCH /tareas/{id}/subtareas/{id_subtarea}/resuelta` y se borra con
- * `DELETE /tareas/{id}/subtareas/{id_subtarea}`; las tres devuelven la tarea
+ * `DELETE /tareas/{id}/subtareas/{id_subtarea}`; todas devuelven la tarea
  * completa.
  */
 export interface Subtarea {
@@ -62,6 +63,15 @@ export interface DatosSubtarea {
   nombre: string
   asignado?: string
   prioridad?: number
+}
+
+/** Cuerpo de `PUT /tareas/{id}/subtareas/{id_subtarea}`. Es un reemplazo
+ * completo: `asignado` o `prioridad` a `null` los vacían. Como en el alta, si
+ * `asignado` no existe en el catálogo de personas, se crea al guardar. */
+export interface DatosEdicionSubtarea {
+  nombre: string
+  asignado: string | null
+  prioridad: number | null
 }
 
 /**

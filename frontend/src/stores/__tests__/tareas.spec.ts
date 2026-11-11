@@ -521,5 +521,45 @@ describe('useTiendaTareas', () => {
       expect(tienda.error).toBe('Subtarea no encontrada')
       expect(tienda.tareas).toEqual([conSubtareas])
     })
+
+    it('editarSubtarea envía PUT /tareas/{id}/subtareas/{id_subtarea}, reemplaza la tarea y refresca los catálogos', async () => {
+      simularObtener([conSubtareas, otra])
+      const actualizada = {
+        ...conSubtareas,
+        subtareas: [{ ...SUBTAREAS[0]!, nombre: 'Índice', asignado: null, prioridad: null }],
+      }
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(actualizada)
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      vi.mocked(clienteApi.obtener).mockClear()
+      const datos = { nombre: 'Índice', asignado: null, prioridad: null }
+      const resultado = await tienda.editarSubtarea(1, 20, datos)
+
+      expect(resultado).toBe(true)
+      expect(clienteApi.actualizar).toHaveBeenCalledWith('/tareas/1/subtareas/20', datos)
+      expect(tienda.tareas).toEqual([actualizada, otra])
+      expect(clienteApi.obtener).toHaveBeenCalledWith('/personas')
+      expect(tienda.error).toBeNull()
+    })
+
+    it('editarSubtarea con un fallo de la API guarda el error, devuelve false y no altera la lista', async () => {
+      simularObtener([conSubtareas])
+      vi.mocked(clienteApi.actualizar).mockRejectedValue(new Error('Subtarea no encontrada'))
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      vi.mocked(clienteApi.obtener).mockClear()
+      const resultado = await tienda.editarSubtarea(1, 20, {
+        nombre: 'x',
+        asignado: 'Ana',
+        prioridad: 1,
+      })
+
+      expect(resultado).toBe(false)
+      expect(tienda.error).toBe('Subtarea no encontrada')
+      expect(tienda.tareas).toEqual([conSubtareas])
+      expect(clienteApi.obtener).not.toHaveBeenCalled()
+    })
   })
 })

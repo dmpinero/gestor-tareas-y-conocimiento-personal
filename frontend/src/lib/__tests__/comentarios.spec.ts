@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   agruparComentariosPorDia,
   formatearDiaComentario,
+  formatearEdicionComentario,
   formatearHoraComentario,
   type Comentario,
 } from '@/lib/comentarios'
@@ -20,7 +21,7 @@ function isoUtcDesdeLocal(
 }
 
 function comentario(id: number, creado: string, texto = `Comentario ${id}`): Comentario {
-  return { id, texto, creado }
+  return { id, texto, creado, editado: null }
 }
 
 const HOY = new Date(2026, 10, 10, 12, 0, 0)
@@ -45,6 +46,14 @@ describe('formatearDiaComentario', () => {
   it('añade el año cuando no es el año en curso', () => {
     expect(formatearDiaComentario(new Date(2025, 11, 31, 10, 0), HOY)).toBe(
       'miércoles, 31 de diciembre de 2025',
+    )
+  })
+})
+
+describe('formatearEdicionComentario', () => {
+  it('muestra el día y la hora local de la edición', () => {
+    expect(formatearEdicionComentario(isoUtcDesdeLocal(2026, 11, 10, 17, 45), HOY)).toBe(
+      'martes, 10 de noviembre a las 17:45',
     )
   })
 })
@@ -90,5 +99,34 @@ describe('agruparComentariosPorDia', () => {
     const grupos = agruparComentariosPorDia([conSaltos], HOY)
 
     expect(grupos[0]!.comentarios[0]!.texto).toBe('Línea 1\nLínea 2')
+  })
+
+  it('da a cada comentario una referencia con su hora y su día', () => {
+    const grupos = agruparComentariosPorDia(
+      [comentario(1, isoUtcDesdeLocal(2026, 4, 1, 18, 30))],
+      HOY,
+    )
+
+    expect(grupos[0]!.comentarios[0]!.referencia).toBe('de las 18:30 del miércoles, 1 de abril')
+  })
+
+  it('numera las referencias que coinciden en día y hora para que sean únicas', () => {
+    const creado = isoUtcDesdeLocal(2026, 4, 1, 18, 30)
+    const grupos = agruparComentariosPorDia(
+      [
+        comentario(1, creado),
+        comentario(2, creado),
+        comentario(3, isoUtcDesdeLocal(2026, 4, 2, 18, 30)),
+        comentario(4, creado),
+      ],
+      HOY,
+    )
+
+    expect(grupos.flatMap((grupo) => grupo.comentarios.map((c) => c.referencia))).toEqual([
+      'de las 18:30 del miércoles, 1 de abril',
+      'de las 18:30 del miércoles, 1 de abril (2)',
+      'de las 18:30 del miércoles, 1 de abril (3)',
+      'de las 18:30 del jueves, 2 de abril',
+    ])
   })
 })

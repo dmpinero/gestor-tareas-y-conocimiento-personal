@@ -12,12 +12,16 @@ vi.mock('@/api/cliente', async (importarOriginal) => {
     clienteApi: {
       obtener: vi.fn<(...args: unknown[]) => unknown>(),
       crear: vi.fn<(...args: unknown[]) => unknown>(),
+      actualizar: vi.fn<(...args: unknown[]) => unknown>(),
+      eliminar: vi.fn<(...args: unknown[]) => unknown>(),
     },
   }
 })
 
 const obtener = vi.mocked(clienteApi.obtener)
 const crear = vi.mocked(clienteApi.crear)
+const actualizar = vi.mocked(clienteApi.actualizar)
+const eliminar = vi.mocked(clienteApi.eliminar)
 
 // Marca UTC con `Z` (como la envía la API) de una hora local dada, para que
 // los tests no dependan de la zona horaria.
@@ -26,9 +30,9 @@ function isoUtcDesdeLocal(mes: number, dia: number, hora: number, minuto: number
 }
 
 const COMENTARIOS: Comentario[] = [
-  { id: 1, texto: 'Primer comentario', creado: isoUtcDesdeLocal(4, 1, 9, 5) },
-  { id: 2, texto: 'Línea 1\nLínea 2', creado: isoUtcDesdeLocal(4, 1, 18, 30) },
-  { id: 3, texto: '<b>sin formato</b>', creado: isoUtcDesdeLocal(4, 2, 8, 0) },
+  { id: 1, texto: 'Primer comentario', creado: isoUtcDesdeLocal(4, 1, 9, 5), editado: null },
+  { id: 2, texto: 'Línea 1\nLínea 2', creado: isoUtcDesdeLocal(4, 1, 18, 30), editado: null },
+  { id: 3, texto: '<b>sin formato</b>', creado: isoUtcDesdeLocal(4, 2, 8, 0), editado: null },
 ]
 
 let contenedor: VueWrapper | null = null
@@ -61,6 +65,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 10, 10, 12, 0, 0))
   obtener.mockReset()
   crear.mockReset()
+  actualizar.mockReset()
+  eliminar.mockReset()
 })
 
 afterEach(() => {
@@ -229,7 +235,12 @@ describe('ComentariosTarea: envío', () => {
 
   it('envía con el botón, añade el comentario, vacía el campo y mantiene el foco', async () => {
     obtener.mockResolvedValue([COMENTARIOS[0]])
-    const nuevo: Comentario = { id: 9, texto: 'Hola', creado: isoUtcDesdeLocal(11, 10, 11, 45) }
+    const nuevo: Comentario = {
+      id: 9,
+      texto: 'Hola',
+      creado: isoUtcDesdeLocal(11, 10, 11, 45),
+      editado: null,
+    }
     crear.mockResolvedValue(nuevo)
     const envoltorio = await montar(7)
     await escribir(envoltorio, '  Hola  ')
@@ -254,7 +265,12 @@ describe('ComentariosTarea: envío', () => {
   // vaciarse el campo y el foco caía en el <body>.
   it('tras enviar con el botón enfocado, el foco vuelve al campo de texto', async () => {
     obtener.mockResolvedValue([])
-    crear.mockResolvedValue({ id: 9, texto: 'Hola', creado: isoUtcDesdeLocal(11, 10, 11, 45) })
+    crear.mockResolvedValue({
+      id: 9,
+      texto: 'Hola',
+      creado: isoUtcDesdeLocal(11, 10, 11, 45),
+      editado: null,
+    })
     const envoltorio = await montar(7)
     await escribir(envoltorio, 'Hola')
     ;(botonEnviar(envoltorio).element as HTMLButtonElement).focus()
@@ -280,7 +296,12 @@ describe('ComentariosTarea: envío', () => {
 
   it('el primer comentario sustituye al estado vacío', async () => {
     obtener.mockResolvedValue([])
-    crear.mockResolvedValue({ id: 9, texto: 'Hola', creado: isoUtcDesdeLocal(11, 10, 11, 45) })
+    crear.mockResolvedValue({
+      id: 9,
+      texto: 'Hola',
+      creado: isoUtcDesdeLocal(11, 10, 11, 45),
+      editado: null,
+    })
     const envoltorio = await montar()
     await escribir(envoltorio, 'Hola')
 
@@ -296,7 +317,12 @@ describe('ComentariosTarea: envío', () => {
     ['Cmd+Enter', { metaKey: true }],
   ])('envía con %s', async (_nombre, modificador) => {
     obtener.mockResolvedValue([])
-    crear.mockResolvedValue({ id: 9, texto: 'Hola', creado: isoUtcDesdeLocal(11, 10, 11, 45) })
+    crear.mockResolvedValue({
+      id: 9,
+      texto: 'Hola',
+      creado: isoUtcDesdeLocal(11, 10, 11, 45),
+      editado: null,
+    })
     const envoltorio = await montar(7)
     await escribir(envoltorio, 'Hola')
 
@@ -348,5 +374,352 @@ describe('ComentariosTarea: envío', () => {
     expect(envoltorio.get('[role="alert"]').text()).toContain('El texto es obligatorio')
     expect((campoTexto(envoltorio).element as HTMLTextAreaElement).value).toBe('Hola')
     expect(botonEnviar(envoltorio).attributes('disabled')).toBeUndefined()
+  })
+})
+
+// Nombre accesible del botón de editar o eliminar del comentario 2 (18:30 del 1 de abril).
+const REFERENCIA_2 = 'de las 18:30 del miércoles, 1 de abril'
+
+function botonPorNombre(envoltorio: VueWrapper, nombre: string) {
+  return envoltorio.get(`button[aria-label="${nombre}"]`)
+}
+
+function botonDe(envoltorio: VueWrapper, selector: string, texto: string) {
+  const encontrado = envoltorio
+    .get(selector)
+    .findAll('button')
+    .find((b) => b.text().trim() === texto)
+  if (!encontrado) throw new Error(`No hay botón «${texto}» en ${selector}`)
+  return encontrado
+}
+
+function campoEdicion(envoltorio: VueWrapper) {
+  return envoltorio.get('textarea[aria-label="Nuevo texto del comentario"]')
+}
+
+const GRUPO_GUARDAR = '[role="group"][aria-label="¿Guardar los cambios del comentario?"]'
+const GRUPO_ELIMINAR = '[role="group"][aria-label="¿Eliminar el comentario?"]'
+
+async function abrirEdicion(envoltorio: VueWrapper): Promise<void> {
+  await botonPorNombre(envoltorio, `Editar comentario ${REFERENCIA_2}`).trigger('click')
+  await flushPromises()
+}
+
+async function pedirGuardar(envoltorio: VueWrapper): Promise<void> {
+  await envoltorio.get('form[aria-label="Editar comentario"]').trigger('submit')
+  await flushPromises()
+}
+
+describe('ComentariosTarea: acciones por comentario', () => {
+  it('cada comentario tiene botones de editar y eliminar con nombres únicos aunque coincida la hora', async () => {
+    const mismaHora = {
+      id: 4,
+      texto: 'Otro a la misma hora',
+      creado: COMENTARIOS[1]!.creado,
+      editado: null,
+    }
+    obtener.mockResolvedValue([...COMENTARIOS, mismaHora])
+
+    const envoltorio = await montar()
+
+    const nombres = envoltorio
+      .findAll('[aria-label="Historial de comentarios"] button')
+      .map((b) => b.attributes('aria-label'))
+    expect(nombres).toEqual([
+      'Editar comentario de las 09:05 del miércoles, 1 de abril',
+      'Eliminar comentario de las 09:05 del miércoles, 1 de abril',
+      `Editar comentario ${REFERENCIA_2}`,
+      `Eliminar comentario ${REFERENCIA_2}`,
+      `Editar comentario ${REFERENCIA_2} (2)`,
+      `Eliminar comentario ${REFERENCIA_2} (2)`,
+      'Editar comentario de las 08:00 del jueves, 2 de abril',
+      'Eliminar comentario de las 08:00 del jueves, 2 de abril',
+    ])
+  })
+
+  it('marca "(editado)" los comentarios editados, con la hora local de la edición', async () => {
+    const editado = { ...COMENTARIOS[1]!, editado: isoUtcDesdeLocal(11, 10, 17, 45) }
+    obtener.mockResolvedValue([COMENTARIOS[0], editado])
+
+    const envoltorio = await montar()
+
+    const marcas = historial(envoltorio).querySelectorAll('[data-testid="marca-editado"]')
+    expect(marcas).toHaveLength(1)
+    const marca = marcas[0] as HTMLElement
+    expect(marca.closest('li')?.textContent).toContain('Línea 1')
+    expect(marca.getAttribute('title')).toBe('Editado el martes, 10 de noviembre a las 17:45')
+    expect(marca.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      '(editado el martes, 10 de noviembre a las 17:45)',
+    )
+    expect(marca.querySelector('.sr-only')?.textContent).toBe(
+      ' el martes, 10 de noviembre a las 17:45',
+    )
+  })
+})
+
+describe('ComentariosTarea: editar', () => {
+  it('convierte el comentario en un campo relleno con su texto, contador y el foco', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+
+    await abrirEdicion(envoltorio)
+
+    const campo = campoEdicion(envoltorio).element as HTMLTextAreaElement
+    expect(campo.value).toBe('Línea 1\nLínea 2')
+    expect(campo.maxLength).toBe(500)
+    expect(document.activeElement).toBe(campo)
+    const contador = document.getElementById(campo.getAttribute('aria-describedby')!)
+    expect(contador?.textContent?.trim()).toBe('15/500')
+    expect(botonDe(envoltorio, 'form[aria-label="Editar comentario"]', 'Guardar').exists()).toBe(
+      true,
+    )
+    expect(botonDe(envoltorio, 'form[aria-label="Editar comentario"]', 'Cancelar').exists()).toBe(
+      true,
+    )
+  })
+
+  it('con el texto vacío muestra un error y no pide confirmación', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    await campoEdicion(envoltorio).setValue('  \n ')
+    await flushPromises()
+
+    await pedirGuardar(envoltorio)
+
+    expect(envoltorio.get('[role="alert"]').text()).toBe('El comentario no puede estar vacío.')
+    expect(envoltorio.find(GRUPO_GUARDAR).exists()).toBe(false)
+    expect(actualizar).not.toHaveBeenCalled()
+  })
+
+  it('Guardar pide confirmación antes de llamar a la API', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+
+    await botonDe(envoltorio, 'form[aria-label="Editar comentario"]', 'Guardar').trigger('click')
+    await flushPromises()
+
+    expect(envoltorio.find(GRUPO_GUARDAR).exists()).toBe(true)
+    expect(document.activeElement).toBe(botonDe(envoltorio, GRUPO_GUARDAR, 'Cancelar').element)
+    expect(actualizar).not.toHaveBeenCalled()
+  })
+
+  it('al confirmar envía el texto, lo muestra "(editado)" y devuelve el foco al botón de editar', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    actualizar.mockResolvedValue({
+      ...COMENTARIOS[1]!,
+      texto: 'Texto nuevo',
+      editado: isoUtcDesdeLocal(11, 10, 11, 50),
+    })
+    const envoltorio = await montar(7)
+    await abrirEdicion(envoltorio)
+    await campoEdicion(envoltorio).setValue('Texto nuevo')
+    await flushPromises()
+    await pedirGuardar(envoltorio)
+
+    await botonDe(envoltorio, GRUPO_GUARDAR, 'Guardar').trigger('click')
+    await flushPromises()
+
+    expect(actualizar).toHaveBeenCalledWith('/tareas/7/comentarios/2', { texto: 'Texto nuevo' })
+    expect(envoltorio.find('textarea[aria-label="Nuevo texto del comentario"]').exists()).toBe(
+      false,
+    )
+    const textos = [...historial(envoltorio).querySelectorAll('li li p')].map((p) => p.textContent)
+    expect(textos).toEqual(['Primer comentario', 'Texto nuevo', '<b>sin formato</b>'])
+    expect(historial(envoltorio).querySelectorAll('[data-testid="marca-editado"]')).toHaveLength(1)
+    expect(document.activeElement).toBe(
+      botonPorNombre(envoltorio, `Editar comentario ${REFERENCIA_2}`).element,
+    )
+    expect(envoltorio.get('[aria-live="polite"]').text()).toBe('Comentario actualizado')
+  })
+
+  it('si la API falla muestra una alerta y conserva el texto en edición', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    actualizar.mockRejectedValue(new ErrorApi(404, 'Comentario no encontrado'))
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    await campoEdicion(envoltorio).setValue('Texto nuevo')
+    await flushPromises()
+    await pedirGuardar(envoltorio)
+
+    await botonDe(envoltorio, GRUPO_GUARDAR, 'Guardar').trigger('click')
+    await flushPromises()
+
+    expect(envoltorio.get('[role="alert"]').text()).toContain('Comentario no encontrado')
+    expect(envoltorio.find(GRUPO_GUARDAR).exists()).toBe(false)
+    const campo = campoEdicion(envoltorio).element as HTMLTextAreaElement
+    expect(campo.value).toBe('Texto nuevo')
+    expect(document.activeElement).toBe(campo)
+  })
+
+  it('Cancelar en la confirmación vuelve al campo con lo escrito', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    await campoEdicion(envoltorio).setValue('Texto nuevo')
+    await flushPromises()
+    await pedirGuardar(envoltorio)
+
+    await botonDe(envoltorio, GRUPO_GUARDAR, 'Cancelar').trigger('click')
+    await flushPromises()
+
+    expect(envoltorio.find(GRUPO_GUARDAR).exists()).toBe(false)
+    const campo = campoEdicion(envoltorio).element as HTMLTextAreaElement
+    expect(campo.value).toBe('Texto nuevo')
+    expect(document.activeElement).toBe(campo)
+    expect(actualizar).not.toHaveBeenCalled()
+  })
+
+  it('Escape en la confirmación vuelve al campo sin propagarse', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    await pedirGuardar(envoltorio)
+    const escuchaVentana = vi.fn<(evento: KeyboardEvent) => void>()
+    window.addEventListener('keydown', escuchaVentana)
+
+    await envoltorio.get(GRUPO_GUARDAR).trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    window.removeEventListener('keydown', escuchaVentana)
+
+    expect(envoltorio.find(GRUPO_GUARDAR).exists()).toBe(false)
+    expect(envoltorio.find('textarea[aria-label="Nuevo texto del comentario"]').exists()).toBe(true)
+    expect(escuchaVentana).not.toHaveBeenCalled()
+    expect(actualizar).not.toHaveBeenCalled()
+  })
+
+  it('Cancelar en el formulario restaura el comentario y devuelve el foco al botón de editar', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    await campoEdicion(envoltorio).setValue('Texto nuevo')
+    await flushPromises()
+
+    await botonDe(envoltorio, 'form[aria-label="Editar comentario"]', 'Cancelar').trigger('click')
+    await flushPromises()
+
+    expect(envoltorio.find('textarea[aria-label="Nuevo texto del comentario"]').exists()).toBe(
+      false,
+    )
+    expect(historial(envoltorio).textContent).toContain('Línea 1')
+    expect(document.activeElement).toBe(
+      botonPorNombre(envoltorio, `Editar comentario ${REFERENCIA_2}`).element,
+    )
+    expect(actualizar).not.toHaveBeenCalled()
+  })
+
+  it('Escape en el formulario cancela la edición sin propagarse', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    const escuchaVentana = vi.fn<(evento: KeyboardEvent) => void>()
+    window.addEventListener('keydown', escuchaVentana)
+
+    await campoEdicion(envoltorio).trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    window.removeEventListener('keydown', escuchaVentana)
+
+    expect(envoltorio.find('textarea[aria-label="Nuevo texto del comentario"]').exists()).toBe(
+      false,
+    )
+    expect(escuchaVentana).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(
+      botonPorNombre(envoltorio, `Editar comentario ${REFERENCIA_2}`).element,
+    )
+  })
+})
+
+describe('ComentariosTarea: eliminar', () => {
+  async function pedirEliminar(envoltorio: VueWrapper): Promise<void> {
+    await botonPorNombre(envoltorio, `Eliminar comentario ${REFERENCIA_2}`).trigger('click')
+    await flushPromises()
+  }
+
+  it('pide confirmación en línea antes de llamar a la API', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+
+    await pedirEliminar(envoltorio)
+
+    expect(botonDe(envoltorio, GRUPO_ELIMINAR, 'Eliminar').exists()).toBe(true)
+    expect(document.activeElement).toBe(botonDe(envoltorio, GRUPO_ELIMINAR, 'Cancelar').element)
+    expect(eliminar).not.toHaveBeenCalled()
+  })
+
+  it('al confirmar lo borra, lo quita de la lista y lleva el foco al historial', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    eliminar.mockResolvedValue(undefined)
+    const envoltorio = await montar(7)
+    await pedirEliminar(envoltorio)
+
+    await botonDe(envoltorio, GRUPO_ELIMINAR, 'Eliminar').trigger('click')
+    await flushPromises()
+
+    expect(eliminar).toHaveBeenCalledWith('/tareas/7/comentarios/2')
+    const textos = [...historial(envoltorio).querySelectorAll('li li p')].map((p) => p.textContent)
+    expect(textos).toEqual(['Primer comentario', '<b>sin formato</b>'])
+    expect(document.activeElement).toBe(historial(envoltorio).parentElement)
+    expect(envoltorio.get('[aria-live="polite"]').text()).toBe('Comentario eliminado')
+  })
+
+  it('al borrar el último comentario muestra el estado vacío y lleva el foco al campo nuevo', async () => {
+    obtener.mockResolvedValue([COMENTARIOS[1]])
+    eliminar.mockResolvedValue(undefined)
+    const envoltorio = await montar()
+    await pedirEliminar(envoltorio)
+
+    await botonDe(envoltorio, GRUPO_ELIMINAR, 'Eliminar').trigger('click')
+    await flushPromises()
+
+    expect(envoltorio.text()).toContain('Todavía no hay comentarios.')
+    expect(document.activeElement).toBe(campoTexto(envoltorio).element)
+  })
+
+  it('Cancelar no llama a la API y devuelve el foco al botón de eliminar', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await pedirEliminar(envoltorio)
+
+    await botonDe(envoltorio, GRUPO_ELIMINAR, 'Cancelar').trigger('click')
+    await flushPromises()
+
+    expect(envoltorio.find(GRUPO_ELIMINAR).exists()).toBe(false)
+    expect(eliminar).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(
+      botonPorNombre(envoltorio, `Eliminar comentario ${REFERENCIA_2}`).element,
+    )
+  })
+
+  it('Escape cancela la confirmación sin propagarse', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await pedirEliminar(envoltorio)
+    const escuchaVentana = vi.fn<(evento: KeyboardEvent) => void>()
+    window.addEventListener('keydown', escuchaVentana)
+
+    await envoltorio.get(GRUPO_ELIMINAR).trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    window.removeEventListener('keydown', escuchaVentana)
+
+    expect(envoltorio.find(GRUPO_ELIMINAR).exists()).toBe(false)
+    expect(escuchaVentana).not.toHaveBeenCalled()
+    expect(eliminar).not.toHaveBeenCalled()
+  })
+
+  it('si la API falla muestra una alerta y conserva el comentario', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    eliminar.mockRejectedValue(new ErrorApi(404, 'Comentario no encontrado'))
+    const envoltorio = await montar()
+    await pedirEliminar(envoltorio)
+
+    await botonDe(envoltorio, GRUPO_ELIMINAR, 'Eliminar').trigger('click')
+    await flushPromises()
+
+    expect(envoltorio.get('[role="alert"]').text()).toContain('Comentario no encontrado')
+    expect(historial(envoltorio).textContent).toContain('Línea 1')
+    expect(document.activeElement).toBe(
+      botonPorNombre(envoltorio, `Eliminar comentario ${REFERENCIA_2}`).element,
+    )
   })
 })

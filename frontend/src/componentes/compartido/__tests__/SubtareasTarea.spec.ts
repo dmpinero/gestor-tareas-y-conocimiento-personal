@@ -1,4 +1,4 @@
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
@@ -396,6 +396,280 @@ describe('SubtareasTarea', () => {
       expect(envoltorio.find('form').exists()).toBe(false)
       expect(clienteApi.crear).not.toHaveBeenCalled()
       expect(escuchaVentana).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('editar', () => {
+    async function abrirEdicion(envoltorio: VueWrapper, nombre: string): Promise<void> {
+      await boton(envoltorio, `Editar subtarea ${nombre}`).trigger('click')
+      await flushPromises()
+    }
+
+    function grupoConfirmacion(envoltorio: VueWrapper) {
+      return envoltorio.find('[role="group"]')
+    }
+
+    function formularioEdicion(envoltorio: VueWrapper) {
+      return envoltorio.get('tbody form')
+    }
+
+    function botonDe(contenedor: Pick<DOMWrapper<Element>, 'findAll'>, texto: string) {
+      const encontrado = contenedor.findAll('button').find((b) => b.text().trim() === texto)
+      if (!encontrado) throw new Error(`No hay botón con el texto «${texto}»`)
+      return encontrado
+    }
+
+    it('cada fila tiene un botón "Editar subtarea" con un nombre accesible único', async () => {
+      const envoltorio = await montar()
+
+      const nombres = envoltorio.findAll('tbody button').map((b) => b.attributes('aria-label'))
+      expect(nombres).toContain('Editar subtarea Redactar índice')
+      expect(nombres).toContain('Editar subtarea Revisar cifras')
+      expect(nombres).toContain('Editar subtarea Enviar borrador')
+      expect(new Set(nombres).size).toBe(nombres.length)
+    })
+
+    it('convierte la fila en un formulario relleno con sus datos y el foco en el nombre', async () => {
+      const envoltorio = await montar()
+
+      await abrirEdicion(envoltorio, 'Redactar índice')
+
+      const nombre = campo(envoltorio, 'Nuevo nombre de la subtarea Redactar índice')
+      expect(nombre.value).toBe('Redactar índice')
+      expect(nombre.maxLength).toBe(200)
+      expect(document.activeElement).toBe(nombre)
+      const persona = campo(envoltorio, 'Nueva persona asignada de la subtarea Redactar índice')
+      expect(persona.value).toBe('Ana')
+      expect(persona.maxLength).toBe(100)
+      const opciones = envoltorio
+        .findAll(`datalist#${persona.getAttribute('list')} option`)
+        .map((o) => o.attributes('value'))
+      expect(opciones).toEqual(['Ana', 'Luis'])
+      const prioridad = campo(envoltorio, 'Nueva prioridad de la subtarea Redactar índice')
+      expect([prioridad.type, prioridad.min, prioridad.max, prioridad.value]).toEqual([
+        'number',
+        '1',
+        '5',
+        '2',
+      ])
+      expect(botonDe(formularioEdicion(envoltorio), 'Guardar').exists()).toBe(true)
+      expect(botonDe(formularioEdicion(envoltorio), 'Cancelar').exists()).toBe(true)
+      // El resto de filas sigue igual.
+      expect(filas(envoltorio)[1]?.slice(0, 3)).toEqual(['Revisar cifras', '—', '—'])
+    })
+
+    it('rellena vacíos la persona y la prioridad si la subtarea no las tiene', async () => {
+      const envoltorio = await montar()
+
+      await abrirEdicion(envoltorio, 'Revisar cifras')
+
+      expect(campo(envoltorio, 'Nueva persona asignada de la subtarea Revisar cifras').value).toBe(
+        '',
+      )
+      expect(campo(envoltorio, 'Nueva prioridad de la subtarea Revisar cifras').value).toBe('')
+    })
+
+    it('los campos de edición no repiten ids ni nombres con la fila de alta abierta', async () => {
+      const envoltorio = await montar()
+      await abrirAlta(envoltorio)
+      await abrirEdicion(envoltorio, 'Redactar índice')
+
+      const ids = [...document.querySelectorAll('[id]')].map((elemento) => elemento.id)
+      expect(new Set(ids).size).toBe(ids.length)
+      const etiquetas = envoltorio.findAll('label').map((l) => l.text().trim())
+      expect(new Set(etiquetas).size).toBe(etiquetas.length)
+    })
+
+    it('sin nombre muestra un error y no pide confirmación ni llama a la API', async () => {
+      const envoltorio = await montar()
+      await abrirEdicion(envoltorio, 'Redactar índice')
+      await escribir(envoltorio, 'Nuevo nombre de la subtarea Redactar índice', '  ')
+
+      await formularioEdicion(envoltorio).trigger('submit')
+      await flushPromises()
+
+      expect(envoltorio.get('[role="alert"]').text()).toBe(
+        'El nombre de la subtarea es obligatorio.',
+      )
+      expect(grupoConfirmacion(envoltorio).exists()).toBe(false)
+      expect(clienteApi.actualizar).not.toHaveBeenCalled()
+    })
+
+    it('con una prioridad fuera de 1–5 muestra un error y no llama a la API', async () => {
+      const envoltorio = await montar()
+      await abrirEdicion(envoltorio, 'Redactar índice')
+      await escribir(envoltorio, 'Nueva prioridad de la subtarea Redactar índice', '0')
+
+      await formularioEdicion(envoltorio).trigger('submit')
+      await flushPromises()
+
+      expect(envoltorio.get('[role="alert"]').text()).toBe(
+        'La prioridad debe ser un número entero del 1 al 5.',
+      )
+      expect(clienteApi.actualizar).not.toHaveBeenCalled()
+    })
+
+    it('Guardar pide confirmación en línea antes de llamar a la API', async () => {
+      const envoltorio = await montar()
+      await abrirEdicion(envoltorio, 'Redactar índice')
+
+      await botonDe(formularioEdicion(envoltorio), 'Guardar').trigger('click')
+      await flushPromises()
+
+      const grupo = grupoConfirmacion(envoltorio)
+      expect(grupo.attributes('aria-label')).toBe(
+        '¿Guardar los cambios de la subtarea Redactar índice?',
+      )
+      expect(botonDe(grupo, 'Guardar').exists()).toBe(true)
+      expect(botonDe(grupo, 'Cancelar').exists()).toBe(true)
+      expect(document.activeElement).toBe(botonDe(grupo, 'Cancelar').element)
+      expect(clienteApi.actualizar).not.toHaveBeenCalled()
+    })
+
+    it('al confirmar envía el reemplazo completo (vacía persona y prioridad), pinta la fila y devuelve el foco', async () => {
+      const envoltorio = await montar()
+      const editada = {
+        ...SUBTAREAS[0]!,
+        nombre: 'Redactar el índice',
+        asignado: null,
+        prioridad: null,
+      }
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({
+        ...TAREA,
+        subtareas: [editada, SUBTAREAS[1]!, SUBTAREAS[2]!],
+      })
+      await abrirEdicion(envoltorio, 'Redactar índice')
+      await escribir(
+        envoltorio,
+        'Nuevo nombre de la subtarea Redactar índice',
+        ' Redactar el índice ',
+      )
+      await escribir(envoltorio, 'Nueva persona asignada de la subtarea Redactar índice', '  ')
+      await escribir(envoltorio, 'Nueva prioridad de la subtarea Redactar índice', '')
+      await formularioEdicion(envoltorio).trigger('submit')
+      await flushPromises()
+      vi.mocked(clienteApi.obtener).mockClear()
+
+      await botonDe(grupoConfirmacion(envoltorio), 'Guardar').trigger('click')
+      await flushPromises()
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith('/tareas/1/subtareas/20', {
+        nombre: 'Redactar el índice',
+        asignado: null,
+        prioridad: null,
+      })
+      expect(envoltorio.find('tbody form').exists()).toBe(false)
+      expect(grupoConfirmacion(envoltorio).exists()).toBe(false)
+      expect(filas(envoltorio)[0]?.slice(0, 3)).toEqual(['Redactar el índice', '—', '—'])
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(
+        'Editar subtarea Redactar el índice',
+      )
+      expect(clienteApi.obtener).toHaveBeenCalledWith('/personas')
+    })
+
+    it('envía la persona y la prioridad editadas', async () => {
+      const envoltorio = await montar()
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(TAREA)
+      await abrirEdicion(envoltorio, 'Revisar cifras')
+      await escribir(envoltorio, 'Nueva persona asignada de la subtarea Revisar cifras', ' Marta ')
+      await escribir(envoltorio, 'Nueva prioridad de la subtarea Revisar cifras', '4')
+      await formularioEdicion(envoltorio).trigger('submit')
+      await flushPromises()
+
+      await botonDe(grupoConfirmacion(envoltorio), 'Guardar').trigger('click')
+      await flushPromises()
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith('/tareas/1/subtareas/21', {
+        nombre: 'Revisar cifras',
+        asignado: 'Marta',
+        prioridad: 4,
+      })
+    })
+
+    it('Cancelar en la confirmación vuelve al formulario con lo escrito y no llama a la API', async () => {
+      const envoltorio = await montar()
+      await abrirEdicion(envoltorio, 'Redactar índice')
+      await escribir(envoltorio, 'Nuevo nombre de la subtarea Redactar índice', 'Otro nombre')
+      await formularioEdicion(envoltorio).trigger('submit')
+      await flushPromises()
+
+      await botonDe(grupoConfirmacion(envoltorio), 'Cancelar').trigger('click')
+      await flushPromises()
+
+      expect(grupoConfirmacion(envoltorio).exists()).toBe(false)
+      const nombre = campo(envoltorio, 'Nuevo nombre de la subtarea Redactar índice')
+      expect(nombre.value).toBe('Otro nombre')
+      expect(document.activeElement).toBe(nombre)
+      expect(clienteApi.actualizar).not.toHaveBeenCalled()
+    })
+
+    it('Escape en la confirmación vuelve al formulario sin propagarse', async () => {
+      const envoltorio = await montar()
+      await abrirEdicion(envoltorio, 'Redactar índice')
+      await formularioEdicion(envoltorio).trigger('submit')
+      await flushPromises()
+      const escuchaVentana = vi.fn<(evento: KeyboardEvent) => void>()
+      window.addEventListener('keydown', escuchaVentana)
+
+      await grupoConfirmacion(envoltorio).trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+      window.removeEventListener('keydown', escuchaVentana)
+
+      expect(grupoConfirmacion(envoltorio).exists()).toBe(false)
+      expect(envoltorio.find('tbody form').exists()).toBe(true)
+      expect(escuchaVentana).not.toHaveBeenCalled()
+      expect(clienteApi.actualizar).not.toHaveBeenCalled()
+    })
+
+    it('Cancelar en el formulario restaura la fila y devuelve el foco al botón de editar', async () => {
+      const envoltorio = await montar()
+      await abrirEdicion(envoltorio, 'Redactar índice')
+      await escribir(envoltorio, 'Nuevo nombre de la subtarea Redactar índice', 'Otro nombre')
+
+      await botonDe(formularioEdicion(envoltorio), 'Cancelar').trigger('click')
+      await flushPromises()
+
+      expect(envoltorio.find('tbody form').exists()).toBe(false)
+      expect(filas(envoltorio)[0]?.slice(0, 3)).toEqual(['Redactar índice', 'Ana', '2'])
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(
+        'Editar subtarea Redactar índice',
+      )
+      expect(clienteApi.actualizar).not.toHaveBeenCalled()
+    })
+
+    it('Escape en el formulario cancela la edición sin propagarse', async () => {
+      const envoltorio = await montar()
+      await abrirEdicion(envoltorio, 'Redactar índice')
+      const escuchaVentana = vi.fn<(evento: KeyboardEvent) => void>()
+      window.addEventListener('keydown', escuchaVentana)
+
+      await formularioEdicion(envoltorio).trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+      window.removeEventListener('keydown', escuchaVentana)
+
+      expect(envoltorio.find('tbody form').exists()).toBe(false)
+      expect(escuchaVentana).not.toHaveBeenCalled()
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(
+        'Editar subtarea Redactar índice',
+      )
+    })
+
+    it('si la API falla conserva lo escrito en el formulario', async () => {
+      const envoltorio = await montar()
+      vi.mocked(clienteApi.actualizar).mockRejectedValue(new Error('Error del servidor'))
+      await abrirEdicion(envoltorio, 'Redactar índice')
+      await escribir(envoltorio, 'Nuevo nombre de la subtarea Redactar índice', 'Otro nombre')
+      await formularioEdicion(envoltorio).trigger('submit')
+      await flushPromises()
+
+      await botonDe(grupoConfirmacion(envoltorio), 'Guardar').trigger('click')
+      await flushPromises()
+
+      expect(useTiendaTareas().error).toBe('Error del servidor')
+      expect(grupoConfirmacion(envoltorio).exists()).toBe(false)
+      const nombre = campo(envoltorio, 'Nuevo nombre de la subtarea Redactar índice')
+      expect(nombre.value).toBe('Otro nombre')
+      expect(document.activeElement).toBe(nombre)
     })
   })
 })
