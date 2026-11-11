@@ -1,5 +1,6 @@
 from copy import deepcopy
 from dataclasses import replace
+from datetime import datetime
 
 from gestor_tareas.dominio.comentario.entidades import Comentario
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
@@ -94,6 +95,18 @@ class RepositorioTareasFalso:
         self._tareas[id_tarea].subtareas.remove(subtarea)
         return deepcopy(self._tareas[id_tarea])
 
+    def editar_subtarea(self, id_tarea: int, subtarea: Subtarea) -> Tarea | None:
+        assert subtarea.id is not None
+        guardada = self._subtarea(id_tarea, subtarea.id)
+        if guardada is None:
+            return None
+        # Como el repositorio real: sustituye nombre, persona y prioridad, y conserva
+        # el estado resuelta.
+        guardada.nombre = subtarea.nombre
+        guardada.asignado = subtarea.asignado
+        guardada.prioridad = subtarea.prioridad
+        return deepcopy(self._tareas[id_tarea])
+
 
 class RepositorioComentariosFalso:
     """Doble de RepositorioComentarios en memoria, sobre las tareas de otro doble."""
@@ -101,11 +114,13 @@ class RepositorioComentariosFalso:
     def __init__(self, tareas: RepositorioTareasFalso) -> None:
         self._tareas = tareas
         self.comentarios: list[Comentario] = []
+        self._siguiente_id = 0
 
     def crear(self, comentario: Comentario) -> Comentario | None:
         if self._tareas.obtener_por_id(comentario.id_tarea) is None:
             return None
-        guardado = replace(comentario, id=len(self.comentarios) + 1)
+        self._siguiente_id += 1
+        guardado = replace(comentario, id=self._siguiente_id)
         self.comentarios.append(guardado)
         return replace(guardado)
 
@@ -114,6 +129,35 @@ class RepositorioComentariosFalso:
             return None
         propios = [c for c in self.comentarios if c.id_tarea == id_tarea]
         return [replace(c) for c in sorted(propios, key=lambda c: (c.creado, c.id))]
+
+    def existe_tarea(self, id_tarea: int) -> bool:
+        return self._tareas.obtener_por_id(id_tarea) is not None
+
+    def _indice(self, id_tarea: int, id_comentario: int) -> int | None:
+        return next(
+            (
+                i
+                for i, c in enumerate(self.comentarios)
+                if c.id == id_comentario and c.id_tarea == id_tarea
+            ),
+            None,
+        )
+
+    def editar(
+        self, id_tarea: int, id_comentario: int, texto: str, editado: datetime
+    ) -> Comentario | None:
+        indice = self._indice(id_tarea, id_comentario)
+        if indice is None:
+            return None
+        self.comentarios[indice] = replace(self.comentarios[indice], texto=texto, editado=editado)
+        return replace(self.comentarios[indice])
+
+    def eliminar(self, id_tarea: int, id_comentario: int) -> bool:
+        indice = self._indice(id_tarea, id_comentario)
+        if indice is None:
+            return False
+        del self.comentarios[indice]
+        return True
 
 
 class RepositorioWorkflowOportunidadesFalso:

@@ -35,7 +35,18 @@ class ComentarioCrearEsquema(BaseModel):
     texto: TextoObligatorio = Field(min_length=1, max_length=500, json_schema_extra=PATRON_NO_VACIO)
 
 
+class ComentarioEditarEsquema(ComentarioCrearEsquema):
+    """Cuerpo de la edición de un comentario: el texto nuevo, con las mismas reglas
+    que el alta."""
+
+
 class ComentarioSalidaEsquema(BaseModel):
     id: int
     texto: str
-    creado: InstanteUtc = Field(description="Instante de alta en UTC; lo pone el servidor.")
+    creado: InstanteUtc = Field(
+        description="Instante de alta en UTC; lo pone el servidor y no cambia al editar."
+    )
+    editado: InstanteUtc | None = Field(
+        description="Instante de la última edición en UTC, o null si nunca se editó; lo "
+        "pone el servidor."
+    )

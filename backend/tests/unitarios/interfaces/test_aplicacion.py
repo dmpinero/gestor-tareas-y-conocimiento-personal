@@ -22,6 +22,7 @@ def test_la_api_expone_salud_tareas_subtareas_comentarios_catalogos_y_workflow_b
         "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}",
         "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}/resuelta",
         "/api/v1/tareas/{id_tarea}/comentarios",
+        "/api/v1/tareas/{id_tarea}/comentarios/{id_comentario}",
         "/api/v1/etiquetas",
         "/api/v1/personas",
         "/api/v1/workflow-oportunidades/pasos",

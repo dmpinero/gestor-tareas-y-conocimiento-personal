@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import func, select
 
 from gestor_tareas.aplicacion.tarea.anadir_subtarea import AnadirSubtarea
+from gestor_tareas.aplicacion.tarea.editar_subtarea import EditarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_subtarea import EliminarSubtarea
 from gestor_tareas.aplicacion.tarea.marcar_subtarea_resuelta import MarcarSubtareaResuelta
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
@@ -121,3 +122,40 @@ def test_eliminar_y_marcar_a_la_vez_la_misma_subtarea(sesion_bd) -> None:
                 f"No existe la subtarea con id {id_sub} en la tarea con id {id_tarea}"
             )
     assert _contar(sesion_bd, SubtareaModelo, SubtareaModelo.tarea_id == id_tarea) == 0
+
+
+def test_editar_y_eliminar_a_la_vez_la_misma_subtarea(sesion_bd) -> None:
+    id_tarea = _nueva_tarea(sesion_bd)
+    tarea = RepositorioTareasSqlAlchemy(sesion_bd).anadir_subtarea(id_tarea, Subtarea(nombre="X"))
+    id_sub = tarea.subtareas[0].id
+
+    operaciones = [
+        lambda: _en_sesion(lambda t, _: EliminarSubtarea(t).ejecutar(id_tarea, id_sub)),
+        *[
+            lambda i=i: _en_sesion(
+                lambda t, p: EditarSubtarea(t, p).ejecutar(
+                    id_tarea, id_sub, f"Y{i}", asignado="Ana", prioridad=3
+                )
+            )
+            for i in range(_HILOS - 1)
+        ],
+    ]
+    resultados = _a_la_vez(operaciones)
+
+    # Cada edición llegó antes de la eliminación (y la respuesta, releída tras
+    # confirmar, puede no incluir ya la subtarea) o después (404); nunca un 500 ni
+    # la subtarea con datos a medias.
+    assert isinstance(resultados[0], Tarea)
+    assert resultados[0].subtareas == []
+    for i, resultado in enumerate(resultados[1:]):
+        if isinstance(resultado, Tarea):
+            assert [(s.asignado, s.prioridad) for s in resultado.subtareas] in ([], [("Ana", 3)])
+            assert all(s.nombre.startswith("Y") for s in resultado.subtareas), i
+        else:
+            assert str(resultado) == (
+                f"No existe la subtarea con id {id_sub} en la tarea con id {id_tarea}"
+            )
+    assert _contar(sesion_bd, SubtareaModelo, SubtareaModelo.tarea_id == id_tarea) == 0
+    # Si alguna edición llegó a tiempo, dio de alta a la persona una sola vez; si
+    # ninguna, el alta se deshizo con su transacción.
+    assert _contar(sesion_bd, PersonaModelo, PersonaModelo.nombre == "Ana") in (0, 1)

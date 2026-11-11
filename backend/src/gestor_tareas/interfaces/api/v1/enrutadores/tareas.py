@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
 from gestor_tareas.aplicacion.tarea.anadir_subtarea import AnadirSubtarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
+from gestor_tareas.aplicacion.tarea.editar_subtarea import EditarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_subtarea import EliminarSubtarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
@@ -30,6 +31,7 @@ from gestor_tareas.interfaces.api.respuestas_error import (
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     PasoHechoEsquema,
     SubtareaCrearEsquema,
+    SubtareaEditarEsquema,
     SubtareaResueltaEsquema,
     TareaActualizarEsquema,
     TareaCompletadaEsquema,
@@ -185,6 +187,30 @@ def marcar_subtarea_resuelta(
     tarea = MarcarSubtareaResuelta(RepositorioTareasSqlAlchemy(sesion)).ejecutar(
         id_tarea, id_subtarea, datos.resuelta
     )
+    return _a_esquema(tarea)
+
+
+@enrutador.put(
+    "/{id_tarea:int}/subtareas/{id_subtarea:int}",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def editar_subtarea(
+    id_tarea: int,
+    id_subtarea: int,
+    datos: SubtareaEditarEsquema,
+    sesion: Session = Depends(obtener_sesion),
+) -> TareaSalidaEsquema:
+    """Sustituye el nombre, la persona asignada y la prioridad de la subtarea y
+    devuelve la tarea completa. Las validaciones son las del alta. Es un reemplazo
+    completo: si `asignado` o `prioridad` faltan o son `null`, se vacían; el estado
+    resuelta no cambia. La persona se busca en su catálogo sin distinguir mayúsculas
+    y se da de alta si no existe. 404 si la tarea no existe o no tiene una subtarea
+    con ese id (también si la subtarea es de otra tarea); entonces no se da de alta
+    a nadie."""
+    tarea = EditarSubtarea(
+        RepositorioTareasSqlAlchemy(sesion), RepositorioPersonasSqlAlchemy(sesion)
+    ).ejecutar(id_tarea, id_subtarea, **datos.model_dump())
     return _a_esquema(tarea)
 
 
