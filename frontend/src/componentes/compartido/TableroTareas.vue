@@ -166,15 +166,18 @@ function terminarArrastre(): void {
         </p>
 
         <!-- Las columnas desplazan en horizontal dentro de su contenedor, sin
-             desbordar la página en pantallas estrechas. -->
-        <div class="flex max-w-full gap-3 overflow-x-auto pb-2">
+             desbordar la página en pantallas estrechas. `relative` hace que los
+             textos sr-only (posición absoluta) de las columnas se recorten aquí:
+             sin él se posicionaban respecto a un antecesor fuera del scroll y
+             ensanchaban la página. -->
+        <div class="relative flex max-w-full gap-3 overflow-x-auto pb-2">
           <section
             v-for="estado in grupoActivo.estados"
             :key="estado.id"
             :aria-label="`Estado ${estado.nombre}`"
             :data-destino="idColumnaDestino === estado.id ? 'true' : undefined"
             :class="[
-              'bg-muted/40 flex w-72 shrink-0 flex-col gap-2 rounded-lg border p-2',
+              'bg-muted/40 relative flex w-72 shrink-0 flex-col gap-2 rounded-lg border p-2',
               idColumnaDestino === estado.id && 'border-primary ring-primary ring-2',
             ]"
             @dragover="alArrastrarSobre($event, estado)"

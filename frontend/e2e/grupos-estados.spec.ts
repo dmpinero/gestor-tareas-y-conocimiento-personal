@@ -169,6 +169,9 @@ test('muestra las tareas en un calendario según su fecha de vencimiento', async
   expect(creada.status()).toBe(201)
 
   await page.goto('/tareas')
+  // La búsqueda también filtra el calendario: así el día solo tiene esta tarea
+  // aunque otras pruebas hayan dejado tareas que vencen el mismo día.
+  await page.getByLabel('Buscar').fill(tarea)
   await page.getByRole('button', { name: 'Ver como calendario' }).click()
   await expect(page.getByRole('button', { name: 'Ver como calendario' })).toHaveAttribute(
     'aria-pressed',
