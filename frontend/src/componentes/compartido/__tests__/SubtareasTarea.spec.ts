@@ -112,6 +112,39 @@ function campo(envoltorio: VueWrapper, etiqueta: string): HTMLInputElement {
   return envoltorio.find(`#${id}`).element as HTMLInputElement
 }
 
+// jsdom no maqueta ni tiene ResizeObserver, así que el componente no mide nada
+// y pinta la tabla. Para probar las tarjetas se sustituye ResizeObserver por uno
+// que informa del ancho indicado al observar, y que deja cambiarlo después.
+type AvisoTamano = (
+  entradas: { borderBoxSize: { inlineSize: number; blockSize: number }[] }[],
+) => void
+let avisarTamano: AvisoTamano | null = null
+
+function fijarAncho(ancho: number): void {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(private readonly llamada: AvisoTamano) {
+        avisarTamano = llamada
+      }
+      observe(): void {
+        this.llamada([{ borderBoxSize: [{ inlineSize: ancho, blockSize: 200 }] }])
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  )
+}
+
+async function cambiarAncho(ancho: number): Promise<void> {
+  avisarTamano?.([{ borderBoxSize: [{ inlineSize: ancho, blockSize: 200 }] }])
+  await flushPromises()
+}
+
+function tarjetas(envoltorio: VueWrapper) {
+  return envoltorio.findAll('[data-testid="tarjeta-subtarea"]')
+}
+
 describe('SubtareasTarea', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -121,6 +154,181 @@ describe('SubtareasTarea', () => {
   afterEach(() => {
     contenedor?.unmount()
     contenedor = null
+    avisarTamano = null
+    vi.unstubAllGlobals()
+  })
+
+  describe('diseño según el ancho disponible', () => {
+    it('sin medida (ancho desconocido) muestra la tabla y no las tarjetas', async () => {
+      const envoltorio = await montar()
+
+      expect(envoltorio.find('table').exists()).toBe(true)
+      expect(envoltorio.find('[data-testid="tarjetas-subtareas"]').exists()).toBe(false)
+    })
+
+    it('con espacio de sobra muestra la tabla y no las tarjetas', async () => {
+      fijarAncho(800)
+      const envoltorio = await montar()
+
+      expect(envoltorio.find('table').exists()).toBe(true)
+      expect(tarjetas(envoltorio)).toHaveLength(0)
+    })
+
+    it('en un hueco estrecho muestra una tarjeta por subtarea y ninguna tabla', async () => {
+      fijarAncho(360)
+      const envoltorio = await montar()
+
+      expect(envoltorio.find('table').exists()).toBe(false)
+      expect(tarjetas(envoltorio)).toHaveLength(3)
+      // Un solo control por subtarea en el árbol de accesibilidad.
+      const nombres = envoltorio.findAll('button').map((b) => b.attributes('aria-label'))
+      expect(nombres.filter((n) => n === 'Editar subtarea Redactar índice')).toHaveLength(1)
+    })
+
+    it('cada tarjeta muestra el nombre, la persona y la prioridad etiquetadas, o una raya', async () => {
+      fijarAncho(360)
+      const envoltorio = await montar()
+
+      const datos = tarjetas(envoltorio).map((tarjeta) => ({
+        nombre: tarjeta.get('[data-testid="nombre-subtarea"]').text().trim(),
+        etiquetas: tarjeta.findAll('dt').map((dt) => dt.text().trim()),
+        valores: tarjeta.findAll('dd').map((dd) => dd.text().trim()),
+      }))
+      expect(datos).toEqual([
+        {
+          nombre: 'Redactar índice',
+          etiquetas: ['Persona asignada', 'Prioridad'],
+          valores: ['Ana', '2'],
+        },
+        {
+          nombre: 'Revisar cifras',
+          etiquetas: ['Persona asignada', 'Prioridad'],
+          valores: ['—', '—'],
+        },
+        {
+          nombre: 'Enviar borrador',
+          etiquetas: ['Persona asignada', 'Prioridad'],
+          valores: ['Luis', '5'],
+        },
+      ])
+      // La resuelta se tacha (nombre y valores) pero no sus botones.
+      const resuelta = tarjetas(envoltorio)[1]!
+      expect(resuelta.findAll('.line-through').map((e) => e.text().trim())).toEqual([
+        'Revisar cifras',
+        '—',
+        '—',
+      ])
+      expect(resuelta.findAll('button').every((b) => !b.element.closest('.line-through'))).toBe(
+        true,
+      )
+    })
+
+    it('pasa a tarjetas cuando el hueco se estrecha (p. ej. al girar el móvil)', async () => {
+      fijarAncho(800)
+      const envoltorio = await montar()
+      expect(envoltorio.find('table').exists()).toBe(true)
+
+      await cambiarAncho(360)
+
+      expect(envoltorio.find('table').exists()).toBe(false)
+      expect(tarjetas(envoltorio)).toHaveLength(3)
+    })
+
+    describe('en tarjetas', () => {
+      beforeEach(() => {
+        fijarAncho(360)
+      })
+
+      it('marca como resuelta con el mismo nombre accesible', async () => {
+        const envoltorio = await montar()
+        vi.mocked(clienteApi.parchear).mockResolvedValue({
+          ...TAREA,
+          subtareas: [{ ...SUBTAREAS[0]!, resuelta: true }, SUBTAREAS[1]!, SUBTAREAS[2]!],
+        })
+
+        await boton(envoltorio, 'Marcar como resuelta la subtarea Redactar índice').trigger('click')
+        await flushPromises()
+
+        expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/subtareas/20/resuelta', {
+          resuelta: true,
+        })
+        expect(tarjetas(envoltorio)[0]!.findAll('.line-through')).toHaveLength(3)
+      })
+
+      it('elimina tras confirmar en la tarjeta y cancelar devuelve el foco', async () => {
+        const envoltorio = await montar()
+        await boton(envoltorio, 'Eliminar subtarea Revisar cifras').trigger('click')
+        await flushPromises()
+
+        const grupo = tarjetas(envoltorio)[1]!.get('[role="group"]')
+        expect(grupo.attributes('aria-label')).toBe('¿Eliminar la subtarea Revisar cifras?')
+        expect(document.activeElement?.textContent?.trim()).toBe('Cancelar')
+
+        await botonPorTexto(envoltorio, 'Cancelar').trigger('click')
+        await flushPromises()
+        expect(document.activeElement?.getAttribute('aria-label')).toBe(
+          'Eliminar subtarea Revisar cifras',
+        )
+
+        vi.mocked(clienteApi.eliminar).mockResolvedValue({
+          ...TAREA,
+          subtareas: [SUBTAREAS[0]!, SUBTAREAS[2]!],
+        })
+        await boton(envoltorio, 'Eliminar subtarea Revisar cifras').trigger('click')
+        await flushPromises()
+        await botonPorTexto(envoltorio, 'Eliminar').trigger('click')
+        await flushPromises()
+
+        expect(clienteApi.eliminar).toHaveBeenCalledWith('/tareas/1/subtareas/21')
+        expect(tarjetas(envoltorio)).toHaveLength(2)
+      })
+
+      it('edita dentro de la tarjeta con confirmación y Escape no se propaga', async () => {
+        const envoltorio = await montar()
+        vi.mocked(clienteApi.actualizar).mockResolvedValue({
+          ...TAREA,
+          subtareas: [{ ...SUBTAREAS[0]!, nombre: 'Otro nombre' }, SUBTAREAS[1]!, SUBTAREAS[2]!],
+        })
+        await boton(envoltorio, 'Editar subtarea Redactar índice').trigger('click')
+        await flushPromises()
+
+        const formulario = tarjetas(envoltorio)[0]!.get('form')
+        expect(formulario.attributes('aria-label')).toBe('Editar subtarea Redactar índice')
+        const nombre = campo(envoltorio, 'Nuevo nombre de la subtarea Redactar índice')
+        expect(document.activeElement).toBe(nombre)
+        await escribir(envoltorio, 'Nuevo nombre de la subtarea Redactar índice', 'Otro nombre')
+        await formulario.trigger('submit')
+        await flushPromises()
+
+        const escuchaVentana = vi.fn<(evento: KeyboardEvent) => void>()
+        window.addEventListener('keydown', escuchaVentana)
+        await envoltorio.get('[role="group"]').trigger('keydown', { key: 'Escape' })
+        await flushPromises()
+        window.removeEventListener('keydown', escuchaVentana)
+        expect(escuchaVentana).not.toHaveBeenCalled()
+        expect(envoltorio.find('[role="group"]').exists()).toBe(false)
+
+        await tarjetas(envoltorio)[0]!.get('form').trigger('submit')
+        await flushPromises()
+        const grupo = envoltorio.get('[role="group"]')
+        expect(grupo.attributes('aria-label')).toBe(
+          '¿Guardar los cambios de la subtarea Redactar índice?',
+        )
+        const guardar = grupo.findAll('button').find((b) => b.text().trim() === 'Guardar')!
+        await guardar.trigger('click')
+        await flushPromises()
+
+        expect(clienteApi.actualizar).toHaveBeenCalledWith('/tareas/1/subtareas/20', {
+          nombre: 'Otro nombre',
+          asignado: 'Ana',
+          prioridad: 2,
+        })
+        expect(tarjetas(envoltorio)[0]!.find('form').exists()).toBe(false)
+        expect(document.activeElement?.getAttribute('aria-label')).toBe(
+          'Editar subtarea Otro nombre',
+        )
+      })
+    })
   })
 
   describe('listado', () => {
