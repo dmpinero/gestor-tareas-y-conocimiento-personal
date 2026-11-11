@@ -26,10 +26,10 @@ Rama: `feature/grupos-estados-tablero` (desde `main` v1.23.0) · Entrega: `stack
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1–S3, S5 (backend + migración aditiva) | delegada (writer A, paralelo) | pendiente | — |
-| T2 | S1, S3, S4, S6 (frontend: Ajustes, formulario, tablero, calendario) | delegada (writer B, paralelo) | pendiente | — |
-| T3 | S1–S5 (e2e contra pila aislada) | inline | pendiente | — |
-| T4 | S1–S5 (verificador: migración, contrato y concurrencia; items 1, 3 y 4) | delegada (verificador) | pendiente | — |
+| T1 | S1–S3, S5 (backend + migración aditiva) | delegada (writer A, paralelo) | hecha | `39af431` |
+| T2 | S1, S3, S4, S6 (frontend: Ajustes, formulario, tablero, calendario) | delegada (writer B, paralelo) | hecha | `28d8fc8`, `05af2c5` |
+| T3 | S1–S5 (e2e contra pila aislada) | inline | hecha | `28d8fc8`, `05af2c5` |
+| T4 | S1–S5 (verificador: migración, contrato y concurrencia; items 1, 3 y 4) | delegada (verificador) | hecha (sin blockers) | — |
 
 ## Log
 
@@ -41,3 +41,5 @@ Rama: `feature/grupos-estados-tablero` (desde `main` v1.23.0) · Entrega: `stack
   S4 queda: el cambio Lista / Tablero son dos botones de icono ("Ver como lista", "Ver como tablero") en la barra del listado de tareas, con `aria-pressed` en el activo.
 - **L4** (2026-11-11) Pedido nuevo del usuario (S6):
   > quiero un icono para poder ver las tareas en un calendario, cada tarea irá en su día según su fecha de vencimiento
+- **L5** (2026-11-11) T1: backend 908 tests (98,99 %), contrato 10/10, migración `c8f3a1d5e7b2` aditiva probada con datos; las pruebas de concurrencia encontraron y se corrigieron interbloqueos (orden de bloqueo: grupo antes que tarea). T2: frontend 510 tests. T3: el e2e encontró que el tablero desbordaba la página a 390 px (textos sr-only absolutos fuera del contenedor con scroll); corregido en `05af2c5`. Playwright 47/47 dos veces.
+- **L6** (2026-11-11) T4, verificador: S1–S6 en verde, sin blockers. Migración con hashes idénticos y esquema igual tras downgrade; 78 sondas de API; 140 rondas de concurrencia sin 5xx y con el invariante intacto; axe sin violaciones en claro, oscuro y 390 px. Advisories: `mover_a` inválido en un estado sin tareas da 409; el "hoy" del calendario no cambia si la página sigue abierta pasada la medianoche; un downgrade tras usarlo pierde los grupos (documentado).
