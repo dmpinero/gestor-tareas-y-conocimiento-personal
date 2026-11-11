@@ -13,10 +13,12 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     String,
     Table,
     Text,
+    UniqueConstraint,
     false,
     func,
     select,
@@ -160,13 +162,70 @@ class ComentarioModelo(Base):
     editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
 
+class GrupoEstadosModelo(Base):
+    """Grupo de estados que se asigna a las tareas. Su nombre es único sin distinguir
+    mayúsculas (misma intercalación que los catálogos)."""
+
+    __tablename__ = "grupos_estados"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(
+        String(50, collation=INTERCALACION_NOMBRES_CATALOGO), nullable=False, unique=True
+    )
+
+
+class EstadoGrupoModelo(Base):
+    """Estado de un grupo; borrar el grupo borra sus estados.
+
+    La posición (1..n sin huecos) y el nombre son únicos dentro del grupo; por la
+    unicidad de la posición el repositorio renumera en dos fases. La restricción
+    única de (grupo_id, id) es la que permite a las tareas apuntar a la pareja
+    grupo-estado con una clave ajena compuesta.
+    """
+
+    __tablename__ = "estados_grupo"
+    __table_args__ = (
+        UniqueConstraint("grupo_id", "posicion", name="uq_estados_grupo_posicion"),
+        UniqueConstraint("grupo_id", "nombre", name="uq_estados_grupo_nombre"),
+        UniqueConstraint("grupo_id", "id", name="uq_estados_grupo_grupo_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    grupo_id: Mapped[int] = mapped_column(
+        ForeignKey("grupos_estados.id", ondelete="CASCADE"), nullable=False
+    )
+    nombre: Mapped[str] = mapped_column(
+        String(50, collation=INTERCALACION_NOMBRES_CATALOGO), nullable=False
+    )
+    posicion: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 class TareaModelo(Base):
+    """Tarea.
+
+    El grupo de estados y el estado son los dos NULL o el estado es del grupo: lo
+    garantizan el CHECK y la clave ajena compuesta (grupo_estados_id, estado_id) a
+    (grupo_id, id) de ``estados_grupo``, que MySQL no comprueba si alguna de las dos
+    es NULL. Las claves ajenas no tienen acción: borrar un grupo o un estado con
+    tareas lo impide la base de datos, y el repositorio mueve o desasigna antes sus
+    tareas en la misma transacción.
+    """
+
     __tablename__ = "tareas"
     __table_args__ = (
         CheckConstraint(
             "prioridad IS NULL OR prioridad BETWEEN 1 AND 5", name="ck_tareas_prioridad_rango"
         ),
         CheckConstraint(f"tipo IS NULL OR tipo IN ({_TIPOS_TAREA})", name="ck_tareas_tipo_valido"),
+        CheckConstraint(
+            "(grupo_estados_id IS NULL) = (estado_id IS NULL)",
+            name="ck_tareas_grupo_y_estado",
+        ),
+        ForeignKeyConstraint(
+            ["grupo_estados_id", "estado_id"],
+            ["estados_grupo.grupo_id", "estados_grupo.id"],
+            name="fk_tareas_estado_del_grupo",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -204,6 +263,20 @@ class TareaModelo(Base):
         passive_deletes=True,
         order_by=SubtareaModelo.id,
     )
+    # Se guardan los ids; las relaciones solo sirven para leer los nombres.
+    grupo_estados_id: Mapped[int | None] = mapped_column(
+        ForeignKey("grupos_estados.id", name="fk_tareas_grupo_estados"), nullable=True
+    )
+    estado_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    grupo_estados: Mapped[GrupoEstadosModelo | None] = relationship(
+        lazy="selectin", viewonly=True, foreign_keys=[grupo_estados_id]
+    )
+    estado: Mapped[EstadoGrupoModelo | None] = relationship(
+        lazy="selectin",
+        viewonly=True,
+        primaryjoin=lambda: TareaModelo.estado_id == EstadoGrupoModelo.id,
+        foreign_keys=[estado_id],
+    )
 
 
 class PasoWorkflowOportunidadModelo(Base):
@@ -222,7 +295,9 @@ __all__ = [
     "Base",
     "ComentarioModelo",
     "ComentarioSubtareaModelo",
+    "EstadoGrupoModelo",
     "EtiquetaModelo",
+    "GrupoEstadosModelo",
     "OportunidadModelo",
     "PasoWorkflowOportunidadModelo",
     "PersonaModelo",

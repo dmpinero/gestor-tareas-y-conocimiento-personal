@@ -215,6 +215,8 @@ def test_la_salida_incluye_el_tipo_y_la_oportunidad() -> None:
         oportunidad={"codigo": "OP-1", "descripcion": None, "observaciones": None},
         completada=False,
         subtareas=[],
+        grupo_estados=None,
+        estado=None,
     )
 
     assert "pasos_oportunidad" not in salida.model_dump(mode="json")

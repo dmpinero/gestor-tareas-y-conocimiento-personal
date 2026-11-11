@@ -25,3 +25,14 @@ class ConflictoDeConcurrenciaError(Exception):
 class OrdenDePasosInvalidoError(Exception):
     """Se lanza al reordenar el workflow con una lista que no es una permutación
     exacta de sus pasos (con repetidos, con pasos de menos o con ids que no existen)."""
+
+
+class OrdenDeEstadosInvalidoError(Exception):
+    """Se lanza al reordenar los estados de un grupo con una lista que no es una
+    permutación exacta de sus estados (con repetidos, con estados de menos o con ids
+    que no son del grupo)."""
+
+
+class AsignacionDeEstadoInvalidaError(Exception):
+    """Se lanza al dar a una tarea un grupo de estados o un estado que no admite: un
+    grupo que no existe o sin estados, o un estado que no es del grupo de la tarea."""

@@ -7,9 +7,7 @@ from gestor_tareas.main import crear_aplicacion
 cliente = TestClient(crear_aplicacion())
 
 
-def test_la_api_expone_salud_tareas_subtareas_comentarios_catalogos_y_workflow_bajo_api_v1() -> (
-    None
-):
+def test_la_api_expone_salud_tareas_catalogos_workflow_y_grupos_de_estados_bajo_api_v1() -> None:
     rutas = set(cliente.get("/openapi.json").json()["paths"])
 
     assert rutas == {
@@ -17,6 +15,7 @@ def test_la_api_expone_salud_tareas_subtareas_comentarios_catalogos_y_workflow_b
         "/api/v1/tareas",
         "/api/v1/tareas/{id_tarea}",
         "/api/v1/tareas/{id_tarea}/completada",
+        "/api/v1/tareas/{id_tarea}/estado",
         "/api/v1/tareas/{id_tarea}/subtareas",
         "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}",
         "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}/resuelta",
@@ -29,6 +28,11 @@ def test_la_api_expone_salud_tareas_subtareas_comentarios_catalogos_y_workflow_b
         "/api/v1/workflow-oportunidades/pasos",
         "/api/v1/workflow-oportunidades/pasos/{id_paso}",
         "/api/v1/workflow-oportunidades/pasos/orden",
+        "/api/v1/grupos-estados",
+        "/api/v1/grupos-estados/{id_grupo}",
+        "/api/v1/grupos-estados/{id_grupo}/estados",
+        "/api/v1/grupos-estados/{id_grupo}/estados/{id_estado}",
+        "/api/v1/grupos-estados/{id_grupo}/orden",
     }
 
 
@@ -39,6 +43,35 @@ def test_la_api_publica_los_metodos_de_cada_ruta_nueva_o_cambiada() -> None:
     assert set(rutas["/api/v1/tareas/{id_tarea}"]) == {"put", "delete"}
     assert set(rutas[f"{subtarea}/comentarios"]) == {"get", "post"}
     assert set(rutas[f"{subtarea}/comentarios/{{id_comentario}}"]) == {"put", "delete"}
+    grupos = "/api/v1/grupos-estados"
+    assert set(rutas[grupos]) == {"get", "post"}
+    assert set(rutas[f"{grupos}/{{id_grupo}}"]) == {"put", "delete"}
+    assert set(rutas[f"{grupos}/{{id_grupo}}/estados"]) == {"post"}
+    assert set(rutas[f"{grupos}/{{id_grupo}}/estados/{{id_estado}}"]) == {"put", "delete"}
+    assert set(rutas[f"{grupos}/{{id_grupo}}/orden"]) == {"put"}
+    assert set(rutas["/api/v1/tareas/{id_tarea}/estado"]) == {"patch"}
+
+
+def test_la_tarea_publica_su_grupo_de_estados_y_su_estado_como_claves_obligatorias() -> None:
+    componentes = cliente.get("/openapi.json").json()["components"]["schemas"]
+    salida = componentes["TareaSalidaEsquema"]
+    alta = componentes["TareaCrearEsquema"]
+
+    assert {"grupo_estados", "estado"} <= set(salida["required"])
+    for campo, componente in (
+        ("grupo_estados", "GrupoEstadosDeTareaEsquema"),
+        ("estado", "EstadoDeTareaEsquema"),
+    ):
+        assert salida["properties"][campo]["anyOf"] == [
+            {"$ref": f"#/components/schemas/{componente}"},
+            {"type": "null"},
+        ]
+    assert "grupo_estados_id" not in alta.get("required", [])
+    assert alta["properties"]["grupo_estados_id"]["anyOf"] == [
+        {"type": "integer"},
+        {"type": "null"},
+    ]
+    assert componentes["TareaEstadoEsquema"]["properties"]["estado_id"]["type"] == "integer"
 
 
 def test_los_comentarios_de_las_subtareas_reutilizan_los_esquemas_de_los_de_la_tarea() -> None:

@@ -18,6 +18,9 @@ from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.workflow_oportunidades.anadir_paso import AnadirPaso
 from gestor_tareas.aplicacion.workflow_oportunidades.reordenar_pasos import ReordenarPasos
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
+    RepositorioGruposEstadosSqlAlchemy,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
 )
@@ -44,6 +47,7 @@ def _crear_oportunidad(i: int) -> Tarea:
             RepositorioEtiquetasSqlAlchemy(sesion),
             RepositorioPersonasSqlAlchemy(sesion),
             RepositorioWorkflowOportunidadesSqlAlchemy(sesion),
+            RepositorioGruposEstadosSqlAlchemy(sesion),
         ).ejecutar(
             nombre=f"Oportunidad {i}",
             descripcion="d",

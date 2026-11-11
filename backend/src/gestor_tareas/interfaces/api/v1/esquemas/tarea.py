@@ -14,6 +14,11 @@ from pydantic import (
 )
 
 from gestor_tareas.dominio.tarea.entidades import TipoTarea
+from gestor_tareas.interfaces.api.v1.esquemas.grupo_estados import (
+    EstadoDeTareaEsquema,
+    GrupoEstadosDeTareaEsquema,
+    IdEntero,
+)
 from gestor_tareas.interfaces.api.v1.esquemas.texto import (
     PATRON_NO_VACIO,
     TextoObligatorio,
@@ -210,6 +215,14 @@ class TareaCrearEsquema(BaseModel):
         default=None,
         description='Obligatoria si tipo es "oportunidad"; si no, debe ser null (422).',
     )
+    grupo_estados_id: IdEntero | None = Field(
+        default=None,
+        description=(
+            "Opcional. Grupo de estados de la tarea: al asignarlo queda en su primer "
+            "estado, y si ya era su grupo conserva el estado. Sin él (o null), la tarea "
+            "queda sin grupo ni estado. 422 si el grupo no existe o no tiene estados."
+        ),
+    )
 
     @model_validator(mode="after")
     def _datos_segun_el_tipo(self) -> Self:
@@ -303,4 +316,10 @@ class TareaSalidaEsquema(BaseModel):
     subtareas: list[SubtareaSalidaEsquema] = Field(
         description="Subtareas por orden de alta; vacía si no tiene. Una oportunidad "
         "recibe al crearla una subtarea por cada paso del workflow, en su orden."
+    )
+    grupo_estados: GrupoEstadosDeTareaEsquema | None = Field(
+        description="Grupo de estados de la tarea, o null si no tiene."
+    )
+    estado: EstadoDeTareaEsquema | None = Field(
+        description="Estado de su grupo en el que está la tarea, o null si no tiene grupo."
     )

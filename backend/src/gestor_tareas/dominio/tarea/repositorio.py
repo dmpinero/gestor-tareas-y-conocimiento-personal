@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from gestor_tareas.dominio.tarea.entidades import Subtarea, Tarea
+from gestor_tareas.dominio.tarea.entidades import ReferenciaEstado, Subtarea, Tarea
 
 
 class RepositorioTareas(Protocol):
@@ -24,6 +24,15 @@ class RepositorioTareas(Protocol):
         """Devuelve la tarea con ese id, o ``None`` si no existe."""
         ...
 
+    def obtener_para_modificar(self, id_tarea: int) -> Tarea | None:
+        """Devuelve la tarea con ese id, o ``None`` si no existe, para modificarla.
+
+        La lectura ve lo último confirmado e impide que otra petición la cambie o la
+        borre hasta que termine la transacción de quien lee, que debe guardar los
+        cambios en ella. No confirma.
+        """
+        ...
+
     def eliminar(self, id_tarea: int) -> bool:
         """Borra la tarea con sus datos de tipo, sus enlaces con los catálogos, sus
         subtareas, sus comentarios y los de sus subtareas, todo en una transacción.
@@ -39,7 +48,8 @@ class RepositorioTareas(Protocol):
         borran los datos de oportunidad que tuviera.
 
         El estado completada no cambia (se ignora ``tarea.completada``): solo lo
-        cambia ``cambiar_completada``.
+        cambia ``cambiar_completada``. El grupo de estados y el estado sí se
+        guardan: ``tarea.estado`` debe ser un estado de ``tarea.grupo_estados``.
 
         Las subtareas no cambian nunca (se ignora ``tarea.subtareas``), tampoco al
         cambiar el tipo de la tarea.
@@ -53,6 +63,14 @@ class RepositorioTareas(Protocol):
         """Guarda el estado completada de la tarea y la devuelve, o ``None`` si no existe.
 
         El resto de datos de la tarea no cambia.
+        """
+        ...
+
+    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado) -> Tarea:
+        """Guarda el estado de la tarea, que debe ser de su grupo, y la devuelve.
+
+        El resto de datos de la tarea no cambia. Lanza ``EntidadNoEncontradaError``
+        si otra petición ha borrado la tarea mientras tanto.
         """
         ...
 

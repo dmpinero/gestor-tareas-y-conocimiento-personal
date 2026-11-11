@@ -4,8 +4,10 @@ from datetime import datetime
 
 from gestor_tareas.dominio.comentario.entidades import Comentario, ComentarioSubtarea
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
+from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
+from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
-from gestor_tareas.dominio.tarea.entidades import Subtarea, Tarea
+from gestor_tareas.dominio.tarea.entidades import ReferenciaEstado, Subtarea, Tarea
 from gestor_tareas.dominio.workflow_oportunidades.entidades import PasoWorkflowOportunidad
 
 
@@ -33,6 +35,16 @@ class RepositorioTareasFalso:
         tarea = self._tareas.get(id_tarea)
         # Copia, como hace el repositorio real: modificarla no altera lo guardado.
         return deepcopy(tarea) if tarea is not None else None
+
+    def obtener_para_modificar(self, id_tarea: int) -> Tarea | None:
+        return self.obtener_por_id(id_tarea)
+
+    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado) -> Tarea:
+        tarea = self._tareas.get(id_tarea)
+        if tarea is None:
+            raise EntidadNoEncontradaError(f"No existe la tarea con id {id_tarea}")
+        tarea.estado = replace(estado)
+        return deepcopy(tarea)
 
     def actualizar(self, tarea: Tarea) -> Tarea:
         assert tarea.id in self._tareas
@@ -225,6 +237,34 @@ class RepositorioWorkflowOportunidadesFalso:
     def leer_pasos_para_copiar(self) -> list[PasoWorkflowOportunidad]:
         self.lecturas_para_copiar += 1
         return [replace(p) for p in sorted(self.pasos, key=lambda p: p.numero)]
+
+
+class RepositorioGruposEstadosFalso:
+    """Doble de los grupos de estados en memoria: solo lo que leen los casos de uso de
+    tareas. ``grupos`` es {nombre: [estados en orden]}; los ids empiezan en 100 (grupos)
+    y 200 (estados)."""
+
+    def __init__(self, **grupos: list[str]) -> None:
+        self.grupos: dict[int, GrupoEstados] = {}
+        id_estado = 200
+        for id_grupo, (nombre, estados) in enumerate(grupos.items(), start=100):
+            entidades = []
+            for posicion, nombre_estado in enumerate(estados, start=1):
+                entidades.append(EstadoGrupo(id=id_estado, nombre=nombre_estado, posicion=posicion))
+                id_estado += 1
+            self.grupos[id_grupo] = GrupoEstados(id=id_grupo, nombre=nombre, estados=entidades)
+        self.lecturas_para_asignar: list[int] = []
+
+    def id_de(self, nombre: str) -> int:
+        return next(g.id for g in self.grupos.values() if g.nombre == nombre)
+
+    def id_estado(self, grupo: str, estado: str) -> int:
+        return next(e.id for e in self.grupos[self.id_de(grupo)].estados if e.nombre == estado)
+
+    def leer_para_asignar(self, id_grupo: int) -> GrupoEstados | None:
+        self.lecturas_para_asignar.append(id_grupo)
+        grupo = self.grupos.get(id_grupo)
+        return deepcopy(grupo) if grupo is not None else None
 
 
 class _RepositorioCatalogoFalso[T: (Etiqueta, Persona)]:
