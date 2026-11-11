@@ -828,3 +828,39 @@ test('filtra por estado: todas, completadas o no completadas', async ({ page, re
   await page.getByRole('button', { name: 'Limpiar filtros' }).click()
   await expect(estado.getByRole('radio', { name: 'Todas', exact: true })).toBeChecked()
 })
+
+test('elige qué columnas ver y lo recuerda al recargar', async ({ page, request }) => {
+  const nombre = `Columnas ${Date.now()}`
+  const creada = await request.post('/api/v1/tareas', {
+    data: { nombre, descripcion: 'Descripción oculta', fecha_creacion: '2026-01-01T09:00:00' },
+  })
+  expect(creada.status()).toBe(201)
+
+  await page.goto('/tareas')
+  const cabecera = (texto: string) => page.getByRole('columnheader', { name: texto })
+  await expect(cabecera('Descripción')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Elegir columnas visibles' }).click()
+  const desplegable = page.locator('[data-slot="popover-content"]')
+  await expect(desplegable.getByRole('checkbox', { name: 'Nombre' })).toBeDisabled()
+  await desplegable.getByRole('checkbox', { name: 'Descripción' }).click()
+  await desplegable.getByRole('checkbox', { name: 'Fecha de creación' }).click()
+  await page.screenshot({ path: 'e2e/capturas/tareas-16-columnas.png' })
+  const resultado = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(resultado.violations).toEqual([])
+  await page.keyboard.press('Escape')
+
+  await expect(cabecera('Descripción')).toHaveCount(0)
+  await expect(cabecera('Fecha de creación')).toHaveCount(0)
+  await expect(page.locator('tr', { hasText: nombre })).not.toContainText('Descripción oculta')
+
+  await page.reload()
+  await expect(cabecera('Descripción')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Elegir columnas visibles' }).click()
+  await desplegable.getByRole('button', { name: 'Mostrar todas' }).click()
+  await page.keyboard.press('Escape')
+  await expect(cabecera('Descripción')).toBeVisible()
+  await expect(cabecera('Fecha de creación')).toBeVisible()
+})

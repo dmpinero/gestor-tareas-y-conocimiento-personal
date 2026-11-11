@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ChevronRight, Circle, CircleCheck, Eye, Pencil, Search, Trash } from '@lucide/vue'
+import {
+  ChevronRight,
+  Circle,
+  CircleCheck,
+  Columns3,
+  Eye,
+  Pencil,
+  Search,
+  Trash,
+} from '@lucide/vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
 import {
@@ -30,6 +39,7 @@ import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
 import type { CeldaExportada } from '@/lib/exportarTabla'
 import { Button } from '@/componentes/ui/button'
+import { Checkbox } from '@/componentes/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/componentes/ui/collapsible'
 import {
   Dialog,
@@ -40,6 +50,7 @@ import {
 } from '@/componentes/ui/dialog'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/componentes/ui/sheet'
 import {
   Table,
@@ -365,21 +376,79 @@ const COLUMNAS_ORDENABLES: { campo: CampoOrdenable; etiqueta: string }[] = [
 // Columnas de la tabla que se muestran como chips.
 const CAMPOS_LISTA = ['etiquetas', 'asignados'] as const
 
-const COLUMNAS_EXPORTACION = COLUMNAS_ORDENABLES.map((columna) => columna.etiqueta)
+// --- Columnas visibles ---
+// Se guardan las columnas ocultas (no las visibles) para que una columna nueva
+// aparezca sin tocar la preferencia. "Nombre" identifica la fila y no se oculta.
+// Es una preferencia de este navegador: si no se puede leer o guardar, se
+// muestran todas.
+const CLAVE_COLUMNAS_OCULTAS = 'gestor-tareas:columnas-ocultas-tareas'
+const COLUMNA_FIJA: CampoOrdenable = 'nombre'
+const CAMPOS_COLUMNA = new Set<string>(COLUMNAS_ORDENABLES.map((columna) => columna.campo))
 
-// Se exportan las filas filtradas en el orden actual y con los valores tal como se ven
-// (del tipo, solo su texto: los campos propios de cada tipo no salen en la tabla).
+function leerColumnasOcultas(): CampoOrdenable[] {
+  try {
+    const guardado: unknown = JSON.parse(localStorage.getItem(CLAVE_COLUMNAS_OCULTAS) ?? '[]')
+    if (!Array.isArray(guardado)) return []
+    return guardado.filter(
+      (campo): campo is CampoOrdenable =>
+        typeof campo === 'string' && CAMPOS_COLUMNA.has(campo) && campo !== COLUMNA_FIJA,
+    )
+  } catch {
+    return []
+  }
+}
+
+const columnasOcultas = ref<CampoOrdenable[]>(leerColumnasOcultas())
+watch(columnasOcultas, (ocultas) => {
+  try {
+    localStorage.setItem(CLAVE_COLUMNAS_OCULTAS, JSON.stringify(ocultas))
+  } catch {
+    // Sin almacenamiento (p. ej. navegación privada) la preferencia dura la sesión.
+  }
+})
+
+function esVisible(campo: CampoOrdenable): boolean {
+  return !columnasOcultas.value.includes(campo)
+}
+
+function cambiarVisibilidad(campo: CampoOrdenable, visible: boolean): void {
+  if (campo === COLUMNA_FIJA) return
+  const resto = columnasOcultas.value.filter((oculto) => oculto !== campo)
+  // Mismo orden que la tabla, para que lo guardado no dependa del orden de los clics.
+  const ocultas = visible ? resto : [...resto, campo]
+  columnasOcultas.value = COLUMNAS_ORDENABLES.map((columna) => columna.campo).filter((c) =>
+    ocultas.includes(c),
+  )
+}
+
+function mostrarTodasLasColumnas(): void {
+  columnasOcultas.value = []
+}
+
+const columnasVisibles = computed(() =>
+  COLUMNAS_ORDENABLES.filter((columna) => esVisible(columna.campo)),
+)
+const camposListaVisibles = computed(() => CAMPOS_LISTA.filter((campo) => esVisible(campo)))
+
+const COLUMNAS_EXPORTACION = computed(() => columnasVisibles.value.map((c) => c.etiqueta))
+
+// Se exportan las filas filtradas en el orden actual, con las columnas visibles y
+// los valores tal como se ven (del tipo, solo su texto: los campos propios de cada
+// tipo no salen en la tabla).
 const filasExportacion = computed<CeldaExportada[][]>(() =>
-  filasOrdenadas.value.map((tarea) => [
-    tarea.nombre,
-    tarea.prioridad ?? '—',
-    tarea.descripcion,
-    unirNombres(tarea.etiquetas) ?? '—',
-    unirNombres(tarea.asignados) ?? '—',
-    formatearFechaHora(tarea.fecha_creacion),
-    tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—',
-    etiquetaTipoTarea(tarea.tipo) ?? '—',
-  ]),
+  filasOrdenadas.value.map((tarea) => {
+    const celdas: Record<CampoOrdenable, CeldaExportada> = {
+      nombre: tarea.nombre,
+      prioridad: tarea.prioridad ?? '—',
+      descripcion: tarea.descripcion,
+      etiquetas: unirNombres(tarea.etiquetas) ?? '—',
+      asignados: unirNombres(tarea.asignados) ?? '—',
+      fechaCreacion: formatearFechaHora(tarea.fecha_creacion),
+      fechaVencimiento: tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—',
+      tipo: etiquetaTipoTarea(tarea.tipo) ?? '—',
+    }
+    return columnasVisibles.value.map((columna) => celdas[columna.campo])
+  }),
 )
 
 function limpiarFormulario(): void {
@@ -686,7 +755,48 @@ async function guardar(): Promise<void> {
     >
       Ninguna tarea coincide con los filtros.
     </p>
-    <div v-if="filasFiltradas.length > 0" class="mt-4 flex justify-end">
+    <div v-if="filasFiltradas.length > 0" class="mt-4 flex flex-wrap justify-end gap-2">
+      <Popover>
+        <PopoverTrigger as-child>
+          <Button
+            variant="outline"
+            type="button"
+            aria-label="Elegir columnas visibles"
+            title="Columnas"
+          >
+            <Columns3 aria-hidden="true" />
+            Columnas
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" class="w-60 p-2">
+          <ul class="space-y-1">
+            <li
+              v-for="columna in COLUMNAS_ORDENABLES"
+              :key="columna.campo"
+              class="flex items-center gap-2 px-2 py-1.5"
+            >
+              <Checkbox
+                :id="`columna-visible-${columna.campo}`"
+                :model-value="esVisible(columna.campo)"
+                :disabled="columna.campo === COLUMNA_FIJA"
+                @update:model-value="(valor) => cambiarVisibilidad(columna.campo, valor === true)"
+              />
+              <Label :for="`columna-visible-${columna.campo}`" class="font-normal">{{
+                columna.etiqueta
+              }}</Label>
+            </li>
+          </ul>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="mt-1 w-full"
+            :disabled="columnasOcultas.length === 0"
+            @click="mostrarTodasLasColumnas"
+            >Mostrar todas</Button
+          >
+        </PopoverContent>
+      </Popover>
       <BotonesExportarTabla
         nombre-fichero="Tareas"
         titulo="Tareas"
@@ -698,7 +808,7 @@ async function guardar(): Promise<void> {
       <TableHeader>
         <TableRow>
           <TableHead
-            v-for="columna in COLUMNAS_ORDENABLES"
+            v-for="columna in columnasVisibles"
             :key="columna.campo"
             :aria-sort="valorAriaSort(campo === columna.campo, direccion)"
           >
@@ -715,10 +825,14 @@ async function guardar(): Promise<void> {
       <TableBody>
         <TableRow v-for="tarea in filasOrdenadas" :key="tarea.id">
           <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{ tarea.nombre }}</TableCell>
-          <TableCell :class="claseCelda(tarea)">{{ tarea.prioridad ?? '—' }}</TableCell>
-          <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{ tarea.descripcion }}</TableCell>
+          <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">{{
+            tarea.prioridad ?? '—'
+          }}</TableCell>
+          <TableCell v-if="esVisible('descripcion')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{
+            tarea.descripcion
+          }}</TableCell>
           <TableCell
-            v-for="campoLista in CAMPOS_LISTA"
+            v-for="campoLista in camposListaVisibles"
             :key="campoLista"
             :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
           >
@@ -734,10 +848,15 @@ async function guardar(): Promise<void> {
             </ul>
             <template v-else>—</template>
           </TableCell>
-          <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{
-            formatearFechaHora(tarea.fecha_creacion)
-          }}</TableCell>
-          <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">
+          <TableCell
+            v-if="esVisible('fechaCreacion')"
+            :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+            >{{ formatearFechaHora(tarea.fecha_creacion) }}</TableCell
+          >
+          <TableCell
+            v-if="esVisible('fechaVencimiento')"
+            :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+          >
             <template v-if="tarea.fecha_vencimiento">
               {{ formatearFechaHora(tarea.fecha_vencimiento) }}
               <ContadorVencimiento
@@ -747,7 +866,9 @@ async function guardar(): Promise<void> {
             </template>
             <template v-else>—</template>
           </TableCell>
-          <TableCell :class="claseCelda(tarea)">{{ textoTipoEnTabla(tarea) }}</TableCell>
+          <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">{{
+            textoTipoEnTabla(tarea)
+          }}</TableCell>
           <TableCell>
             <div class="flex gap-1">
               <Button
