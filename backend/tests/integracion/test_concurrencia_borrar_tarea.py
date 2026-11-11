@@ -164,8 +164,33 @@ def test_borrar_la_tarea_a_la_vez_que_se_le_anaden_subtareas_y_comentarios(
         select(func.count()).select_from(modelos.ComentarioSubtareaModelo),
     ]
     assert [_contar(sesion_bd, c) for c in consultas] == [0, 0, 0, 0]
-    # La persona solo se queda en el catálogo si el alta de la subtarea llegó a
-    # confirmarse (antes del borrado); si respondió que la tarea no existe, no.
+    # La persona se queda en el catálogo si el alta de la subtarea llegó a
+    # confirmarse antes del borrado: borrar una tarea nunca borra personas del
+    # catálogo. Si el alta respondió que la tarea no existe, hay dos órdenes
+    # válidos: o encontró la tarea ya borrada (y deshizo el alta de la persona), o
+    # se confirmó justo antes del borrado y, al releer la tarea para responder,
+    # ya no existía (la persona se queda). Nunca queda más de una.
     anadida = not isinstance(resultados[2], EntidadNoEncontradaError)
     personas = select(func.count()).where(modelos.PersonaModelo.nombre == persona)
-    assert _contar(sesion_bd, personas) == int(anadida)
+    if anadida:
+        assert _contar(sesion_bd, personas) == 1
+    else:
+        assert _contar(sesion_bd, personas) in (0, 1)
+
+
+def test_la_persona_de_una_subtarea_confirmada_se_queda_al_borrar_la_tarea(sesion_bd) -> None:
+    """El orden que antes hacía fallar la prueba anterior, de forma determinista."""
+    id_tarea, _, _ = _preparar(sesion_bd)
+    sesion_bd.rollback()
+
+    _en_sesion(
+        lambda s: AnadirSubtarea(
+            RepositorioTareasSqlAlchemy(s), RepositorioPersonasSqlAlchemy(s)
+        ).ejecutar(id_tarea, "Camión", asignado="Berta")
+    )
+    _en_sesion(lambda s: EliminarTarea(RepositorioTareasSqlAlchemy(s)).ejecutar(id_tarea))
+
+    subtareas = select(func.count()).where(modelos.SubtareaModelo.tarea_id == id_tarea)
+    personas = select(func.count()).where(modelos.PersonaModelo.nombre == "Berta")
+    assert _contar(sesion_bd, subtareas) == 0
+    assert _contar(sesion_bd, personas) == 1
