@@ -38,7 +38,10 @@ const COMENTARIOS: Comentario[] = [
 let contenedor: VueWrapper | null = null
 
 async function montar(idTarea = 7): Promise<VueWrapper> {
-  contenedor = mount(ComentariosTarea, { props: { idTarea }, attachTo: document.body })
+  contenedor = mount(ComentariosTarea, {
+    props: { ruta: `/tareas/${idTarea}/comentarios` },
+    attachTo: document.body,
+  })
   await flushPromises()
   return contenedor
 }
@@ -109,7 +112,7 @@ describe('ComentariosTarea: carga', () => {
     obtener.mockResolvedValueOnce(COMENTARIOS).mockResolvedValueOnce([])
     const envoltorio = await montar(7)
 
-    await envoltorio.setProps({ idTarea: 8 })
+    await envoltorio.setProps({ ruta: '/tareas/8/comentarios' })
     await flushPromises()
 
     expect(obtener).toHaveBeenLastCalledWith('/tareas/8/comentarios')
@@ -124,7 +127,7 @@ describe('ComentariosTarea: carga', () => {
       .mockResolvedValueOnce([])
     const envoltorio = await montar(7)
 
-    await envoltorio.setProps({ idTarea: 8 })
+    await envoltorio.setProps({ ruta: '/tareas/8/comentarios' })
     await flushPromises()
     resolverAnterior(COMENTARIOS)
     await flushPromises()
@@ -721,5 +724,152 @@ describe('ComentariosTarea: eliminar', () => {
     expect(document.activeElement).toBe(
       botonPorNombre(envoltorio, `Eliminar comentario ${REFERENCIA_2}`).element,
     )
+  })
+})
+
+describe('ComentariosTarea: comentarios de una subtarea', () => {
+  const RUTA_SUBTAREA = '/tareas/7/subtareas/9/comentarios'
+
+  async function montarSubtarea(): Promise<VueWrapper> {
+    contenedor = mount(ComentariosTarea, {
+      props: { ruta: RUTA_SUBTAREA, contexto: 'de la subtarea Revisar' },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    return contenedor
+  }
+
+  it('carga, crea, edita y elimina usando la ruta recibida', async () => {
+    obtener.mockResolvedValue([COMENTARIOS[0]])
+    crear.mockResolvedValue({
+      id: 5,
+      texto: 'Nuevo',
+      creado: isoUtcDesdeLocal(4, 3, 10, 0),
+      editado: null,
+    })
+    actualizar.mockResolvedValue({ ...COMENTARIOS[0], texto: 'Cambiado' })
+    eliminar.mockResolvedValue(undefined)
+    const envoltorio = await montarSubtarea()
+
+    expect(obtener).toHaveBeenCalledWith(RUTA_SUBTAREA)
+
+    await envoltorio
+      .get('textarea[aria-label="Escribe un comentario de la subtarea Revisar"]')
+      .setValue('Nuevo')
+    await flushPromises()
+    await envoltorio
+      .get('button[aria-label="Enviar comentario de la subtarea Revisar"]')
+      .trigger('click')
+    await flushPromises()
+    expect(crear).toHaveBeenCalledWith(RUTA_SUBTAREA, { texto: 'Nuevo' })
+
+    const editar = envoltorio
+      .findAll('button')
+      .find((b) => (b.attributes('aria-label') ?? '').startsWith('Editar comentario de las 09:05'))!
+    expect(editar.attributes('aria-label')).toMatch(/ de la subtarea Revisar$/)
+    await editar.trigger('click')
+    await flushPromises()
+    const campo = envoltorio.get(
+      'textarea[aria-label="Nuevo texto del comentario de la subtarea Revisar"]',
+    )
+    await campo.setValue('Cambiado')
+    await flushPromises()
+    await envoltorio
+      .get('form[aria-label="Editar comentario de la subtarea Revisar"]')
+      .trigger('submit')
+    await flushPromises()
+    const guardar = envoltorio
+      .get(
+        '[role="group"][aria-label="¿Guardar los cambios del comentario de la subtarea Revisar?"]',
+      )
+      .findAll('button')
+      .find((b) => b.text() === 'Guardar')!
+    await guardar.trigger('click')
+    await flushPromises()
+    expect(actualizar).toHaveBeenCalledWith(`${RUTA_SUBTAREA}/1`, { texto: 'Cambiado' })
+
+    const borrar = envoltorio
+      .findAll('button')
+      .find((b) =>
+        (b.attributes('aria-label') ?? '').startsWith('Eliminar comentario de las 09:05'),
+      )!
+    await borrar.trigger('click')
+    await flushPromises()
+    const confirmar = envoltorio
+      .get('[role="group"][aria-label="¿Eliminar el comentario de la subtarea Revisar?"]')
+      .findAll('button')
+      .find((b) => b.text() === 'Eliminar')!
+    await confirmar.trigger('click')
+    await flushPromises()
+    expect(eliminar).toHaveBeenCalledWith(`${RUTA_SUBTAREA}/1`)
+  })
+
+  it('añade el contexto a los nombres accesibles para no repetirlos con los de la tarea', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montarSubtarea()
+
+    expect(
+      envoltorio
+        .find('[role="region"][aria-label="Comentarios anteriores de la subtarea Revisar"]')
+        .exists(),
+    ).toBe(true)
+    expect(
+      envoltorio.find('[aria-label="Historial de comentarios de la subtarea Revisar"]').exists(),
+    ).toBe(true)
+    const seccion = envoltorio.get('section').element
+    const titulo = document.getElementById(seccion.getAttribute('aria-labelledby')!)
+    expect(titulo?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'Comentarios de la subtarea Revisar',
+    )
+    // El texto visible del encabezado sigue siendo "Comentarios".
+    expect(titulo?.querySelector('.sr-only')?.textContent?.trim()).toBe('de la subtarea Revisar')
+  })
+
+  it('sin contexto los nombres accesibles no cambian', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+
+    expect(envoltorio.find('[role="region"][aria-label="Comentarios anteriores"]').exists()).toBe(
+      true,
+    )
+    const seccion = envoltorio.get('section').element
+    const titulo = document.getElementById(seccion.getAttribute('aria-labelledby')!)
+    expect(titulo?.textContent?.trim()).toBe('Comentarios')
+  })
+
+  it('avisa del número de comentarios al cargarlos, al añadir uno y al eliminarlo', async () => {
+    obtener.mockResolvedValue([COMENTARIOS[0], COMENTARIOS[1]])
+    crear.mockResolvedValue({
+      id: 5,
+      texto: 'Nuevo',
+      creado: isoUtcDesdeLocal(4, 3, 10, 0),
+      editado: null,
+    })
+    eliminar.mockResolvedValue(undefined)
+    const envoltorio = await montarSubtarea()
+    expect(envoltorio.emitted('actualizados')).toEqual([[2]])
+
+    await envoltorio
+      .get('textarea[aria-label="Escribe un comentario de la subtarea Revisar"]')
+      .setValue('Nuevo')
+    await flushPromises()
+    await envoltorio.get('form:not([aria-label])').trigger('submit')
+    await flushPromises()
+    expect(envoltorio.emitted('actualizados')).toEqual([[2], [3]])
+
+    await envoltorio
+      .findAll('button')
+      .find((b) =>
+        (b.attributes('aria-label') ?? '').startsWith('Eliminar comentario de las 09:05'),
+      )!
+      .trigger('click')
+    await flushPromises()
+    await envoltorio
+      .get('[role="group"][aria-label="¿Eliminar el comentario de la subtarea Revisar?"]')
+      .findAll('button')
+      .find((b) => b.text() === 'Eliminar')!
+      .trigger('click')
+    await flushPromises()
+    expect(envoltorio.emitted('actualizados')).toEqual([[2], [3], [2]])
   })
 })

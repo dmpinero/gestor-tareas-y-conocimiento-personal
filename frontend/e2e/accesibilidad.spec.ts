@@ -47,7 +47,7 @@ async function auditarPanelCrearTarea(page: Page) {
   return auditarPagina(page)
 }
 
-test('el panel "Crear tarea" no tiene violaciones de accesibilidad en modo claro (WCAG 2.1 AA)', async ({
+test('la ventana "Crear tarea" no tiene violaciones de accesibilidad en modo claro (WCAG 2.1 AA)', async ({
   page,
 }) => {
   await page.goto('/tareas')
@@ -55,7 +55,7 @@ test('el panel "Crear tarea" no tiene violaciones de accesibilidad en modo claro
   expect(resultado.violations).toEqual([])
 })
 
-test('el panel "Crear tarea" no tiene violaciones de accesibilidad en modo oscuro (WCAG 2.1 AA)', async ({
+test('la ventana "Crear tarea" no tiene violaciones de accesibilidad en modo oscuro (WCAG 2.1 AA)', async ({
   page,
 }) => {
   await page.goto('/tareas')
@@ -114,3 +114,55 @@ test('el historial de cambios no tiene violaciones de accesibilidad en modo oscu
   const resultado = await auditarHistorialDeCambios(page)
   expect(resultado.violations).toEqual([])
 })
+
+// Regresión: el botón de comentarios de una subtarea con comentarios mostraba su
+// número fuera del nombre accesible (WCAG 2.5.3, label-content-name-mismatch).
+const MODOS = [
+  { modo: 'claro', preparar: async (_page: Page) => {} },
+  { modo: 'oscuro', preparar: activarModoOscuro },
+] as const
+
+for (const { modo, preparar } of MODOS) {
+  test(`el detalle con los comentarios de una subtarea abiertos no tiene violaciones de accesibilidad en modo ${modo} (WCAG 2.1 AA)`, async ({
+    page,
+    request,
+  }) => {
+    const nombre = `Accesible ${modo} ${Date.now()}`
+    const creada = await request.post('/api/v1/tareas', {
+      data: { nombre, descripcion: 'Auditoría', fecha_creacion: '2026-01-01T09:00:00' },
+    })
+    const { id } = (await creada.json()) as { id: number }
+    const subtarea = await request.post(`/api/v1/tareas/${id}/subtareas`, {
+      data: { nombre: 'Auditar' },
+    })
+    const { subtareas } = (await subtarea.json()) as { subtareas: { id: number }[] }
+    const ruta = `/api/v1/tareas/${id}/subtareas/${subtareas[0]!.id}/comentarios`
+    expect((await request.post(ruta, { data: { texto: 'Primero' } })).status()).toBe(201)
+    expect(
+      (
+        await request.post(`/api/v1/tareas/${id}/comentarios`, { data: { texto: 'De la tarea' } })
+      ).status(),
+    ).toBe(201)
+
+    await page.goto('/tareas')
+    await preparar(page)
+    await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+    const detalle = page.getByRole('dialog', { name: nombre })
+    const boton = detalle.getByRole('button', { name: 'Comentarios de la subtarea Auditar: 1' })
+    await expect(boton).toBeVisible()
+    await boton.click()
+    await expect(detalle.getByTestId('comentarios-subtarea')).toContainText('Primero')
+    // Espera a que terminen las animaciones de apertura (las infinitas no cuentan).
+    await detalle.evaluate((elemento) =>
+      Promise.all(
+        elemento
+          .getAnimations({ subtree: true })
+          .filter((animacion) => animacion.effect?.getTiming().iterations !== Infinity)
+          .map((animacion) => animacion.finished),
+      ),
+    )
+
+    const resultado = await auditarPagina(page)
+    expect(resultado.violations).toEqual([])
+  })
+}

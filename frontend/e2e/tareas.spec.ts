@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
-test('crea una tarea desde el panel lateral y aparece en el listado', async ({ page }) => {
+test('crea una tarea desde la ventana modal y aparece en el listado', async ({ page }) => {
   // Nombre único: la base de datos de la pila local no se vacía entre ejecuciones.
   const nombre = `Tarea e2e ${Date.now()}`
 
@@ -722,4 +722,71 @@ test('en pantallas estrechas muestra las subtareas como tarjetas sin desbordar',
   await expect(
     detalle.getByRole('button', { name: 'Editar subtarea Comprar cajas grandes' }),
   ).toBeVisible()
+})
+
+test('comenta una subtarea y borra la tarea pidiendo confirmación', async ({ page, request }) => {
+  const nombre = `Borrable ${Date.now()}`
+  const creada = await request.post('/api/v1/tareas', {
+    data: { nombre, descripcion: 'Para comentar y borrar', fecha_creacion: '2026-01-01T09:00:00' },
+  })
+  const { id } = (await creada.json()) as { id: number }
+  expect(
+    (
+      await request.post(`/api/v1/tareas/${id}/subtareas`, { data: { nombre: 'Revisar' } })
+    ).status(),
+  ).toBe(201)
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: nombre })
+
+  // Comentarios de la subtarea, con su contador.
+  const botonComentarios = detalle.getByRole('button', {
+    name: /^Comentarios de la subtarea Revisar/,
+  })
+  await botonComentarios.click()
+  await expect(botonComentarios).toHaveAttribute('aria-expanded', 'true')
+  await detalle
+    .getByRole('textbox', { name: 'Escribe un comentario de la subtarea Revisar' })
+    .fill('Falta la parte dos')
+  await detalle.getByRole('button', { name: 'Enviar comentario de la subtarea Revisar' }).click()
+  await expect(detalle.getByTestId('comentarios-subtarea')).toContainText('Falta la parte dos')
+  await expect(detalle.getByTestId('numero-comentarios-subtarea')).toHaveText('1')
+  await page.screenshot({ path: 'e2e/capturas/tareas-13-comentarios-subtarea.png' })
+
+  // Borrar desde el detalle: cancelar conserva, eliminar borra y cierra.
+  await detalle.getByRole('button', { name: `Eliminar la tarea ${nombre}` }).click()
+  const confirmar = page.getByRole('alertdialog', { name: `¿Eliminar la tarea ${nombre}?` })
+  await expect(confirmar).toContainText('También se eliminarán sus subtareas y comentarios.')
+  await confirmar.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(confirmar).toBeHidden()
+  await expect(detalle).toBeVisible()
+  await detalle.getByRole('button', { name: `Eliminar la tarea ${nombre}` }).click()
+  await confirmar.getByRole('button', { name: 'Eliminar' }).click()
+  await expect(detalle).toBeHidden()
+  await expect(page.locator('tr', { hasText: nombre })).toHaveCount(0)
+  expect((await request.get(`/api/v1/tareas/${id}/comentarios`)).status()).toBe(404)
+  await page.reload()
+  await expect(page.locator('tr', { hasText: nombre })).toHaveCount(0)
+})
+
+test('crea la tarea en una ventana modal y la borra desde la lista', async ({ page }) => {
+  const nombre = `Modal ${Date.now()}`
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Crear tarea' }).click()
+  const ventana = page.getByRole('dialog', { name: 'Crear tarea' })
+  await expect(ventana).toHaveAttribute('data-slot', 'dialog-content')
+  await ventana.getByPlaceholder('Nombre').fill(nombre)
+  await ventana.getByPlaceholder('Descripción').fill('Creada en la ventana modal')
+  await page.screenshot({ path: 'e2e/capturas/tareas-14-crear-modal.png' })
+  await ventana.getByRole('button', { name: 'Guardar' }).click()
+  await expect(ventana).toBeHidden()
+
+  const fila = page.locator('tr', { hasText: nombre })
+  await fila.getByRole('button', { name: `Eliminar la tarea ${nombre}` }).click()
+  await page
+    .getByRole('alertdialog', { name: `¿Eliminar la tarea ${nombre}?` })
+    .getByRole('button', { name: 'Eliminar' })
+    .click()
+  await expect(fila).toHaveCount(0)
 })

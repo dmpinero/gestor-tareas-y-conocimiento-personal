@@ -1,6 +1,6 @@
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
@@ -8,9 +8,9 @@ from gestor_tareas.aplicacion.tarea.anadir_subtarea import AnadirSubtarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.editar_subtarea import EditarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_subtarea import EliminarSubtarea
+from gestor_tareas.aplicacion.tarea.eliminar_tarea import EliminarTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
-from gestor_tareas.aplicacion.tarea.marcar_paso_hecho import MarcarPasoHecho
 from gestor_tareas.aplicacion.tarea.marcar_subtarea_resuelta import MarcarSubtareaResuelta
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
@@ -29,7 +29,6 @@ from gestor_tareas.interfaces.api.respuestas_error import (
     RESPUESTA_NO_ENCONTRADO,
 )
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
-    PasoHechoEsquema,
     SubtareaCrearEsquema,
     SubtareaEditarEsquema,
     SubtareaResueltaEsquema,
@@ -78,9 +77,10 @@ def crear(
     Las etiquetas y personas se buscan en su catálogo sin distinguir mayúsculas
     (se conserva la grafía guardada) y se dan de alta si no existen.
 
-    Una oportunidad recibe en `pasos_oportunidad` una copia de los pasos vigentes del
-    workflow de las oportunidades, en su orden y pendientes; cambiar el workflow
-    después no la altera.
+    Una oportunidad recibe en `subtareas` una subtarea por cada paso vigente del
+    workflow de las oportunidades, en su orden, pendiente y sin persona ni
+    prioridad; son subtareas como cualquier otra, y cambiar el workflow después no
+    las altera.
     """
     tarea = CrearTarea(
         RepositorioTareasSqlAlchemy(sesion),
@@ -101,11 +101,11 @@ def actualizar(
 ) -> TareaSalidaEsquema:
     """Sustituye todos los datos de una tarea existente, incluidos sus conjuntos de
     etiquetas y personas asignadas, y su tipo con sus datos (sin tipo, se borran
-    los datos de oportunidad y sus pasos); 404 si el id no existe y 422 si la fecha
-    de vencimiento es anterior a la de creación o el tipo no casa con sus datos.
-    El estado completada no cambia (solo lo cambia `PATCH .../completada`), ni los
-    pasos de una oportunidad que sigue siéndolo, ni las subtareas. Una tarea que pasa a ser
-    oportunidad no recibe pasos: solo se copian al crear la oportunidad."""
+    los datos de oportunidad); 404 si el id no existe y 422 si la fecha de
+    vencimiento es anterior a la de creación o el tipo no casa con sus datos.
+    El estado completada no cambia (solo lo cambia `PATCH .../completada`), ni las
+    subtareas, tampoco al cambiar el tipo: una tarea que pasa a ser oportunidad no
+    recibe las del workflow (solo se crean al dar de alta la oportunidad)."""
     tarea = ActualizarTarea(
         RepositorioTareasSqlAlchemy(sesion),
         RepositorioEtiquetasSqlAlchemy(sesion),
@@ -131,22 +131,18 @@ def marcar_completada(
     return _a_esquema(tarea)
 
 
-@enrutador.patch(
-    "/{id_tarea:int}/pasos/{id_paso:int}",
-    response_model=TareaSalidaEsquema,
-    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+@enrutador.delete(
+    "/{id_tarea:int}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    responses={**RESPUESTA_NO_ENCONTRADO},
 )
-def marcar_paso_hecho(
-    id_tarea: int, id_paso: int, datos: PasoHechoEsquema, sesion: Session = Depends(obtener_sesion)
-) -> TareaSalidaEsquema:
-    """Marca el paso de la oportunidad como hecho (`true`) o lo deja pendiente
-    (`false`) y devuelve la tarea con el resto de sus datos sin cambios; 404 si la
-    tarea no existe o no tiene un paso con ese id (también si el paso es de otra
-    tarea) y 422 si `hecho` no es un booleano de JSON."""
-    tarea = MarcarPasoHecho(RepositorioTareasSqlAlchemy(sesion)).ejecutar(
-        id_tarea, id_paso, datos.hecho
-    )
-    return _a_esquema(tarea)
+def eliminar(id_tarea: int, sesion: Session = Depends(obtener_sesion)) -> Response:
+    """Borra la tarea con sus datos de tipo, sus subtareas, sus comentarios y los de
+    sus subtareas. Las etiquetas y personas del catálogo se conservan. 404 si la
+    tarea no existe."""
+    EliminarTarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @enrutador.post(
@@ -222,8 +218,8 @@ def editar_subtarea(
 def eliminar_subtarea(
     id_tarea: int, id_subtarea: int, sesion: Session = Depends(obtener_sesion)
 ) -> TareaSalidaEsquema:
-    """Borra la subtarea y devuelve la tarea con el resto de sus datos sin cambios;
-    404 si la tarea no existe o no tiene una subtarea con ese id (también si la
-    subtarea es de otra tarea)."""
+    """Borra la subtarea con sus comentarios y devuelve la tarea con el resto de sus
+    datos sin cambios; 404 si la tarea no existe o no tiene una subtarea con ese id
+    (también si la subtarea es de otra tarea)."""
     tarea = EliminarSubtarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea, id_subtarea)
     return _a_esquema(tarea)

@@ -77,33 +77,38 @@ export const useTiendaTareas = defineStore('tareas', () => {
     }
   }
 
-  // Cambia un paso del workflow de una oportunidad entre hecho y pendiente.
-  // Como `alternarCompletada`: si la API falla se guarda el mensaje en `error`
-  // y la tarea se queda como estaba.
-  async function alternarPasoTarea(idTarea: number, idPaso: number): Promise<void> {
-    const paso = tareas.value
-      .find((t) => t.id === idTarea)
-      ?.pasos_oportunidad.find((p) => p.id === idPaso)
-    if (!paso) return
-    error.value = null
-    try {
-      const tarea = await clienteApi.parchear<Tarea>(`/tareas/${idTarea}/pasos/${idPaso}`, {
-        hecho: !paso.hecho,
-      })
-      const indice = tareas.value.findIndex((t) => t.id === idTarea)
-      if (indice !== -1) tareas.value[indice] = tarea
-    } catch (motivo) {
-      error.value = (motivo as Error).message
-    }
-  }
-
   function reemplazarTarea(tarea: Tarea): void {
     const indice = tareas.value.findIndex((t) => t.id === tarea.id)
     if (indice !== -1) tareas.value[indice] = tarea
   }
 
+  // Borra la tarea (con sus subtareas y comentarios). Como las acciones de
+  // subtareas, si la API falla guarda el mensaje en `error`, la lista se queda
+  // como estaba y devuelve `false`.
+  async function eliminarTarea(id: number): Promise<boolean> {
+    error.value = null
+    try {
+      await clienteApi.eliminar<void>(`/tareas/${id}`)
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+    tareas.value = tareas.value.filter((tarea) => tarea.id !== id)
+    return true
+  }
+
+  // Los comentarios de una subtarea se cargan y guardan en su propio
+  // componente; este ajusta el número que muestra la lista de subtareas sin
+  // volver a pedir la tarea.
+  function fijarComentariosSubtarea(idTarea: number, idSubtarea: number, total: number): void {
+    const subtarea = tareas.value
+      .find((t) => t.id === idTarea)
+      ?.subtareas.find((s) => s.id === idSubtarea)
+    if (subtarea) subtarea.comentarios = total
+  }
+
   // Las acciones de subtareas se lanzan desde el detalle de la tarea. Como
-  // `alternarPasoTarea`, si la API falla guardan el mensaje en `error` y la
+  // `alternarCompletada`, si la API falla guardan el mensaje en `error` y la
   // tarea se queda como estaba; devuelven `true` si la operación se hizo, para
   // que el formulario sepa si limpiarse.
   async function crearSubtarea(idTarea: number, datos: DatosSubtarea): Promise<boolean> {
@@ -181,7 +186,8 @@ export const useTiendaTareas = defineStore('tareas', () => {
     crear,
     actualizar,
     alternarCompletada,
-    alternarPasoTarea,
+    eliminarTarea,
+    fijarComentariosSubtarea,
     crearSubtarea,
     editarSubtarea,
     alternarSubtarea,

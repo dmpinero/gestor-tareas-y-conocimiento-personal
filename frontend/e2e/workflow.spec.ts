@@ -84,7 +84,7 @@ test('gestiona los pasos del workflow desde Ajustes y los reordena', async ({ pa
   expect(resultado.violations).toEqual([])
 })
 
-test('una oportunidad nueva recibe una copia fija de los pasos y se marca su avance', async ({
+test('una oportunidad nueva recibe los pasos del workflow como subtareas y se marca su avance', async ({
   page,
 }) => {
   const nombre = `Oportunidad con pasos ${Date.now()}`
@@ -107,13 +107,17 @@ test('una oportunidad nueva recibe una copia fija de los pasos y se marca su ava
 
   await fila.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
   const detalle = page.getByRole('dialog', { name: nombre })
-  const pasos = detalle.getByTestId('pasos-oportunidad').getByRole('checkbox')
-  await expect(pasos).toHaveCount(3)
-  await detalle.getByRole('checkbox', { name: '1. Llamar' }).click()
-  await expect(detalle.getByRole('checkbox', { name: '1. Llamar' })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  )
+  // Los pasos llegan como subtareas, en orden y sin resolver.
+  await expect(detalle.getByTestId('pasos-oportunidad')).toHaveCount(0)
+  for (const paso of ['Llamar', 'Visitar', 'Firmar']) {
+    await expect(
+      detalle.getByRole('button', { name: `Marcar como resuelta la subtarea ${paso}` }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  }
+  await detalle.getByRole('button', { name: 'Marcar como resuelta la subtarea Llamar' }).click()
+  await expect(
+    detalle.getByRole('button', { name: 'Marcar como resuelta la subtarea Llamar' }),
+  ).toHaveAttribute('aria-pressed', 'true')
   await page.screenshot({ path: 'e2e/capturas/workflow-02-pasos-tarea.png' })
   await page.keyboard.press('Escape')
   await expect(detalle).toBeHidden()

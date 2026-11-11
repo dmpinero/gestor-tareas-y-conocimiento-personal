@@ -1,13 +1,13 @@
 <script setup lang="ts">
+import { Trash } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
-import { etiquetaTipoTarea, type PasoTarea, type Tarea } from '@/api/tipos'
+import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
 import { formatearFechaHora } from '@/lib/fechas'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import SubtareasTarea from '@/componentes/compartido/SubtareasTarea.vue'
 import { Button } from '@/componentes/ui/button'
-import { Checkbox } from '@/componentes/ui/checkbox'
 import {
   Dialog,
   DialogClose,
@@ -17,15 +17,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/componentes/ui/dialog'
-import { Label } from '@/componentes/ui/label'
 
 // Modal con todos los campos de una tarea. Está abierta mientras `tarea` no
-// sea `null`; al cerrarla (botón, Escape o clic fuera) emite `cerrar`. Al
-// pulsar la casilla de un paso del workflow emite `alternarPaso` con su id; la
-// tarea actualizada llega de vuelta por `tarea`. `error` se muestra dentro de
-// la modal porque, mientras está abierta, el resto de la página queda oculto.
+// sea `null`; al cerrarla (botón, Escape o clic fuera) emite `cerrar`. El botón
+// de la papelera emite `eliminar`: la confirmación, el borrado y el cierre son
+// cosa de quien la usa. `error` se muestra dentro de la modal porque, mientras
+// está abierta, el resto de la página queda oculto.
 const props = defineProps<{ tarea: Tarea | null; error?: string | null }>()
-const emit = defineEmits<{ cerrar: []; alternarPaso: [idPaso: number] }>()
+const emit = defineEmits<{ cerrar: []; eliminar: [] }>()
 
 // Se conserva la última tarea mostrada para que el contenido no desaparezca
 // mientras dura la animación de cierre.
@@ -93,13 +92,6 @@ const camposOportunidad = computed<Campo[] | null>(() => {
   ]
 })
 
-// Pasos del workflow por número, o `null` si la tarea no es una oportunidad.
-const pasosOportunidad = computed<PasoTarea[] | null>(() => {
-  const tarea = tareaMostrada.value
-  if (tarea?.tipo !== 'oportunidad') return null
-  return [...tarea.pasos_oportunidad].sort((a, b) => a.numero - b.numero)
-})
-
 function alCambiarApertura(abierta: boolean): void {
   if (!abierta) emit('cerrar')
 }
@@ -161,27 +153,6 @@ function alCambiarApertura(abierta: boolean): void {
                 />
               </div>
             </dl>
-
-            <template v-if="pasosOportunidad">
-              <h4 class="mt-6 mb-3 text-sm font-semibold">Pasos del workflow</h4>
-              <ul
-                v-if="pasosOportunidad.length > 0"
-                data-testid="pasos-oportunidad"
-                class="grid gap-2"
-              >
-                <li v-for="paso in pasosOportunidad" :key="paso.id" class="flex items-center gap-2">
-                  <Checkbox
-                    :id="`paso-tarea-${paso.id}`"
-                    :model-value="paso.hecho"
-                    @update:model-value="emit('alternarPaso', paso.id)"
-                  />
-                  <Label :for="`paso-tarea-${paso.id}`" class="font-normal [overflow-wrap:anywhere]"
-                    >{{ paso.numero }}. {{ paso.nombre }}</Label
-                  >
-                </li>
-              </ul>
-              <p v-else class="text-muted-foreground text-sm">Esta oportunidad no tiene pasos.</p>
-            </template>
           </section>
 
           <div v-if="tareaMostrada" class="mt-6 border-t pt-4">
@@ -195,13 +166,23 @@ function alCambiarApertura(abierta: boolean): void {
           aria-label="Comentarios de la tarea"
           class="flex min-h-0 flex-col border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6"
         >
-          <ComentariosTarea :id-tarea="tareaMostrada.id" />
+          <ComentariosTarea :ruta="`/tareas/${tareaMostrada.id}/comentarios`" />
         </aside>
       </div>
 
       <p v-if="props.error" class="text-sm text-destructive" role="alert">{{ props.error }}</p>
 
       <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          class="text-destructive sm:mr-auto"
+          :aria-label="`Eliminar la tarea ${tareaMostrada?.nombre ?? ''}`"
+          @click="emit('eliminar')"
+        >
+          <Trash aria-hidden="true" />
+          Eliminar
+        </Button>
         <DialogClose as-child>
           <Button type="button" variant="secondary">Cerrar</Button>
         </DialogClose>

@@ -26,24 +26,14 @@ export interface Oportunidad {
 }
 
 /**
- * Paso del workflow copiado en una oportunidad al crearla. Es una copia fija:
- * cambiar el workflow después no lo altera. Solo `hecho` cambia, con
- * `PATCH /tareas/{id}/pasos/{id_paso}`.
- */
-export interface PasoTarea {
-  id: number
-  numero: number
-  nombre: string
-  hecho: boolean
-}
-
-/**
  * Subtarea de una tarea. Solo existe dentro de su tarea: se crea con
  * `POST /tareas/{id}/subtareas`, se edita con
  * `PUT /tareas/{id}/subtareas/{id_subtarea}`, cambia de estado con
  * `PATCH /tareas/{id}/subtareas/{id_subtarea}/resuelta` y se borra con
  * `DELETE /tareas/{id}/subtareas/{id_subtarea}`; todas devuelven la tarea
- * completa.
+ * completa. Al crear una oportunidad, cada paso del workflow de Ajustes se
+ * copia como una subtarea. Sus comentarios se gestionan en
+ * `/tareas/{id}/subtareas/{id_subtarea}/comentarios`, igual que los de la tarea.
  */
 export interface Subtarea {
   id: number
@@ -55,6 +45,8 @@ export interface Subtarea {
   /** De 1 (más prioritaria) a 5; `null` si no tiene. */
   prioridad: number | null
   resuelta: boolean
+  /** Número de comentarios de la subtarea. */
+  comentarios: number
 }
 
 /** Cuerpo de `POST /tareas/{id}/subtareas`. Si `asignado` no existe en el
@@ -76,7 +68,8 @@ export interface DatosEdicionSubtarea {
 
 /**
  * Tarea tal como la devuelve la API (`GET`/`POST /tareas`, `PUT /tareas/{id}`,
- * `PATCH /tareas/{id}/completada`).
+ * `PATCH /tareas/{id}/completada`). Se borra con `DELETE /tareas/{id}` (204),
+ * que borra también sus subtareas y todos los comentarios.
  */
 export interface Tarea {
   id: number
@@ -98,9 +91,6 @@ export interface Tarea {
   /** `true` si la tarea está completada. Solo cambia con
    * `PATCH /tareas/{id}/completada`; `POST` y `PUT` no lo reciben. */
   completada: boolean
-  /** Pasos del workflow de la oportunidad, por número; vacía si la tarea no
-   * es una oportunidad o no tiene pasos. */
-  pasos_oportunidad: PasoTarea[]
   /** Subtareas por orden de alta; vacía si no tiene. */
   subtareas: Subtarea[]
 }

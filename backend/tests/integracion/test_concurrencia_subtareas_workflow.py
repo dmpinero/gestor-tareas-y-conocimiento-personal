@@ -1,8 +1,9 @@
 """Altas de oportunidades simultáneas con reordenaciones del workflow.
 
 Cada hilo simula una petición: su propia sesión y su propia transacción, con los
-casos de uso y los repositorios reales sobre MySQL. La copia de los pasos de cada
-oportunidad debe ser uno de los órdenes completos del workflow, nunca uno a medias.
+casos de uso y los repositorios reales sobre MySQL. Las subtareas que recibe cada
+oportunidad deben seguir uno de los órdenes completos del workflow, nunca uno a
+medias.
 """
 
 import random
@@ -86,7 +87,7 @@ def _a_la_vez(operaciones: list[Callable[[], object]]) -> list[object]:
 
 @pytest.mark.usefixtures("sesion_bd")
 @pytest.mark.parametrize("ronda", range(_RONDAS))
-def test_las_altas_copian_un_orden_completo_del_workflow_aunque_se_reordene_a_la_vez(
+def test_las_altas_crean_las_subtareas_en_un_orden_completo_aunque_se_reordene_a_la_vez(
     ronda,
 ) -> None:
     sesion = FabricaSesiones()
@@ -112,10 +113,12 @@ def test_las_altas_copian_un_orden_completo_del_workflow_aunque_se_reordene_a_la
     tareas = [r for r in resultados if isinstance(r, Tarea)]
     assert len(tareas) == _ALTAS
     for tarea in tareas:
-        assert [p.numero for p in tarea.pasos_oportunidad] == list(range(1, _PASOS + 1))
-        assert [p.nombre for p in tarea.pasos_oportunidad] in nombres_validos
-        assert not any(p.hecho for p in tarea.pasos_oportunidad)
-        assert _guardada(tarea.id).pasos_oportunidad == tarea.pasos_oportunidad
+        assert [s.nombre for s in tarea.subtareas] in nombres_validos
+        assert not any(s.resuelta for s in tarea.subtareas)
+        assert all(s.asignado is None and s.prioridad is None for s in tarea.subtareas)
+        ids = [s.id for s in tarea.subtareas]
+        assert ids == sorted(ids)
+        assert _guardada(tarea.id).subtareas == tarea.subtareas
 
 
 @pytest.mark.usefixtures("sesion_bd")

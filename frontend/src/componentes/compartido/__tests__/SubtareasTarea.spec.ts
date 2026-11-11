@@ -19,9 +19,30 @@ vi.mock('@/api/cliente', () => ({
 }))
 
 const SUBTAREAS: Subtarea[] = [
-  { id: 20, nombre: 'Redactar índice', asignado: 'Ana', prioridad: 2, resuelta: false },
-  { id: 21, nombre: 'Revisar cifras', asignado: null, prioridad: null, resuelta: true },
-  { id: 22, nombre: 'Enviar borrador', asignado: 'Luis', prioridad: 5, resuelta: false },
+  {
+    id: 20,
+    nombre: 'Redactar índice',
+    asignado: 'Ana',
+    prioridad: 2,
+    resuelta: false,
+    comentarios: 0,
+  },
+  {
+    id: 21,
+    nombre: 'Revisar cifras',
+    asignado: null,
+    prioridad: null,
+    resuelta: true,
+    comentarios: 2,
+  },
+  {
+    id: 22,
+    nombre: 'Enviar borrador',
+    asignado: 'Luis',
+    prioridad: 5,
+    resuelta: false,
+    comentarios: 0,
+  },
 ]
 
 const TAREA: Tarea = {
@@ -36,9 +57,14 @@ const TAREA: Tarea = {
   tipo: null,
   oportunidad: null,
   completada: false,
-  pasos_oportunidad: [],
   subtareas: SUBTAREAS,
 }
+
+// Comentarios que devuelve la API para cualquier subtarea.
+const COMENTARIOS_SUBTAREA = [
+  { id: 1, texto: 'Cifras del T1', creado: '2026-04-01T08:05:00Z', editado: null },
+  { id: 2, texto: 'Cifras del T2', creado: '2026-04-02T09:15:00Z', editado: null },
+]
 
 const PERSONAS = [
   { id: 1, nombre: 'Ana' },
@@ -60,6 +86,9 @@ async function montar(tarea: Tarea = TAREA): Promise<VueWrapper> {
   vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
     if (ruta === '/personas') return Promise.resolve(PERSONAS)
     if (ruta === '/etiquetas') return Promise.resolve([])
+    if (String(ruta).endsWith('/comentarios')) {
+      return Promise.resolve(structuredClone(COMENTARIOS_SUBTAREA))
+    }
     return Promise.resolve([tarea])
   })
   const tienda = useTiendaTareas()
@@ -328,6 +357,142 @@ describe('SubtareasTarea', () => {
           'Editar subtarea Otro nombre',
         )
       })
+    })
+  })
+
+  describe('comentarios de la subtarea', () => {
+    // Nombre accesible del botón: su texto (sin aria-label), que incluye el número
+    // visible para cumplir WCAG 2.5.3 (la etiqueta visible forma parte del nombre).
+    function nombreAccesible(elemento: { text: () => string }): string {
+      return elemento.text().replace(/\s+/g, ' ').trim()
+    }
+
+    function botonComentarios(envoltorio: VueWrapper, nombre: string) {
+      const prefijo = `Comentarios de la subtarea ${nombre}`
+      const encontrado = envoltorio.findAll('button').find((b) => {
+        const texto = nombreAccesible(b)
+        return texto === prefijo || texto.startsWith(`${prefijo}:`)
+      })
+      if (!encontrado) throw new Error(`No hay botón «${prefijo}»`)
+      return encontrado
+    }
+
+    it('cada subtarea tiene un botón de comentarios plegado que muestra cuántos tiene si hay alguno', async () => {
+      const envoltorio = await montar()
+
+      for (const subtarea of SUBTAREAS) {
+        const elemento = botonComentarios(envoltorio, subtarea.nombre)
+        expect(elemento.attributes('aria-expanded')).toBe('false')
+        expect(elemento.find('svg').exists()).toBe(true)
+      }
+      const conComentarios = botonComentarios(envoltorio, 'Revisar cifras')
+      expect(conComentarios.attributes('aria-label')).toBeUndefined()
+      expect(conComentarios.get('[data-testid="numero-comentarios-subtarea"]').text()).toBe('2')
+      expect(nombreAccesible(conComentarios)).toBe('Comentarios de la subtarea Revisar cifras: 2')
+      const sinComentarios = botonComentarios(envoltorio, 'Redactar índice')
+      expect(sinComentarios.find('[data-testid="numero-comentarios-subtarea"]').exists()).toBe(
+        false,
+      )
+      expect(nombreAccesible(sinComentarios)).toBe('Comentarios de la subtarea Redactar índice')
+      expect(clienteApi.obtener).not.toHaveBeenCalledWith(expect.stringContaining('/comentarios'))
+    })
+
+    it('en la tabla abre los comentarios en una fila a todo lo ancho bajo la subtarea y los vuelve a plegar', async () => {
+      const envoltorio = await montar()
+
+      await botonComentarios(envoltorio, 'Revisar cifras').trigger('click')
+      await flushPromises()
+
+      const abierto = botonComentarios(envoltorio, 'Revisar cifras')
+      expect(abierto.attributes('aria-expanded')).toBe('true')
+      expect(clienteApi.obtener).toHaveBeenCalledWith('/tareas/1/subtareas/21/comentarios')
+      const panel = document.getElementById(abierto.attributes('aria-controls')!)!
+      const celda = panel.closest('td')!
+      expect(celda.getAttribute('colspan')).toBe('4')
+      // La fila del panel va justo después de la de su subtarea.
+      const filasCuerpo = [...envoltorio.element.querySelectorAll('tbody tr')]
+      expect(filasCuerpo.indexOf(celda.closest('tr')!)).toBe(2)
+      expect(
+        panel.querySelector(
+          '[role="region"][aria-label="Comentarios anteriores de la subtarea Revisar cifras"]',
+        )?.textContent,
+      ).toContain('Cifras del T1')
+
+      await botonComentarios(envoltorio, 'Revisar cifras').trigger('click')
+      await flushPromises()
+      expect(botonComentarios(envoltorio, 'Revisar cifras').attributes('aria-expanded')).toBe(
+        'false',
+      )
+      expect(envoltorio.findAll('tbody tr')).toHaveLength(3)
+    })
+
+    it('solo hay un panel abierto a la vez', async () => {
+      const envoltorio = await montar()
+
+      await botonComentarios(envoltorio, 'Revisar cifras').trigger('click')
+      await flushPromises()
+      await botonComentarios(envoltorio, 'Enviar borrador').trigger('click')
+      await flushPromises()
+
+      expect(botonComentarios(envoltorio, 'Revisar cifras').attributes('aria-expanded')).toBe(
+        'false',
+      )
+      expect(botonComentarios(envoltorio, 'Enviar borrador').attributes('aria-expanded')).toBe(
+        'true',
+      )
+      expect(envoltorio.findAll('[aria-label^="Comentarios anteriores"]')).toHaveLength(1)
+      expect(clienteApi.obtener).toHaveBeenLastCalledWith('/tareas/1/subtareas/22/comentarios')
+    })
+
+    it('al añadir un comentario actualiza el número del botón', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValue({
+        id: 3,
+        texto: 'Revisadas',
+        creado: '2026-04-03T10:00:00Z',
+        editado: null,
+      })
+      const envoltorio = await montar()
+      await botonComentarios(envoltorio, 'Revisar cifras').trigger('click')
+      await flushPromises()
+
+      await envoltorio
+        .get('textarea[aria-label="Escribe un comentario de la subtarea Revisar cifras"]')
+        .setValue('Revisadas')
+      await flushPromises()
+      await boton(envoltorio, 'Enviar comentario de la subtarea Revisar cifras').trigger('click')
+      await flushPromises()
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/subtareas/21/comentarios', {
+        texto: 'Revisadas',
+      })
+      expect(nombreAccesible(botonComentarios(envoltorio, 'Revisar cifras'))).toBe(
+        'Comentarios de la subtarea Revisar cifras: 3',
+      )
+      expect(useTiendaTareas().tareas[0]!.subtareas[1]!.comentarios).toBe(3)
+    })
+
+    it('en tarjetas abre los comentarios dentro de la tarjeta de su subtarea', async () => {
+      fijarAncho(360)
+      const envoltorio = await montar()
+
+      await botonComentarios(envoltorio, 'Redactar índice').trigger('click')
+      await flushPromises()
+
+      const abierto = botonComentarios(envoltorio, 'Redactar índice')
+      expect(abierto.attributes('aria-expanded')).toBe('true')
+      const panel = document.getElementById(abierto.attributes('aria-controls')!)!
+      expect(panel.closest('[data-testid="tarjeta-subtarea"]')).toBe(
+        tarjetas(envoltorio)[0]!.element,
+      )
+      expect(
+        panel.querySelector(
+          '[aria-label="Historial de comentarios de la subtarea Redactar índice"]',
+        ),
+      ).not.toBeNull()
+      // Al cargarlos, el número del botón refleja los que hay de verdad.
+      expect(nombreAccesible(botonComentarios(envoltorio, 'Redactar índice'))).toBe(
+        'Comentarios de la subtarea Redactar índice: 2',
+      )
     })
   })
 
@@ -630,7 +795,9 @@ describe('SubtareasTarea', () => {
     it('cada fila tiene un botón "Editar subtarea" con un nombre accesible único', async () => {
       const envoltorio = await montar()
 
-      const nombres = envoltorio.findAll('tbody button').map((b) => b.attributes('aria-label'))
+      const nombres = envoltorio
+        .findAll('tbody button')
+        .map((b) => b.attributes('aria-label') ?? b.text().replace(/\s+/g, ' ').trim())
       expect(nombres).toContain('Editar subtarea Redactar índice')
       expect(nombres).toContain('Editar subtarea Revisar cifras')
       expect(nombres).toContain('Editar subtarea Enviar borrador')

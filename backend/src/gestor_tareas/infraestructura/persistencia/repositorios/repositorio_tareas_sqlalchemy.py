@@ -1,10 +1,10 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.nombres_catalogo import ordenar_nombres
 from gestor_tareas.dominio.tarea.entidades import (
     Oportunidad,
-    PasoOportunidad,
     Subtarea,
     Tarea,
     TipoTarea,
@@ -12,7 +12,6 @@ from gestor_tareas.dominio.tarea.entidades import (
 from gestor_tareas.infraestructura.persistencia.modelos import (
     EtiquetaModelo,
     OportunidadModelo,
-    PasoOportunidadModelo,
     PersonaModelo,
     SubtareaModelo,
     TareaModelo,
@@ -44,10 +43,6 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         tipo=TipoTarea(modelo.tipo) if modelo.tipo is not None else None,
         oportunidad=_a_oportunidad(modelo.oportunidad),
         completada=modelo.completada,
-        pasos_oportunidad=[
-            PasoOportunidad(id=p.id, numero=p.numero, nombre=p.nombre, hecho=p.hecho)
-            for p in sorted(modelo.pasos_oportunidad, key=lambda p: p.numero)
-        ],
         subtareas=[_a_subtarea(s) for s in sorted(modelo.subtareas, key=lambda s: s.id)],
     )
 
@@ -59,6 +54,7 @@ def _a_subtarea(modelo: SubtareaModelo) -> Subtarea:
         asignado=modelo.asignado.nombre if modelo.asignado is not None else None,
         prioridad=modelo.prioridad,
         resuelta=modelo.resuelta,
+        comentarios=modelo.numero_comentarios,
     )
 
 
@@ -96,10 +92,6 @@ class RepositorioTareasSqlAlchemy:
         modelo.asignados = self._filas_catalogo(PersonaModelo, tarea.asignados)
         modelo.tipo = tarea.tipo.value if tarea.tipo is not None else None
         self._asignar_oportunidad(modelo, tarea.oportunidad)
-        # Los pasos solo se guardan al crear la tarea; una tarea que deja de ser
-        # oportunidad los pierde ("delete-orphan" borra sus filas).
-        if tarea.tipo is not TipoTarea.OPORTUNIDAD:
-            modelo.pasos_oportunidad = []
 
     @staticmethod
     def _asignar_oportunidad(modelo: TareaModelo, oportunidad: Oportunidad | None) -> None:
@@ -117,14 +109,24 @@ class RepositorioTareasSqlAlchemy:
         modelo.oportunidad.descripcion = oportunidad.descripcion
         modelo.oportunidad.observaciones = oportunidad.observaciones
 
+    def _subtarea_nueva(self, subtarea: Subtarea) -> SubtareaModelo:
+        persona = None
+        if subtarea.asignado is not None:
+            (persona,) = self._filas_catalogo(PersonaModelo, [subtarea.asignado])
+        return SubtareaModelo(
+            nombre=subtarea.nombre,
+            asignado=persona,
+            prioridad=subtarea.prioridad,
+            resuelta=subtarea.resuelta,
+        )
+
     def crear(self, tarea: Tarea) -> Tarea:
         with traducir_conflictos(self._sesion):
+            # Las subtareas se insertan en el orden de la lista, así que sus ids
+            # (y con ellos su orden de alta) siguen ese orden.
             modelo = TareaModelo(
                 completada=tarea.completada,
-                pasos_oportunidad=[
-                    PasoOportunidadModelo(numero=p.numero, nombre=p.nombre, hecho=p.hecho)
-                    for p in tarea.pasos_oportunidad
-                ],
+                subtareas=[self._subtarea_nueva(s) for s in tarea.subtareas],
             )
             self._asignar_datos(modelo, tarea)
             self._sesion.add(modelo)
@@ -139,45 +141,55 @@ class RepositorioTareasSqlAlchemy:
         modelo = self._sesion.get(TareaModelo, id_tarea)
         return _a_entidad(modelo) if modelo is not None else None
 
+    def _tarea_bloqueada(self, id_tarea: int) -> TareaModelo | None:
+        """La tarea leída con bloqueo, o ``None`` si ya no existe.
+
+        La lectura con bloqueo ve lo último confirmado y espera a un borrado en
+        curso: si otra petición borra la tarea entre la lectura del caso de uso y
+        esta escritura, se detecta aquí en lugar de fallar el UPDATE.
+        """
+        consulta = (
+            select(TareaModelo)
+            .where(TareaModelo.id == id_tarea)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return self._sesion.scalars(consulta).one_or_none()
+
     def actualizar(self, tarea: Tarea) -> Tarea:
         with traducir_conflictos(self._sesion):
-            modelo = self._sesion.get(TareaModelo, tarea.id)
+            modelo = self._tarea_bloqueada(tarea.id)
+            if modelo is None:
+                self._sesion.rollback()
+                raise EntidadNoEncontradaError(f"No existe la tarea con id {tarea.id}")
             self._asignar_datos(modelo, tarea)
             self._sesion.commit()
         return _a_entidad(modelo)
 
     def cambiar_completada(self, id_tarea: int, completada: bool) -> Tarea | None:
         with traducir_conflictos(self._sesion):
-            modelo = self._sesion.get(TareaModelo, id_tarea)
+            modelo = self._tarea_bloqueada(id_tarea)
             if modelo is None:
+                self._sesion.rollback()
                 return None
             modelo.completada = completada
             self._sesion.commit()
         return _a_entidad(modelo)
 
-    def cambiar_hecho_paso(self, id_tarea: int, id_paso: int, hecho: bool) -> Tarea | None:
+    def eliminar(self, id_tarea: int) -> bool:
         with traducir_conflictos(self._sesion):
-            # Lectura con bloqueo: ve lo último confirmado y espera a una edición en
-            # curso que pueda estar borrando los pasos (si los borra, no lo encuentra).
-            consulta = (
-                select(PasoOportunidadModelo)
-                .where(
-                    PasoOportunidadModelo.id == id_paso,
-                    PasoOportunidadModelo.tarea_id == id_tarea,
-                )
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-            paso = self._sesion.scalars(consulta).one_or_none()
-            if paso is None:
+            # Un único DELETE: el ON DELETE CASCADE de la base de datos borra en la
+            # misma sentencia sus datos de oportunidad, sus enlaces con los
+            # catálogos, sus subtareas, sus comentarios y los de sus subtareas (las
+            # filas de los catálogos no se tocan). Espera a quien tenga la tarea
+            # bloqueada (p. ej. un alta de subtarea en curso) y se lleva lo que haya
+            # confirmado.
+            resultado = self._sesion.execute(delete(TareaModelo).where(TareaModelo.id == id_tarea))
+            if resultado.rowcount == 0:
                 self._sesion.rollback()
-                return None
-            paso.hecho = hecho
-            self._sesion.flush()
-            # Antes de confirmar: la tarea, con el paso ya cambiado en la sesión.
-            tarea = _a_entidad(self._sesion.get(TareaModelo, id_tarea))
+                return False
             self._sesion.commit()
-        return tarea
+        return True
 
     def _subtarea_bloqueada(self, id_tarea: int, id_subtarea: int) -> SubtareaModelo | None:
         """La subtarea de esa tarea, leída con bloqueo, o ``None`` si no la tiene.

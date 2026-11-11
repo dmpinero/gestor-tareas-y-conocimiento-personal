@@ -164,7 +164,6 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         tipo=None,
         oportunidad=None,
         completada=False,
-        pasos_oportunidad=[],
         subtareas=[],
     )
 
@@ -180,7 +179,6 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "tipo": None,
         "oportunidad": None,
         "completada": False,
-        "pasos_oportunidad": [],
         "subtareas": [],
     }
 
@@ -198,7 +196,6 @@ def test_salida_serializa_la_fecha_de_vencimiento_ausente_como_null() -> None:
         tipo=None,
         oportunidad=None,
         completada=False,
-        pasos_oportunidad=[],
         subtareas=[],
     )
 
