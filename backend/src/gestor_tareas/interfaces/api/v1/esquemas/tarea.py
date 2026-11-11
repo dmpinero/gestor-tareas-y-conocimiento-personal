@@ -283,6 +283,12 @@ class SubtareaCrearEsquema(BaseModel):
     prioridad: PrioridadEntera | None = None
 
 
+class SubtareaEditarEsquema(SubtareaCrearEsquema):
+    """Cuerpo de la edición de una subtarea: los mismos campos y validaciones que el
+    alta. Es un reemplazo completo: si ``asignado`` o ``prioridad`` faltan o son
+    ``null``, se vacían. El estado resuelta no cambia."""
+
+
 class SubtareaResueltaEsquema(BaseModel):
     """Cuerpo del cambio de estado de una subtarea. Solo admite ``true`` o
     ``false`` de JSON: una cadena, un número o ``null`` se rechazan con 422."""

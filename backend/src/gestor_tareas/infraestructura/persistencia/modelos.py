@@ -135,6 +135,8 @@ class SubtareaModelo(Base):
 class ComentarioModelo(Base):
     """Comentario del histórico de una tarea; borrar la tarea borra sus comentarios.
 
+    ``editado`` es el instante de su última edición, o NULL si nunca se editó.
+
     No hay relación desde ``TareaModelo``: los comentarios no se cargan con la tarea.
     """
 
@@ -147,6 +149,7 @@ class ComentarioModelo(Base):
     texto: Mapped[str] = mapped_column(String(500), nullable=False)
     # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
     creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
 
 class TareaModelo(Base):

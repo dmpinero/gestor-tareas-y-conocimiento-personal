@@ -131,3 +131,92 @@ Característica: Subtareas de una tarea
     Cuando intento eliminar la subtarea "Reservar" de "Viaje" a través de "Mudanza"
     Entonces la API responde que "Mudanza" no tiene la subtarea "Reservar" de "Viaje"
     Y al consultar las tareas "Viaje" tiene las subtareas "Reservar: -, -, pendiente"
+
+  Escenario: Editar una subtarea sustituye su nombre, persona y prioridad y conserva su estado
+    Dado que "Mudanza" tiene las subtareas "Embalar, Limpiar"
+    Y la subtarea "Embalar" de "Mudanza" está resuelta
+    Cuando edito la subtarea "Embalar" de "Mudanza" con el cuerpo {"nombre": "  Embalar libros  ", "asignado": "  Ana  ", "prioridad": 3}
+    Entonces la API responde 200 con "Mudanza" y sus subtareas "Embalar libros: Ana, 3, resuelta; Limpiar: -, -, pendiente"
+    Y al consultar las tareas "Mudanza" tiene las subtareas "Embalar libros: Ana, 3, resuelta; Limpiar: -, -, pendiente"
+    Y el catálogo de personas es "Ana"
+
+  Esquema del escenario: Editar una subtarea sin persona o sin prioridad las vacía
+    Dado que "Mudanza" tiene la subtarea "Embalar" asignada a "Ana" con prioridad 2
+    Cuando edito la subtarea "Embalar" de "Mudanza" con el cuerpo <cuerpo>
+    Entonces la API responde 200 con "Mudanza" y sus subtareas "<subtareas>"
+    Y al consultar las tareas "Mudanza" tiene las subtareas "<subtareas>"
+    Y el catálogo de personas es "Ana"
+
+    Ejemplos:
+      | cuerpo                                                    | subtareas              |
+      | {"nombre": "Embalar"}                                     | Embalar: -, -, pendiente  |
+      | {"nombre": "Embalar", "asignado": null, "prioridad": null} | Embalar: -, -, pendiente  |
+      | {"nombre": "Embalar", "prioridad": 2}                     | Embalar: -, 2, pendiente  |
+      | {"nombre": "Embalar", "asignado": "Ana"}                  | Embalar: Ana, -, pendiente |
+
+  Escenario: Editar la persona asignada reutiliza la del catálogo o la da de alta
+    Dado que existe la tarea "Viaje" asignada a "Ana"
+    Y que "Mudanza" tiene las subtareas "Embalar, Limpiar"
+    Cuando edito la subtarea "Embalar" de "Mudanza" con el cuerpo {"nombre": "Embalar", "asignado": "ANA"}
+    Entonces la API responde 200 con "Mudanza" y sus subtareas "Embalar: Ana, -, pendiente; Limpiar: -, -, pendiente"
+    Cuando edito la subtarea "Limpiar" de "Mudanza" con el cuerpo {"nombre": "Limpiar", "asignado": "Luis"}
+    Entonces la API responde 200 con "Mudanza" y sus subtareas "Embalar: Ana, -, pendiente; Limpiar: Luis, -, pendiente"
+    Y el catálogo de personas es "Ana, Luis"
+
+  Escenario: Se admite editar una subtarea con un nombre de 200 caracteres y una persona de 100
+    Dado que "Mudanza" tiene las subtareas "Embalar"
+    Cuando edito la subtarea "Embalar" de "Mudanza" con un nombre de 200 caracteres y una persona de 100
+    Entonces la API responde 200 con una subtarea de nombre de 200 caracteres y persona de 100
+
+  Esquema del escenario: Se rechaza editar una subtarea con datos inválidos
+    Dado que "Mudanza" tiene la subtarea "Embalar" asignada a "Ana" con prioridad 2
+    Cuando edito la subtarea "Embalar" de "Mudanza" con el cuerpo <cuerpo>
+    Entonces la API rechaza la petición por datos inválidos
+    Y al consultar las tareas "Mudanza" tiene las subtareas "Embalar: Ana, 2, pendiente"
+    Y el catálogo de personas es "Ana"
+
+    Ejemplos:
+      | cuerpo                                             |
+      | {}                                                 |
+      | {"nombre": ""}                                     |
+      | {"nombre": "   "}                                  |
+      | {"nombre": null}                                   |
+      | {"nombre": 5}                                      |
+      | {"asignado": "Luis", "prioridad": 3}               |
+      | {"nombre": "A", "asignado": ""}                    |
+      | {"nombre": "A", "asignado": "  "}                  |
+      | {"nombre": "A", "asignado": "Luis", "prioridad": 0} |
+      | {"nombre": "A", "asignado": "Luis", "prioridad": 6} |
+      | {"nombre": "A", "prioridad": "2"}                  |
+      | {"nombre": "A", "prioridad": 2.5}                  |
+      | {"nombre": "A", "prioridad": true}                 |
+
+  Escenario: Se rechaza editar una subtarea con un nombre de 201 caracteres o una persona de 101
+    Dado que "Mudanza" tiene la subtarea "Embalar" asignada a "Ana" con prioridad 2
+    Cuando intento editar la subtarea "Embalar" de "Mudanza" con un nombre de 201 caracteres
+    Entonces la API rechaza la petición por datos inválidos
+    Cuando intento editar la subtarea "Embalar" de "Mudanza" con una persona de 101 caracteres
+    Entonces la API rechaza la petición por datos inválidos
+    Y al consultar las tareas "Mudanza" tiene las subtareas "Embalar: Ana, 2, pendiente"
+    Y el catálogo de personas es "Ana"
+
+  Escenario: Se rechaza editar una subtarea de una tarea que no existe sin dar de alta a la persona
+    Dado que "Mudanza" tiene las subtareas "Embalar"
+    Cuando intento editar la subtarea "Embalar" de la tarea con id 999999 asignándola a "Luis"
+    Entonces la API responde que no existe la tarea con id 999999
+    Y al consultar las tareas "Mudanza" tiene las subtareas "Embalar: -, -, pendiente"
+    Y el catálogo de personas es ""
+
+  Escenario: Se rechaza editar una subtarea que no existe sin dar de alta a la persona
+    Cuando intento editar la subtarea con id 999999 de "Mudanza" asignándola a "Luis"
+    Entonces la API responde que "Mudanza" no tiene la subtarea con id 999999
+    Y el catálogo de personas es ""
+
+  Escenario: Se rechaza editar la subtarea de otra tarea
+    Dado que existe la tarea "Viaje" asignada a "Ana"
+    Y que "Viaje" tiene las subtareas "Reservar"
+    Cuando intento editar la subtarea "Reservar" de "Viaje" a través de "Mudanza" asignándola a "Luis"
+    Entonces la API responde que "Mudanza" no tiene la subtarea "Reservar" de "Viaje"
+    Y al consultar las tareas "Viaje" tiene las subtareas "Reservar: -, -, pendiente"
+    Y al consultar las tareas "Mudanza" tiene las subtareas ""
+    Y el catálogo de personas es "Ana"

@@ -5,10 +5,12 @@ from pydantic import ValidationError
 
 from gestor_tareas.interfaces.api.v1.esquemas.comentario import (
     ComentarioCrearEsquema,
+    ComentarioEditarEsquema,
     ComentarioSalidaEsquema,
 )
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     SubtareaCrearEsquema,
+    SubtareaEditarEsquema,
     SubtareaResueltaEsquema,
     TareaSalidaEsquema,
 )
@@ -92,12 +94,67 @@ def test_la_salida_del_comentario_serializa_el_instante_en_utc_con_z() -> None:
         datetime(2026, 11, 10, 16, 30, 5, tzinfo=UTC),
         datetime(2026, 11, 10, 17, 30, 5, tzinfo=madrid),
     ):
-        salida = ComentarioSalidaEsquema(id=1, texto="Hola", creado=creado)
+        salida = ComentarioSalidaEsquema(id=1, texto="Hola", creado=creado, editado=None)
         assert salida.model_dump(mode="json") == {
             "id": 1,
             "texto": "Hola",
             "creado": "2026-11-10T16:30:05Z",
+            "editado": None,
         }
 
     contrato = ComentarioSalidaEsquema.model_json_schema(mode="serialization")
     assert contrato["properties"]["creado"]["pattern"] == r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+
+
+def test_la_salida_del_comentario_serializa_editado_en_utc_con_z() -> None:
+    madrid = timezone(timedelta(hours=1))
+    salida = ComentarioSalidaEsquema(
+        id=1,
+        texto="Hola",
+        creado=datetime(2026, 11, 10, 16, 30, 5, tzinfo=UTC),
+        editado=datetime(2026, 11, 10, 19, 0, 1, tzinfo=madrid),
+    )
+
+    assert salida.model_dump(mode="json")["editado"] == "2026-11-10T18:00:01Z"
+    contrato = ComentarioSalidaEsquema.model_json_schema(mode="serialization")
+    assert set(contrato["required"]) == {"id", "texto", "creado", "editado"}
+    variantes = contrato["properties"]["editado"]["anyOf"]
+    assert {"type": "null"} in variantes
+    instante = next(v for v in variantes if v.get("type") == "string")
+    assert instante["pattern"] == r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+
+
+def test_la_edicion_de_un_comentario_valida_como_el_alta() -> None:
+    assert ComentarioEditarEsquema(texto="\n Uno\nDos ").texto == "Uno\nDos"
+    assert ComentarioEditarEsquema(texto="á" * 500).texto == "á" * 500
+    for texto in ["", " \n\t ", "a" * 501, None, 5]:
+        with pytest.raises(ValidationError):
+            ComentarioEditarEsquema(texto=texto)
+    assert (
+        ComentarioEditarEsquema.model_json_schema()["properties"]["texto"]
+        == (ComentarioCrearEsquema.model_json_schema()["properties"]["texto"])
+    )
+
+
+def test_la_edicion_de_una_subtarea_valida_como_el_alta_y_sin_campos_opcionales_los_vacia() -> None:
+    assert SubtareaEditarEsquema(nombre="  Embalar ").model_dump() == {
+        "nombre": "Embalar",
+        "asignado": None,
+        "prioridad": None,
+    }
+    assert SubtareaEditarEsquema(nombre="A", asignado=" Ana ", prioridad=2).model_dump() == {
+        "nombre": "A",
+        "asignado": "Ana",
+        "prioridad": 2,
+    }
+    for datos in [
+        {},
+        {"nombre": "n" * 201},
+        {"nombre": "A", "asignado": "p" * 101},
+        {"nombre": "A", "prioridad": True},
+    ]:
+        with pytest.raises(ValidationError):
+            SubtareaEditarEsquema(**datos)
+    edicion = SubtareaEditarEsquema.model_json_schema()
+    assert edicion["required"] == ["nombre"]
+    assert edicion["properties"] == SubtareaCrearEsquema.model_json_schema()["properties"]

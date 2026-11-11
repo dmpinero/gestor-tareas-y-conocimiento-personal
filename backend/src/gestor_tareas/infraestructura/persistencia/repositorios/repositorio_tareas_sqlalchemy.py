@@ -241,6 +241,24 @@ class RepositorioTareasSqlAlchemy:
             self._sesion.commit()
         return self._tarea_tras_confirmar(id_tarea)
 
+    def editar_subtarea(self, id_tarea: int, subtarea: Subtarea) -> Tarea | None:
+        if subtarea.id is None:
+            raise ValueError("La subtarea a editar debe tener id")
+        with traducir_conflictos(self._sesion):
+            modelo = self._subtarea_bloqueada(id_tarea, subtarea.id)
+            if modelo is None:
+                # Deshace también las altas en el catálogo hechas para la subtarea.
+                self._sesion.rollback()
+                return None
+            persona = None
+            if subtarea.asignado is not None:
+                (persona,) = self._filas_catalogo(PersonaModelo, [subtarea.asignado])
+            modelo.nombre = subtarea.nombre
+            modelo.asignado = persona
+            modelo.prioridad = subtarea.prioridad
+            self._sesion.commit()
+        return self._tarea_tras_confirmar(id_tarea)
+
     def eliminar_subtarea(self, id_tarea: int, id_subtarea: int) -> Tarea | None:
         with traducir_conflictos(self._sesion):
             subtarea = self._subtarea_bloqueada(id_tarea, id_subtarea)

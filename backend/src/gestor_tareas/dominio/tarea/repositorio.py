@@ -79,6 +79,20 @@ class RepositorioTareas(Protocol):
         """
         ...
 
+    def editar_subtarea(self, id_tarea: int, subtarea: Subtarea) -> Tarea | None:
+        """Sustituye el nombre, la persona asignada y la prioridad de la subtarea
+        ``subtarea.id`` y devuelve la tarea.
+
+        Es un reemplazo completo: ``asignado`` o ``prioridad`` a ``None`` los vacían.
+        El estado resuelta no cambia (se ignora ``subtarea.resuelta``).
+        ``subtarea.asignado`` debe existir ya en el catálogo de personas. Devuelve
+        ``None`` si la tarea no tiene una subtarea con ese id (como en
+        ``cambiar_resuelta_subtarea``), y entonces deshace la transacción (también
+        las altas en el catálogo hechas en ella). El resto de datos de la tarea no
+        cambia.
+        """
+        ...
+
     def eliminar_subtarea(self, id_tarea: int, id_subtarea: int) -> Tarea | None:
         """Borra la subtarea y devuelve la tarea, o ``None`` si la tarea no tiene
         una subtarea con ese id (como en ``cambiar_resuelta_subtarea``)."""

@@ -267,6 +267,103 @@ def eliminar_de_otra(cliente: TestClient, subtarea: str, otra: str, tarea: str) 
     return cliente.delete(_ruta(id_tarea, _id_subtarea(cliente, otra, subtarea)))
 
 
+@given(
+    _patron(r"que {tarea} tiene la subtarea {nombre} asignada a {persona} con prioridad (?P<p>\d)")
+)
+def tiene_la_subtarea_completa(
+    cliente: TestClient, tarea: str, nombre: str, persona: str, p: str
+) -> None:
+    cuerpo = {"nombre": nombre, "asignado": persona, "prioridad": int(p)}
+    assert _anadir(cliente, tarea, cuerpo).status_code == 201
+
+
+def _editar_subtarea(
+    cliente: TestClient, id_tarea: int, id_subtarea: int, cuerpo: dict
+) -> Response:
+    return cliente.put(_ruta(id_tarea, id_subtarea), json=cuerpo)
+
+
+def _editar_por_nombre(cliente: TestClient, tarea: str, subtarea: str, cuerpo: dict) -> Response:
+    id_tarea = _tarea(cliente, tarea)["id"]
+    return _editar_subtarea(cliente, id_tarea, _id_subtarea(cliente, tarea, subtarea), cuerpo)
+
+
+@when(
+    _patron("edito la subtarea {subtarea} de {tarea} con el cuerpo (?P<cuerpo>.+)"),
+    target_fixture="respuesta",
+)
+def editar_subtarea_con_cuerpo(
+    cliente: TestClient, subtarea: str, tarea: str, cuerpo: str
+) -> Response:
+    return _editar_por_nombre(cliente, tarea, subtarea, json.loads(cuerpo))
+
+
+@when(
+    _patron(
+        "edito la subtarea {subtarea} de {tarea} con un nombre de 200 caracteres"
+        " y una persona de 100"
+    ),
+    target_fixture="respuesta",
+)
+def editar_subtarea_en_el_limite(cliente: TestClient, subtarea: str, tarea: str) -> Response:
+    cuerpo = {"nombre": "n" * 200, "asignado": "p" * 100}
+    return _editar_por_nombre(cliente, tarea, subtarea, cuerpo)
+
+
+@when(
+    _patron("intento editar la subtarea {subtarea} de {tarea} con un nombre de 201 caracteres"),
+    target_fixture="respuesta",
+)
+def editar_subtarea_nombre_largo(cliente: TestClient, subtarea: str, tarea: str) -> Response:
+    return _editar_por_nombre(cliente, tarea, subtarea, {"nombre": "n" * 201})
+
+
+@when(
+    _patron("intento editar la subtarea {subtarea} de {tarea} con una persona de 101 caracteres"),
+    target_fixture="respuesta",
+)
+def editar_subtarea_persona_larga(cliente: TestClient, subtarea: str, tarea: str) -> Response:
+    return _editar_por_nombre(cliente, tarea, subtarea, {"nombre": "A", "asignado": "p" * 101})
+
+
+@when(
+    _patron(
+        r"intento editar la subtarea {subtarea} de la tarea con id (?P<i>\d+)"
+        " asignándola a {persona}"
+    ),
+    target_fixture="respuesta",
+)
+def editar_en_tarea_inexistente(
+    cliente: TestClient, subtarea: str, i: str, persona: str
+) -> Response:
+    id_subtarea = _id_de_cualquier_tarea(cliente, subtarea)
+    return _editar_subtarea(cliente, int(i), id_subtarea, {"nombre": "X", "asignado": persona})
+
+
+@when(
+    _patron(r"intento editar la subtarea con id (?P<i>\d+) de {tarea} asignándola a {persona}"),
+    target_fixture="respuesta",
+)
+def editar_subtarea_inexistente(cliente: TestClient, i: str, tarea: str, persona: str) -> Response:
+    id_tarea = _tarea(cliente, tarea)["id"]
+    return _editar_subtarea(cliente, id_tarea, int(i), {"nombre": "X", "asignado": persona})
+
+
+@when(
+    _patron(
+        "intento editar la subtarea {subtarea} de {otra} a través de {tarea}"
+        " asignándola a {persona}"
+    ),
+    target_fixture="respuesta",
+)
+def editar_de_otra(
+    cliente: TestClient, subtarea: str, otra: str, tarea: str, persona: str
+) -> Response:
+    id_tarea = _tarea(cliente, tarea)["id"]
+    id_subtarea = _id_subtarea(cliente, otra, subtarea)
+    return _editar_subtarea(cliente, id_tarea, id_subtarea, {"nombre": "X", "asignado": persona})
+
+
 @then(
     _patron(r"la API responde (?P<codigo>\d+) con {nombre} y sus subtareas {subtareas}"),
 )
@@ -278,9 +375,14 @@ def la_api_responde_con_subtareas(
     assert _subtareas(respuesta.json()) == _esperadas(subtareas)
 
 
-@then("la API responde 201 con una subtarea de nombre de 200 caracteres y persona de 100")
-def la_api_responde_en_el_limite(cliente: TestClient, respuesta: Response) -> None:
-    assert respuesta.status_code == 201
+@then(
+    parsers.re(
+        r"^la API responde (?P<codigo>201|200) con una subtarea de nombre de 200 caracteres"
+        r" y persona de 100$"
+    )
+)
+def la_api_responde_en_el_limite(cliente: TestClient, respuesta: Response, codigo: str) -> None:
+    assert respuesta.status_code == int(codigo)
     assert _subtareas(respuesta.json()) == [("n" * 200, "p" * 100, None, False)]
     assert _subtareas(_tarea(cliente, "Mudanza")) == [("n" * 200, "p" * 100, None, False)]
 
