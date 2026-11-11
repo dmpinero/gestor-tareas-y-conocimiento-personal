@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { activarModoOscuro } from './utilidades'
 
 test('crea una tarea desde la ventana modal y aparece en el listado', async ({ page }) => {
   // Nombre único: la base de datos de la pila local no se vacía entre ejecuciones.
@@ -864,3 +865,57 @@ test('elige qué columnas ver y lo recuerda al recargar', async ({ page, request
   await expect(cabecera('Descripción')).toBeVisible()
   await expect(cabecera('Fecha de creación')).toBeVisible()
 })
+
+const MODOS_BORDES = [
+  { modo: 'claro', preparar: async (_page: Page) => {} },
+  { modo: 'oscuro', preparar: activarModoOscuro },
+] as const
+
+for (const { modo, preparar } of MODOS_BORDES) {
+  test(`edita la tarea en una ventana modal con los campos obligatorios en rojo y los opcionales en verde (modo ${modo})`, async ({
+    page,
+    request,
+  }) => {
+    const nombre = `Bordes ${modo} ${Date.now()}`
+    const creada = await request.post('/api/v1/tareas', {
+      data: { nombre, descripcion: 'Para editar', fecha_creacion: '2026-01-01T09:00:00' },
+    })
+    expect(creada.status()).toBe(201)
+
+    await page.goto('/tareas')
+    await preparar(page)
+    await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
+    const ventana = page.getByRole('dialog', { name: 'Editar tarea' })
+    await expect(ventana).toHaveAttribute('data-slot', 'dialog-content')
+    await expect(ventana.getByText('Los campos con * (borde rojo) son obligatorios')).toBeVisible()
+
+    const borde = (selector: string) =>
+      ventana.locator(selector).evaluate((elemento) => getComputedStyle(elemento).borderTopColor)
+    const rojo = await borde('#tarea-nombre')
+    const verde = await borde('#tarea-prioridad')
+    expect(rojo).not.toBe(verde)
+    expect(await borde('#tarea-descripcion')).toBe(rojo)
+    expect(await borde('#fecha-creacion')).toBe(rojo)
+    expect(await borde('#tarea-tipo')).toBe(verde)
+    expect(await borde('#etiquetas')).toBe(verde)
+
+    await ventana.evaluate((elemento) =>
+      Promise.all(
+        elemento
+          .getAnimations({ subtree: true })
+          .filter((animacion) => animacion.effect?.getTiming().iterations !== Infinity)
+          .map((animacion) => animacion.finished),
+      ),
+    )
+    await page.screenshot({ path: `e2e/capturas/tareas-17-bordes-${modo}.png` })
+    const resultado = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+    expect(resultado.violations).toEqual([])
+
+    await ventana.getByPlaceholder('Nombre').fill(`${nombre} editada`)
+    await ventana.getByRole('button', { name: 'Guardar' }).click()
+    await expect(ventana).toBeHidden()
+    await expect(page.locator('tr', { hasText: `${nombre} editada` })).toHaveCount(1)
+  })
+}

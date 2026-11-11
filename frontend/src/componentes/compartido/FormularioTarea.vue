@@ -10,8 +10,8 @@ import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import { useTiendaTareas } from '@/stores/tareas'
 
-// Campos de una tarea, compartidos por la ventana de alta y el panel lateral
-// de edición. Escribe directamente en `valores` (v-model); al enviar emite
+// Campos de una tarea, compartidos por las ventanas modales de alta y de
+// edición. Escribe directamente en `valores` (v-model); al enviar emite
 // `guardar` y quien lo usa valida y guarda, y devuelve el fallo por `error`.
 // "Cancelar" emite `cancelar`. El cuerpo desplaza y el pie con los botones
 // queda fijo, para que en pantallas bajas se vea que hay más campos.
@@ -31,8 +31,17 @@ const tiendaGrupos = useTiendaGruposEstados()
       data-testid="cuerpo-formulario-tarea"
       class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-scroll px-4 pb-4"
     >
-      <div class="flex flex-col gap-1.5">
-        <Label for="tarea-nombre">Nombre</Label>
+      <!-- El color no es la única pista (WCAG 1.4.1): los obligatorios llevan
+           además un asterisco y el atributo required. -->
+      <p data-testid="leyenda-campos" class="text-muted-foreground text-xs">
+        Los campos con * (borde rojo) son obligatorios; los de borde verde, opcionales.
+      </p>
+      <div class="campo-obligatorio flex flex-col gap-1.5">
+        <Label for="tarea-nombre"
+          >Nombre<span data-testid="marca-obligatorio" aria-hidden="true" class="text-destructive"
+            >*</span
+          ></Label
+        >
         <Input
           id="tarea-nombre"
           v-model="valores.nombre"
@@ -41,7 +50,7 @@ const tiendaGrupos = useTiendaGruposEstados()
           maxlength="200"
         />
       </div>
-      <div class="flex flex-col gap-1.5">
+      <div class="campo-opcional flex flex-col gap-1.5">
         <Label for="tarea-prioridad">Prioridad</Label>
         <Input
           id="tarea-prioridad"
@@ -52,8 +61,15 @@ const tiendaGrupos = useTiendaGruposEstados()
           placeholder="Prioridad"
         />
       </div>
-      <div class="flex flex-col gap-1.5">
-        <Label for="tarea-descripcion">Descripción</Label>
+      <div class="campo-obligatorio flex flex-col gap-1.5">
+        <Label for="tarea-descripcion"
+          >Descripción<span
+            data-testid="marca-obligatorio"
+            aria-hidden="true"
+            class="text-destructive"
+            >*</span
+          ></Label
+        >
         <Textarea
           id="tarea-descripcion"
           v-model="valores.descripcion"
@@ -62,24 +78,35 @@ const tiendaGrupos = useTiendaGruposEstados()
           maxlength="500"
         />
       </div>
-      <SelectorEtiquetas
-        id="etiquetas"
-        v-model="valores.etiquetas"
-        etiqueta="Etiquetas"
-        :longitud-maxima="50"
-        texto-nuevo='Crear etiqueta "{valor}"'
-        :sugerencias="tienda.etiquetas"
-      />
-      <SelectorEtiquetas
-        id="asignados"
-        v-model="valores.asignados"
-        etiqueta="Asignado a"
-        :longitud-maxima="100"
-        texto-nuevo='Añadir persona "{valor}"'
-        :sugerencias="tienda.personas"
-      />
-      <div class="flex flex-col gap-1.5">
-        <Label for="fecha-creacion">Fecha de creación</Label>
+      <div class="campo-opcional">
+        <SelectorEtiquetas
+          id="etiquetas"
+          v-model="valores.etiquetas"
+          etiqueta="Etiquetas"
+          :longitud-maxima="50"
+          texto-nuevo='Crear etiqueta "{valor}"'
+          :sugerencias="tienda.etiquetas"
+        />
+      </div>
+      <div class="campo-opcional">
+        <SelectorEtiquetas
+          id="asignados"
+          v-model="valores.asignados"
+          etiqueta="Asignado a"
+          :longitud-maxima="100"
+          texto-nuevo='Añadir persona "{valor}"'
+          :sugerencias="tienda.personas"
+        />
+      </div>
+      <div class="campo-obligatorio flex flex-col gap-1.5">
+        <Label for="fecha-creacion"
+          >Fecha de creación<span
+            data-testid="marca-obligatorio"
+            aria-hidden="true"
+            class="text-destructive"
+            >*</span
+          ></Label
+        >
         <SelectorFechaHora
           id="fecha-creacion"
           v-model="valores.fechaCreacion"
@@ -87,7 +114,7 @@ const tiendaGrupos = useTiendaGruposEstados()
           required
         />
       </div>
-      <div class="flex flex-col gap-1.5">
+      <div class="campo-opcional flex flex-col gap-1.5">
         <Label for="fecha-vencimiento">Fecha de vencimiento</Label>
         <SelectorFechaHora
           id="fecha-vencimiento"
@@ -96,7 +123,7 @@ const tiendaGrupos = useTiendaGruposEstados()
           anulable
         />
       </div>
-      <div class="flex flex-col gap-1.5">
+      <div class="campo-opcional flex flex-col gap-1.5">
         <Label for="tarea-tipo">Tipo de tarea</Label>
         <select
           id="tarea-tipo"
@@ -109,7 +136,7 @@ const tiendaGrupos = useTiendaGruposEstados()
           </option>
         </select>
       </div>
-      <div class="flex flex-col gap-1.5">
+      <div class="campo-opcional flex flex-col gap-1.5">
         <Label for="tarea-grupo-estados">Grupo de estados</Label>
         <select
           id="tarea-grupo-estados"
@@ -132,8 +159,15 @@ const tiendaGrupos = useTiendaGruposEstados()
         class="flex flex-col gap-3 rounded-md border p-3"
       >
         <legend class="px-1 text-sm font-medium">Oportunidad</legend>
-        <div class="flex flex-col gap-1.5">
-          <Label for="oportunidad-codigo">Código de la oportunidad</Label>
+        <div class="campo-obligatorio flex flex-col gap-1.5">
+          <Label for="oportunidad-codigo"
+            >Código de la oportunidad<span
+              data-testid="marca-obligatorio"
+              aria-hidden="true"
+              class="text-destructive"
+              >*</span
+            ></Label
+          >
           <Input
             id="oportunidad-codigo"
             v-model="valores.oportunidad.codigo"
@@ -141,7 +175,7 @@ const tiendaGrupos = useTiendaGruposEstados()
             maxlength="10"
           />
         </div>
-        <div class="flex flex-col gap-1.5">
+        <div class="campo-opcional flex flex-col gap-1.5">
           <Label for="oportunidad-descripcion">Descripción de la oportunidad</Label>
           <Input
             id="oportunidad-descripcion"
@@ -149,7 +183,7 @@ const tiendaGrupos = useTiendaGruposEstados()
             maxlength="200"
           />
         </div>
-        <div class="flex flex-col gap-1.5">
+        <div class="campo-opcional flex flex-col gap-1.5">
           <Label for="oportunidad-observaciones">Observaciones</Label>
           <Textarea
             id="oportunidad-observaciones"
@@ -171,3 +205,21 @@ const tiendaGrupos = useTiendaGruposEstados()
     </div>
   </form>
 </template>
+
+<style scoped>
+/* Borde de los campos según sean obligatorios u opcionales. Solo los controles de
+   texto y las listas; los botones de icono (calendario, borrar fecha) no cambian.
+   Tonos con contraste de al menos 3:1 con el fondo (WCAG 1.4.11). */
+.campo-obligatorio :deep(:is(input, textarea, select)) {
+  border-color: oklch(0.577 0.245 27.325); /* rojo 600 */
+}
+.campo-opcional :deep(:is(input, textarea, select)) {
+  border-color: oklch(0.527 0.154 150.069); /* verde 700 */
+}
+:global(.dark) .campo-obligatorio :deep(:is(input, textarea, select)) {
+  border-color: oklch(0.704 0.191 22.216); /* rojo 400 */
+}
+:global(.dark) .campo-opcional :deep(:is(input, textarea, select)) {
+  border-color: oklch(0.792 0.209 151.711); /* verde 400 */
+}
+</style>

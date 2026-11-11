@@ -353,12 +353,14 @@ describe('VistaTareas', () => {
     expect(clienteApi.crear).not.toHaveBeenCalled()
   })
 
-  it('"Editar" sigue abriendo el panel lateral con el título "Editar tarea"', async () => {
+  it('"Editar" abre una ventana modal como la del alta, no el panel lateral, con el título "Editar tarea"', async () => {
     const panel = await abrirPanelEdicion(await montar(), 'Escribir informe')
 
     expect(panel.querySelector('h2')?.textContent?.trim()).toBe('Editar tarea')
-    expect(panel.getAttribute('data-slot')).toBe('sheet-content')
-    expect(document.body.querySelector('[data-slot="dialog-content"]')).toBeNull()
+    expect(panel.getAttribute('data-slot')).toBe('dialog-content')
+    expect(document.body.querySelector('[data-slot="sheet-content"]')).toBeNull()
+    // Mismos datos de la tarea que antes en el panel.
+    expect(panel.querySelector<HTMLInputElement>('#tarea-nombre')?.value).toBe('Escribir informe')
   })
 
   it('los campos del formulario tienen sus restricciones', async () => {
@@ -383,8 +385,9 @@ describe('VistaTareas', () => {
     expect(fechaCreacion.required).toBe(true)
     expect(fechaCreacion.getAttribute('placeholder')).toBe('dd/mm/aaaa hh:mm:ss')
     expect(fechaCreacion.getAttribute('pattern')).toBe('\\d{2}/\\d{2}/\\d{4} \\d{2}:\\d{2}:\\d{2}')
+    // El asterisco visible marca el campo obligatorio (oculto a lectores de pantalla).
     expect(panel.querySelector('label[for="fecha-creacion"]')?.textContent?.trim()).toBe(
-      'Fecha de creación',
+      'Fecha de creación*',
     )
 
     const vencimiento = campo<HTMLInputElement>(panel, SELECTOR_VENCIMIENTO)
@@ -779,7 +782,7 @@ describe('VistaTareas', () => {
           l.textContent?.trim(),
         ]),
       )
-      expect(etiquetas.get('oportunidad-codigo')).toBe('Código de la oportunidad')
+      expect(etiquetas.get('oportunidad-codigo')).toBe('Código de la oportunidad*')
       expect(etiquetas.get('oportunidad-descripcion')).toBe('Descripción de la oportunidad')
       expect(etiquetas.get('oportunidad-observaciones')).toBe('Observaciones')
       const codigo = campo<HTMLInputElement>(panel, '#oportunidad-codigo')
