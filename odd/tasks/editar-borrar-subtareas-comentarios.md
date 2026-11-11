@@ -18,12 +18,14 @@ Rama: `feature/editar-borrar-subtareas-comentarios` (desde `main` v1.19.0) · En
 
 | ID | Specs | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S3–S5 (backend: PUT subtarea, PUT/DELETE comentario, columna `editado` con migración, tests) | delegada (writer A, paralelo) | pendiente | — |
-| T2 | S2–S4 (frontend: edición en línea y confirmaciones en `SubtareasTarea` y `ComentariosTarea`, specs) | delegada (writer B, paralelo) | pendiente | — |
-| T3 | S1–S5 (e2e contra pila aislada) | inline | pendiente | — |
-| T4 | S1–S5 (verificador independiente: migración y contrato, items 1 y 3) | delegada (verificador) | pendiente | — |
+| T1 | S3–S5 (backend: PUT subtarea, PUT/DELETE comentario, columna `editado` con migración, tests) | delegada (writer A, paralelo) | hecha | `b2ac070` |
+| T2 | S2–S4 (frontend: edición en línea y confirmaciones en `SubtareasTarea` y `ComentariosTarea`, specs) | delegada (writer B, paralelo) | hecha | `b68e1d5` |
+| T3 | S1–S5 (e2e contra pila aislada) | inline | hecha | `b68e1d5` |
+| T4 | S1–S5 (verificador independiente: migración y contrato, items 1 y 3) | delegada (verificador) | hecha (sin blockers) | — |
 
 ## Log
 
 - **L1** (2026-11-10) Pedido original del usuario:
   > quiero poder editar y borrar tanto las subtareas como los comentarios, pidiendo confirmación previa
+- **L2** (2026-11-11) T1 (writer A, retomado tras agotarse el límite de uso): `PUT` de subtarea (reemplazo completo, conserva `resuelta`), `PUT`/`DELETE` de comentario y columna `editado` (migración `a3d9f6b2c8e1`). 630 tests, 98,60 %, contrato 10/10. T2 (writer B): edición en línea y confirmaciones en `SubtareasTarea` y `ComentariosTarea`, marca "(editado)" con la fecha para lectores de pantalla; 403 tests. T3: e2e; dos fallos del propio test (texto completo de la marca y un localizador de texto ambiguo durante la transición) corregidos; Playwright 36/36 dos veces.
+- **L3** (2026-11-11) T4, verificador: S1–S5 en verde, sin blockers. Migración con hash y esquema idénticos; 47 sondas de API; carreras edición/borrado sin 5xx; OpenAPI solo con añadidos; axe sin violaciones en claro, oscuro y 390×844. Advisories: en móvil la tabla de subtareas desborda más (ya desbordaba en la base) y en modo edición los campos quedan parcialmente cortados; `POST` en la ruta nueva de un comentario da 405.
