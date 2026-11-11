@@ -93,6 +93,11 @@ export interface Tarea {
   completada: boolean
   /** Subtareas por orden de alta; vacía si no tiene. */
   subtareas: Subtarea[]
+  /** Grupo de estados al que apunta la tarea; `null` si no tiene. */
+  grupo_estados: ReferenciaNombre | null
+  /** Estado actual dentro de su grupo; `null` si no tiene grupo. Solo cambia
+   * con `PATCH /tareas/{id}/estado` o al cambiar de grupo (va al primero). */
+  estado: ReferenciaNombre | null
 }
 
 /**
@@ -111,6 +116,9 @@ export interface DatosTarea {
   asignados: string[]
   tipo: TipoTarea | null
   oportunidad: Oportunidad | null
+  /** Grupo de estados de la tarea, o `null` sin grupo. Al asignarlo o
+   * cambiarlo, la tarea pasa al primer estado del grupo. */
+  grupo_estados_id: number | null
 }
 
 /** Elemento de un catálogo compartido (`GET /etiquetas`, `GET /personas`). */
@@ -129,4 +137,36 @@ export interface PasoWorkflow {
   numero: number
   /** Entre 1 y 50 caracteres, sin espacios al principio ni al final. */
   nombre: string
+}
+
+/** Referencia a otro recurso por su id y su nombre. */
+export interface ReferenciaNombre {
+  id: number
+  nombre: string
+}
+
+/** Estado de un grupo de estados. `posicion` (1..n) solo define el orden de
+ * las columnas del tablero; se puede pasar de cualquier estado a cualquier otro. */
+export interface EstadoGrupo {
+  id: number
+  /** Entre 1 y 50 caracteres, único dentro de su grupo. */
+  nombre: string
+  posicion: number
+  /** Número de tareas en este estado. */
+  tareas: number
+}
+
+/**
+ * Grupo de estados (`/grupos-estados`). Las tareas apuntan al grupo: los
+ * cambios en sus estados se reflejan en ellas. Las acciones sobre sus estados
+ * (`/grupos-estados/{id}/estados`, `/grupos-estados/{id}/orden`) devuelven el
+ * grupo completo.
+ */
+export interface GrupoEstados {
+  id: number
+  /** Entre 1 y 50 caracteres, único entre los grupos. */
+  nombre: string
+  /** Número de tareas del grupo. */
+  tareas: number
+  estados: EstadoGrupo[]
 }

@@ -36,6 +36,8 @@ const TAREA_SIN_TIPO: Tarea = {
   oportunidad: null,
   completada: false,
   subtareas: [],
+  grupo_estados: null,
+  estado: null,
 }
 
 const TAREA_OPORTUNIDAD: Tarea = {
@@ -55,6 +57,8 @@ const TAREA_OPORTUNIDAD: Tarea = {
   },
   completada: false,
   subtareas: [],
+  grupo_estados: null,
+  estado: null,
 }
 
 let contenedor: VueWrapper | null = null
@@ -134,6 +138,8 @@ describe('DetalleTarea', () => {
       ['Fecha de vencimiento', '—'],
       ['Tipo', '—'],
       ['Estado', 'Pendiente'],
+      ['Grupo de estados', '—'],
+      ['Estado del grupo', '—'],
     ])
     expect(modal().querySelector('[data-testid="campos-oportunidad"]')).toBeNull()
     expect(modal().textContent).not.toContain('Código')
@@ -144,6 +150,20 @@ describe('DetalleTarea', () => {
 
     expect(paresDe(listaDe('campos-tarea'))).toContainEqual(['Estado', 'Completada'])
     expect(paresDe(listaDe('campos-tarea'))).not.toContainEqual(['Estado', 'Pendiente'])
+  })
+
+  it('muestra el grupo de estados de la tarea y su estado en el grupo', async () => {
+    await montar({
+      ...TAREA_SIN_TIPO,
+      grupo_estados: { id: 1, nombre: 'Desarrollo' },
+      estado: { id: 11, nombre: 'En curso' },
+    })
+
+    const pares = paresDe(listaDe('campos-tarea'))
+    expect(pares).toContainEqual(['Grupo de estados', 'Desarrollo'])
+    expect(pares).toContainEqual(['Estado del grupo', 'En curso'])
+    // El estado de completado sigue aparte.
+    expect(pares).toContainEqual(['Estado', 'Pendiente'])
   })
 
   it('con tipo Oportunidad muestra su sección con todos sus campos', async () => {
@@ -159,6 +179,8 @@ describe('DetalleTarea', () => {
       ['Fecha de vencimiento', '20/11/2026 18:00:00 Vence en 2 d 03 h 15 min 20 s'],
       ['Tipo', 'Oportunidad'],
       ['Estado', 'Pendiente'],
+      ['Grupo de estados', '—'],
+      ['Estado del grupo', '—'],
     ])
     const seccion = listaDe('campos-oportunidad')
     expect(modal().querySelector('h3')?.textContent?.trim()).toBe('Oportunidad')

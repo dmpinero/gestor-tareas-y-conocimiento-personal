@@ -27,6 +27,8 @@ const tareaEjemplo = {
   oportunidad: null,
   completada: false,
   subtareas: [],
+  grupo_estados: null,
+  estado: null,
 }
 
 const ETIQUETAS = [
@@ -87,6 +89,7 @@ describe('useTiendaTareas', () => {
       asignados: ['Ana'],
       tipo: null,
       oportunidad: null,
+      grupo_estados_id: null,
     }
     await tienda.crear(datos)
 
@@ -111,6 +114,7 @@ describe('useTiendaTareas', () => {
       asignados: ['Ana'],
       tipo: 'oportunidad' as const,
       oportunidad,
+      grupo_estados_id: null,
     }
     await tienda.crear(datos)
 
@@ -133,6 +137,7 @@ describe('useTiendaTareas', () => {
         asignados: [],
         tipo: null,
         oportunidad: null,
+        grupo_estados_id: null,
       }),
     ).rejects.toThrow('datos inválidos')
     expect(tienda.tareas).toEqual([])
@@ -156,6 +161,7 @@ describe('useTiendaTareas', () => {
       asignados: ['Ana'],
       tipo: null,
       oportunidad: null,
+      grupo_estados_id: null,
     }
     await tienda.actualizar(1, datos)
 
@@ -180,6 +186,7 @@ describe('useTiendaTareas', () => {
         asignados: [],
         tipo: null,
         oportunidad: null,
+        grupo_estados_id: null,
       }),
     ).rejects.toThrow('Tarea no encontrada')
     expect(tienda.tareas).toEqual([tareaEjemplo])
@@ -222,6 +229,7 @@ describe('useTiendaTareas', () => {
       asignados: ['Ana'],
       tipo: null,
       oportunidad: null,
+      grupo_estados_id: null,
     })
 
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -247,6 +255,7 @@ describe('useTiendaTareas', () => {
       asignados: ['Ana'],
       tipo: null,
       oportunidad: null,
+      grupo_estados_id: null,
     })
 
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -269,6 +278,7 @@ describe('useTiendaTareas', () => {
         asignados: [],
         tipo: null,
         oportunidad: null,
+        grupo_estados_id: null,
       }),
     ).rejects.toThrow('datos inválidos')
     expect(clienteApi.obtener).not.toHaveBeenCalled()
@@ -562,5 +572,55 @@ describe('useTiendaTareas', () => {
       expect(tienda.tareas).toEqual([conSubtareas])
       expect(clienteApi.obtener).not.toHaveBeenCalled()
     })
+  })
+  describe('cambiarEstadoTarea', () => {
+    const enGrupo = {
+      ...tareaEjemplo,
+      grupo_estados: { id: 1, nombre: 'Desarrollo' },
+      estado: { id: 10, nombre: 'Pendiente' },
+    }
+
+    it('envía PATCH /tareas/{id}/estado, reemplaza la tarea y devuelve true', async () => {
+      simularObtener([enGrupo])
+      const movida = { ...enGrupo, estado: { id: 11, nombre: 'En curso' } }
+      vi.mocked(clienteApi.parchear).mockResolvedValue(movida)
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+
+      expect(await tienda.cambiarEstadoTarea(1, 11)).toBe(true)
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/estado', { estado_id: 11 })
+      expect(tienda.tareas).toEqual([movida])
+      expect(tienda.error).toBeNull()
+    })
+
+    it('si la API falla guarda el error, devuelve false y deja la tarea como estaba', async () => {
+      simularObtener([enGrupo])
+      vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('El estado no es del grupo'))
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+
+      expect(await tienda.cambiarEstadoTarea(1, 99)).toBe(false)
+      expect(tienda.error).toBe('El estado no es del grupo')
+      expect(tienda.tareas).toEqual([enGrupo])
+    })
+  })
+
+  it('crear devuelve la tarea creada', async () => {
+    simularObtener([])
+    vi.mocked(clienteApi.crear).mockResolvedValue(tareaEjemplo)
+    const tienda = useTiendaTareas()
+
+    const datos = {
+      nombre: tareaEjemplo.nombre,
+      prioridad: null,
+      descripcion: tareaEjemplo.descripcion,
+      fecha_creacion: tareaEjemplo.fecha_creacion,
+      fecha_vencimiento: null,
+      etiquetas: tareaEjemplo.etiquetas,
+      asignados: tareaEjemplo.asignados,
+      tipo: null,
+      oportunidad: null,
+    }
+    expect(await tienda.crear({ ...datos, grupo_estados_id: null })).toEqual(tareaEjemplo)
   })
 })
