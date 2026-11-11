@@ -338,7 +338,7 @@ watch(() => props.ruta, cargar, { immediate: true })
               <form
                 v-if="idEditando === comentario.id"
                 class="mt-1 flex flex-col gap-1"
-                aria-label="Editar comentario"
+                :aria-label="`Editar comentario${sufijo}`"
                 novalidate
                 @submit.prevent="pedirConfirmacionEdicion(comentario.id)"
                 @keydown.esc.stop.prevent="cancelarEdicion(comentario.id)"
@@ -346,7 +346,7 @@ watch(() => props.ruta, cargar, { immediate: true })
                 <Textarea
                   :id="idCampoEdicion"
                   v-model="textoEdicion"
-                  aria-label="Nuevo texto del comentario"
+                  :aria-label="`Nuevo texto del comentario${sufijo}`"
                   :maxlength="LONGITUD_MAXIMA"
                   :aria-describedby="idContadorEdicion"
                   :aria-invalid="errorAccion?.mensaje === ERROR_TEXTO_VACIO ? 'true' : undefined"
@@ -359,7 +359,7 @@ watch(() => props.ruta, cargar, { immediate: true })
                 <div
                   v-if="confirmandoEdicion"
                   role="group"
-                  aria-label="¿Guardar los cambios del comentario?"
+                  :aria-label="`¿Guardar los cambios del comentario${sufijo}?`"
                   class="flex flex-wrap items-center justify-end gap-2"
                   @keydown.esc.stop.prevent="volverAEdicion"
                 >
@@ -398,7 +398,7 @@ watch(() => props.ruta, cargar, { immediate: true })
               <div
                 v-if="idConfirmandoEliminar === comentario.id"
                 role="group"
-                aria-label="¿Eliminar el comentario?"
+                :aria-label="`¿Eliminar el comentario${sufijo}?`"
                 class="mt-1 flex flex-wrap items-center justify-end gap-2"
                 @keydown.esc.stop.prevent="cancelarEliminar(comentario.id)"
               >

@@ -361,8 +361,20 @@ describe('SubtareasTarea', () => {
   })
 
   describe('comentarios de la subtarea', () => {
+    // Nombre accesible del botón: su texto (sin aria-label), que incluye el número
+    // visible para cumplir WCAG 2.5.3 (la etiqueta visible forma parte del nombre).
+    function nombreAccesible(elemento: { text: () => string }): string {
+      return elemento.text().replace(/\s+/g, ' ').trim()
+    }
+
     function botonComentarios(envoltorio: VueWrapper, nombre: string) {
-      return boton(envoltorio, `Comentarios de la subtarea ${nombre}`)
+      const prefijo = `Comentarios de la subtarea ${nombre}`
+      const encontrado = envoltorio.findAll('button').find((b) => {
+        const texto = nombreAccesible(b)
+        return texto === prefijo || texto.startsWith(`${prefijo}:`)
+      })
+      if (!encontrado) throw new Error(`No hay botón «${prefijo}»`)
+      return encontrado
     }
 
     it('cada subtarea tiene un botón de comentarios plegado que muestra cuántos tiene si hay alguno', async () => {
@@ -373,8 +385,15 @@ describe('SubtareasTarea', () => {
         expect(elemento.attributes('aria-expanded')).toBe('false')
         expect(elemento.find('svg').exists()).toBe(true)
       }
-      expect(botonComentarios(envoltorio, 'Revisar cifras').text().trim()).toBe('2')
-      expect(botonComentarios(envoltorio, 'Redactar índice').text().trim()).toBe('')
+      const conComentarios = botonComentarios(envoltorio, 'Revisar cifras')
+      expect(conComentarios.attributes('aria-label')).toBeUndefined()
+      expect(conComentarios.get('[data-testid="numero-comentarios-subtarea"]').text()).toBe('2')
+      expect(nombreAccesible(conComentarios)).toBe('Comentarios de la subtarea Revisar cifras: 2')
+      const sinComentarios = botonComentarios(envoltorio, 'Redactar índice')
+      expect(sinComentarios.find('[data-testid="numero-comentarios-subtarea"]').exists()).toBe(
+        false,
+      )
+      expect(nombreAccesible(sinComentarios)).toBe('Comentarios de la subtarea Redactar índice')
       expect(clienteApi.obtener).not.toHaveBeenCalledWith(expect.stringContaining('/comentarios'))
     })
 
@@ -446,7 +465,9 @@ describe('SubtareasTarea', () => {
       expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/subtareas/21/comentarios', {
         texto: 'Revisadas',
       })
-      expect(botonComentarios(envoltorio, 'Revisar cifras').text().trim()).toBe('3')
+      expect(nombreAccesible(botonComentarios(envoltorio, 'Revisar cifras'))).toBe(
+        'Comentarios de la subtarea Revisar cifras: 3',
+      )
       expect(useTiendaTareas().tareas[0]!.subtareas[1]!.comentarios).toBe(3)
     })
 
@@ -469,7 +490,9 @@ describe('SubtareasTarea', () => {
         ),
       ).not.toBeNull()
       // Al cargarlos, el número del botón refleja los que hay de verdad.
-      expect(botonComentarios(envoltorio, 'Redactar índice').text().trim()).toBe('2')
+      expect(nombreAccesible(botonComentarios(envoltorio, 'Redactar índice'))).toBe(
+        'Comentarios de la subtarea Redactar índice: 2',
+      )
     })
   })
 
@@ -772,7 +795,9 @@ describe('SubtareasTarea', () => {
     it('cada fila tiene un botón "Editar subtarea" con un nombre accesible único', async () => {
       const envoltorio = await montar()
 
-      const nombres = envoltorio.findAll('tbody button').map((b) => b.attributes('aria-label'))
+      const nombres = envoltorio
+        .findAll('tbody button')
+        .map((b) => b.attributes('aria-label') ?? b.text().replace(/\s+/g, ' ').trim())
       expect(nombres).toContain('Editar subtarea Redactar índice')
       expect(nombres).toContain('Editar subtarea Revisar cifras')
       expect(nombres).toContain('Editar subtarea Enviar borrador')

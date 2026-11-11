@@ -338,12 +338,17 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
           variant="ghost"
           size="sm"
           class="h-8 gap-1 px-2"
-          :aria-label="`Comentarios de la subtarea ${subtarea.nombre}`"
           :aria-expanded="idComentariosAbiertos === subtarea.id ? 'true' : 'false'"
           :aria-controls="idPanelComentarios(subtarea)"
           @click="alternarComentarios(subtarea)"
         >
           <MessageSquare aria-hidden="true" />
+          <!-- El número visible forma parte del nombre accesible (WCAG 2.5.3). -->
+          <span class="sr-only">{{
+            subtarea.comentarios > 0
+              ? `Comentarios de la subtarea ${subtarea.nombre}: `
+              : `Comentarios de la subtarea ${subtarea.nombre}`
+          }}</span>
           <span v-if="subtarea.comentarios > 0" data-testid="numero-comentarios-subtarea">{{
             subtarea.comentarios
           }}</span>

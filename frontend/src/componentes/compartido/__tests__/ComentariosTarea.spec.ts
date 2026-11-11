@@ -769,13 +769,19 @@ describe('ComentariosTarea: comentarios de una subtarea', () => {
     expect(editar.attributes('aria-label')).toMatch(/ de la subtarea Revisar$/)
     await editar.trigger('click')
     await flushPromises()
-    const campo = envoltorio.get('textarea[aria-label="Nuevo texto del comentario"]')
+    const campo = envoltorio.get(
+      'textarea[aria-label="Nuevo texto del comentario de la subtarea Revisar"]',
+    )
     await campo.setValue('Cambiado')
     await flushPromises()
-    await envoltorio.get('form[aria-label="Editar comentario"]').trigger('submit')
+    await envoltorio
+      .get('form[aria-label="Editar comentario de la subtarea Revisar"]')
+      .trigger('submit')
     await flushPromises()
     const guardar = envoltorio
-      .get('[role="group"][aria-label="¿Guardar los cambios del comentario?"]')
+      .get(
+        '[role="group"][aria-label="¿Guardar los cambios del comentario de la subtarea Revisar?"]',
+      )
       .findAll('button')
       .find((b) => b.text() === 'Guardar')!
     await guardar.trigger('click')
@@ -790,7 +796,7 @@ describe('ComentariosTarea: comentarios de una subtarea', () => {
     await borrar.trigger('click')
     await flushPromises()
     const confirmar = envoltorio
-      .get('[role="group"][aria-label="¿Eliminar el comentario?"]')
+      .get('[role="group"][aria-label="¿Eliminar el comentario de la subtarea Revisar?"]')
       .findAll('button')
       .find((b) => b.text() === 'Eliminar')!
     await confirmar.trigger('click')
@@ -859,7 +865,7 @@ describe('ComentariosTarea: comentarios de una subtarea', () => {
       .trigger('click')
     await flushPromises()
     await envoltorio
-      .get('[role="group"][aria-label="¿Eliminar el comentario?"]')
+      .get('[role="group"][aria-label="¿Eliminar el comentario de la subtarea Revisar?"]')
       .findAll('button')
       .find((b) => b.text() === 'Eliminar')!
       .trigger('click')
