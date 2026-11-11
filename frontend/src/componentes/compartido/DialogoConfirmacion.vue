@@ -17,7 +17,8 @@ import { Button } from '@/componentes/ui/button'
 // la usa cierra al terminar o deja el fallo en `error`, que se muestra dentro.
 // `cierreFoco` reenvía el evento de devolución del foco al cerrar, para que
 // quien la usa pueda llevarlo a otro sitio (`preventDefault`) si el elemento
-// que la abrió ya no existe.
+// que la abrió ya no existe. El contenido por defecto (slot) va bajo la
+// descripción, p. ej. para elegir una opción antes de confirmar.
 const props = defineProps<{
   abierto: boolean
   titulo: string
@@ -56,6 +57,7 @@ const emit = defineEmits<{
             props.descripcion
           }}</AlertDialogDescription>
         </div>
+        <slot />
         <p v-if="props.error" class="text-destructive text-sm" role="alert">{{ props.error }}</p>
         <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <AlertDialogCancel as-child>

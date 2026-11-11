@@ -73,6 +73,9 @@ const camposTarea = computed<Campo[]>(() => {
     },
     { termino: 'Tipo', valor: textoOVacio(etiquetaTipoTarea(tarea.tipo)) },
     { termino: 'Estado', valor: tarea.completada ? 'Completada' : 'Pendiente' },
+    // "Estado del grupo" para no confundirlo con el de completado.
+    { termino: 'Grupo de estados', valor: textoOVacio(tarea.grupo_estados?.nombre) },
+    { termino: 'Estado del grupo', valor: textoOVacio(tarea.estado?.nombre) },
   ]
 })
 

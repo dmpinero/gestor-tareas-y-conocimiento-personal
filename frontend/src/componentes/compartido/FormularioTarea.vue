@@ -7,6 +7,7 @@ import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
 import { Textarea } from '@/componentes/ui/textarea'
 import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
+import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import { useTiendaTareas } from '@/stores/tareas'
 
 // Campos de una tarea, compartidos por la ventana de alta y el panel lateral
@@ -19,6 +20,9 @@ const props = defineProps<{ error: string | null }>()
 const emit = defineEmits<{ guardar: []; cancelar: [] }>()
 
 const tienda = useTiendaTareas()
+// Los grupos los carga quien usa el formulario. Un grupo sin estados no se
+// puede asignar: la tarea no tendría estado en el que empezar.
+const tiendaGrupos = useTiendaGruposEstados()
 </script>
 
 <template>
@@ -102,6 +106,24 @@ const tienda = useTiendaTareas()
           <option value="">Sin tipo</option>
           <option v-for="tipo in TIPOS_TAREA" :key="tipo.valor" :value="tipo.valor">
             {{ tipo.etiqueta }}
+          </option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <Label for="tarea-grupo-estados">Grupo de estados</Label>
+        <select
+          id="tarea-grupo-estados"
+          v-model="valores.grupoEstadosId"
+          class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
+        >
+          <option value="">Sin grupo</option>
+          <option
+            v-for="grupo in tiendaGrupos.grupos"
+            :key="grupo.id"
+            :value="grupo.id"
+            :disabled="grupo.estados.length === 0"
+          >
+            {{ grupo.estados.length === 0 ? `${grupo.nombre} (sin estados)` : grupo.nombre }}
           </option>
         </select>
       </div>

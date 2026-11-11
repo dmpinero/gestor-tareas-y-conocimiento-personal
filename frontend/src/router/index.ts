@@ -3,6 +3,7 @@ import VistaInicio from '@/vistas/VistaInicio.vue'
 import VistaTareas from '@/vistas/VistaTareas.vue'
 import VistaConocimiento from '@/vistas/VistaConocimiento.vue'
 import VistaAjustes from '@/vistas/VistaAjustes.vue'
+import VistaGruposEstados from '@/vistas/VistaGruposEstados.vue'
 import VistaWorkflowOportunidades from '@/vistas/VistaWorkflowOportunidades.vue'
 
 const router = createRouter({
@@ -32,6 +33,11 @@ const router = createRouter({
       path: '/ajustes/workflow-oportunidades',
       name: 'workflow-oportunidades',
       component: VistaWorkflowOportunidades,
+    },
+    {
+      path: '/ajustes/grupos-estados',
+      name: 'grupos-estados',
+      component: VistaGruposEstados,
     },
   ],
 })

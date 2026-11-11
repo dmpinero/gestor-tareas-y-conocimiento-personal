@@ -45,11 +45,13 @@ export const useTiendaTareas = defineStore('tareas', () => {
     }
   }
 
-  async function crear(datos: DatosTarea): Promise<void> {
+  // Devuelve la tarea creada, p. ej. para colocarla después en un estado.
+  async function crear(datos: DatosTarea): Promise<Tarea> {
     const tarea = await clienteApi.crear<Tarea>('/tareas', datos)
     tareas.value.push(tarea)
     // Guardar puede haber dado de alta etiquetas o personas nuevas.
     await cargarCatalogos()
+    return tarea
   }
 
   async function actualizar(id: number, datos: DatosTarea): Promise<void> {
@@ -80,6 +82,22 @@ export const useTiendaTareas = defineStore('tareas', () => {
   function reemplazarTarea(tarea: Tarea): void {
     const indice = tareas.value.findIndex((t) => t.id === tarea.id)
     if (indice !== -1) tareas.value[indice] = tarea
+  }
+
+  // Mueve la tarea a otro estado de su grupo (desde el tablero). Se reemplaza
+  // con la respuesta, sin cambio optimista; si falla, guarda el mensaje en
+  // `error`, la tarea se queda donde estaba y devuelve `false`.
+  async function cambiarEstadoTarea(idTarea: number, idEstado: number): Promise<boolean> {
+    error.value = null
+    try {
+      reemplazarTarea(
+        await clienteApi.parchear<Tarea>(`/tareas/${idTarea}/estado`, { estado_id: idEstado }),
+      )
+      return true
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
   }
 
   // Borra la tarea (con sus subtareas y comentarios). Como las acciones de
@@ -186,6 +204,7 @@ export const useTiendaTareas = defineStore('tareas', () => {
     crear,
     actualizar,
     alternarCompletada,
+    cambiarEstadoTarea,
     eliminarTarea,
     fijarComentariosSubtarea,
     crearSubtarea,

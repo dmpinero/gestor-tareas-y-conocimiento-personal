@@ -58,6 +58,8 @@ const TAREA: Tarea = {
   oportunidad: null,
   completada: false,
   subtareas: SUBTAREAS,
+  grupo_estados: null,
+  estado: null,
 }
 
 // Comentarios que devuelve la API para cualquier subtarea.

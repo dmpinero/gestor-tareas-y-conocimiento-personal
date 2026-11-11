@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { clienteApi } from '@/api/cliente'
 import { exportarTablaExcel, exportarTablaPDF } from '@/lib/exportarTabla'
@@ -36,6 +37,8 @@ const TAREAS = [
     oportunidad: null,
     completada: false,
     subtareas: [],
+    grupo_estados: null,
+    estado: null,
   },
   {
     id: 2,
@@ -50,6 +53,8 @@ const TAREAS = [
     oportunidad: null,
     completada: false,
     subtareas: [],
+    grupo_estados: null,
+    estado: null,
   },
 ]
 
@@ -69,6 +74,7 @@ const SIN_EXTRAS = {
   asignados: [],
   tipo: null,
   oportunidad: null,
+  grupo_estados_id: null,
 }
 
 const OPORTUNIDAD = {
@@ -110,18 +116,31 @@ const SELECTOR_VENCIMIENTO = '#fecha-vencimiento'
 
 let contenedor: VueWrapper | null = null
 
-async function montar(tareas: unknown[] = TAREAS): Promise<VueWrapper> {
+async function montar(tareas: unknown[] = TAREAS, grupos: unknown[] = []): Promise<VueWrapper> {
   // Copia para que los tests que editan no alteren los datos compartidos.
   vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
     if (ruta === '/etiquetas') return Promise.resolve(structuredClone(ETIQUETAS))
     if (ruta === '/personas') return Promise.resolve(structuredClone(PERSONAS))
+    if (ruta === '/grupos-estados') return Promise.resolve(structuredClone(grupos))
     // El detalle carga los comentarios de la tarea abierta.
     if (String(ruta).endsWith('/comentarios')) return Promise.resolve([])
     return Promise.resolve(structuredClone(tareas))
   })
   const pinia = createPinia()
   setActivePinia(pinia)
-  contenedor = mount(VistaTareas, { global: { plugins: [pinia] }, attachTo: document.body })
+  // El tablero enlaza con Ajustes cuando no hay grupos de estados.
+  const enrutador = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/tareas', component: { template: '<div />' } },
+      { path: '/ajustes/grupos-estados', component: { template: '<div />' } },
+    ],
+  })
+  await enrutador.push('/tareas')
+  contenedor = mount(VistaTareas, {
+    global: { plugins: [pinia, enrutador] },
+    attachTo: document.body,
+  })
   await flushPromises()
   return contenedor
 }
@@ -488,6 +507,7 @@ describe('VistaTareas', () => {
       asignados: ['Luis'],
       tipo: null,
       oportunidad: null,
+      grupo_estados_id: null,
     })
     // Tras guardar se vuelven a pedir los catálogos por si hay nombres nuevos.
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -602,6 +622,7 @@ describe('VistaTareas', () => {
       asignados: ['Ana'],
       tipo: null,
       oportunidad: null,
+      grupo_estados_id: null,
     })
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(filasTabla(envoltorio)).toEqual([
@@ -788,6 +809,8 @@ describe('VistaTareas', () => {
         tipo: 'oportunidad',
         oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
         subtareas: [],
+        grupo_estados: null,
+        estado: null,
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -824,6 +847,8 @@ describe('VistaTareas', () => {
         tipo: 'oportunidad',
         oportunidad: OPORTUNIDAD,
         subtareas: [],
+        grupo_estados: null,
+        estado: null,
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -1298,6 +1323,8 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         subtareas: [],
+        grupo_estados: null,
+        estado: null,
       },
       {
         id: 2,
@@ -1312,6 +1339,8 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         subtareas: [],
+        grupo_estados: null,
+        estado: null,
       },
       {
         id: 3,
@@ -1327,6 +1356,8 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         subtareas: [],
+        grupo_estados: null,
+        estado: null,
       },
     ]
 
@@ -1578,6 +1609,8 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         subtareas: [],
+        grupo_estados: null,
+        estado: null,
       },
       {
         id: 2,
@@ -1592,6 +1625,8 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         subtareas: [],
+        grupo_estados: null,
+        estado: null,
       },
       {
         id: 3,
@@ -1606,6 +1641,8 @@ describe('VistaTareas', () => {
         oportunidad: null,
         completada: false,
         subtareas: [],
+        grupo_estados: null,
+        estado: null,
       },
     ]
     const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']
@@ -2112,6 +2149,739 @@ describe('VistaTareas', () => {
       const esperadas = TODAS_LAS_COLUMNAS.filter((c) => c !== 'Descripción' && c !== 'Tipo')
       expect(columnas).toEqual(esperadas)
       for (const fila of filas as unknown[][]) expect(fila).toHaveLength(esperadas.length)
+    })
+  })
+
+  describe('grupos de estados', () => {
+    const CLAVE_VISTA = 'gestor-tareas:vista-tareas'
+    const CLAVE_GRUPO = 'gestor-tareas:grupo-tablero'
+
+    const DESARROLLO = {
+      id: 1,
+      nombre: 'Desarrollo',
+      tareas: 2,
+      estados: [
+        { id: 10, nombre: 'Pendiente', posicion: 1, tareas: 1 },
+        { id: 11, nombre: 'En curso', posicion: 2, tareas: 1 },
+        { id: 12, nombre: 'Hecho', posicion: 3, tareas: 0 },
+      ],
+    }
+    const SOPORTE = {
+      id: 2,
+      nombre: 'Soporte',
+      tareas: 0,
+      estados: [{ id: 20, nombre: 'Abierta', posicion: 1, tareas: 0 }],
+    }
+    const SIN_ESTADOS = { id: 3, nombre: 'Vacío', tareas: 0, estados: [] }
+    const GRUPOS = [DESARROLLO, SOPORTE, SIN_ESTADOS]
+
+    const EN_DESARROLLO = { id: 1, nombre: 'Desarrollo' }
+    const INFORME = {
+      ...TAREAS[0],
+      grupo_estados: EN_DESARROLLO,
+      estado: { id: 10, nombre: 'Pendiente' },
+    }
+    const ARTICULO = {
+      ...TAREAS[1],
+      grupo_estados: EN_DESARROLLO,
+      estado: { id: 11, nombre: 'En curso' },
+    }
+    const SUELTA = { ...TAREAS[1], id: 3, nombre: 'Sin grupo' }
+    const TAREAS_GRUPO = [INFORME, ARTICULO, SUELTA]
+
+    beforeEach(() => {
+      localStorage.removeItem(CLAVE_VISTA)
+      localStorage.removeItem(CLAVE_GRUPO)
+    })
+    afterEach(() => {
+      localStorage.removeItem(CLAVE_VISTA)
+      localStorage.removeItem(CLAVE_GRUPO)
+    })
+
+    function botonVista(etiqueta: 'Ver como lista' | 'Ver como tablero'): HTMLButtonElement {
+      const boton = document.body.querySelector<HTMLButtonElement>(
+        `button[aria-label="${etiqueta}"]`,
+      )
+      if (!boton) throw new Error(`No se encontró el botón "${etiqueta}"`)
+      return boton
+    }
+
+    async function montarTablero(tareas: unknown[] = TAREAS_GRUPO, grupos: unknown[] = GRUPOS) {
+      const envoltorio = await montar(tareas, grupos)
+      botonVista('Ver como tablero').click()
+      await flushPromises()
+      return envoltorio
+    }
+
+    function columna(nombre: string): HTMLElement {
+      const elemento = document.body.querySelector<HTMLElement>(
+        `section[aria-label="Estado ${nombre}"]`,
+      )
+      if (!elemento) throw new Error(`No se encontró la columna "${nombre}"`)
+      return elemento
+    }
+
+    function columnas(): string[] {
+      return [...document.body.querySelectorAll('section[aria-label^="Estado "]')].map((c) =>
+        c.getAttribute('aria-label')!,
+      )
+    }
+
+    function tarjetas(nombre: string): string[] {
+      return [...columna(nombre).querySelectorAll('[data-tarjeta] [data-nombre-tarjeta]')].map(
+        (t) => t.textContent!.trim(),
+      )
+    }
+
+    function contador(nombre: string): string {
+      return columna(nombre).querySelector('[data-contador]')!.textContent!.trim()
+    }
+
+    function botonEn(raiz: ParentNode, etiqueta: string): HTMLButtonElement {
+      const boton = raiz.querySelector<HTMLButtonElement>(`button[aria-label="${etiqueta}"]`)
+      if (!boton) throw new Error(`No se encontró el botón "${etiqueta}"`)
+      return boton
+    }
+
+    function crearDataTransfer() {
+      const datos: Record<string, string> = {}
+      return {
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: (tipo: string, valor: string) => {
+          datos[tipo] = valor
+        },
+        getData: (tipo: string) => datos[tipo] ?? '',
+      }
+    }
+
+    function lanzarEventoArrastre(elemento: Element, tipo: string, dataTransfer: object): void {
+      const evento = new Event(tipo, { bubbles: true, cancelable: true })
+      Object.defineProperty(evento, 'dataTransfer', { value: dataTransfer })
+      elemento.dispatchEvent(evento)
+    }
+
+    async function elegirGrupo(panel: HTMLElement, valor: string): Promise<void> {
+      const selector = campo<HTMLSelectElement>(panel, '#tarea-grupo-estados')
+      selector.value = valor
+      selector.dispatchEvent(new Event('change'))
+      await flushPromises()
+    }
+
+    describe('formulario', () => {
+      it('ofrece "Grupo de estados" con "Sin grupo" y los grupos; los grupos sin estados no se pueden elegir', async () => {
+        const envoltorio = await montar([], GRUPOS)
+        const panel = await abrirPanel(envoltorio)
+
+        expect(campo(panel, 'label[for="tarea-grupo-estados"]').textContent?.trim()).toBe(
+          'Grupo de estados',
+        )
+        const opciones = [...campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').options]
+        expect(opciones.map((o) => o.textContent?.trim())).toEqual([
+          'Sin grupo',
+          'Desarrollo',
+          'Soporte',
+          'Vacío (sin estados)',
+        ])
+        expect(opciones.map((o) => o.disabled)).toEqual([false, false, false, true])
+        expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('')
+      })
+
+      it('al crear envía el grupo elegido en grupo_estados_id', async () => {
+        const envoltorio = await montar([], GRUPOS)
+        vi.mocked(clienteApi.crear).mockResolvedValue({ ...INFORME, id: 9, nombre: 'Nueva' })
+        const panel = await abrirPanel(envoltorio)
+
+        await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Nueva')
+        await escribir(campo(panel, 'textarea[placeholder="Descripción"]'), 'Detalle')
+        await elegirGrupo(panel, '1')
+        await enviar(panel)
+
+        expect(clienteApi.crear).toHaveBeenCalledWith(
+          '/tareas',
+          expect.objectContaining({ grupo_estados_id: 1 }),
+        )
+        expect(clienteApi.parchear).not.toHaveBeenCalled()
+      })
+
+      it('al editar carga el grupo de la tarea y "Sin grupo" envía null', async () => {
+        const envoltorio = await montar(TAREAS_GRUPO, GRUPOS)
+        vi.mocked(clienteApi.actualizar).mockResolvedValue({
+          ...INFORME,
+          grupo_estados: null,
+          estado: null,
+        })
+        const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+
+        expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('1')
+        await elegirGrupo(panel, '')
+        await enviar(panel)
+
+        expect(clienteApi.actualizar).toHaveBeenCalledWith(
+          '/tareas/1',
+          expect.objectContaining({ grupo_estados_id: null }),
+        )
+      })
+
+      it('al editar sin cambiar el grupo lo vuelve a enviar', async () => {
+        const envoltorio = await montar(TAREAS_GRUPO, GRUPOS)
+        vi.mocked(clienteApi.actualizar).mockResolvedValue(INFORME)
+        const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+
+        await enviar(panel)
+
+        expect(clienteApi.actualizar).toHaveBeenCalledWith(
+          '/tareas/1',
+          expect.objectContaining({ grupo_estados_id: 1 }),
+        )
+      })
+    })
+
+    describe('Lista / Tablero', () => {
+      it('muestra la lista por defecto con "Ver como lista" pulsado', async () => {
+        await montar(TAREAS_GRUPO, GRUPOS)
+
+        expect(botonVista('Ver como lista').getAttribute('aria-pressed')).toBe('true')
+        expect(botonVista('Ver como tablero').getAttribute('aria-pressed')).toBe('false')
+        expect(botonVista('Ver como lista').getAttribute('title')).toBe('Ver como lista')
+        expect(botonVista('Ver como tablero').getAttribute('title')).toBe('Ver como tablero')
+        expect(document.body.querySelector('table')).not.toBeNull()
+        expect(columnas()).toEqual([])
+      })
+
+      it('"Ver como tablero" cambia al tablero, oculta la tabla y recuerda la elección', async () => {
+        const envoltorio = await montarTablero()
+
+        expect(botonVista('Ver como tablero').getAttribute('aria-pressed')).toBe('true')
+        expect(botonVista('Ver como lista').getAttribute('aria-pressed')).toBe('false')
+        expect(document.body.querySelector('table')).toBeNull()
+        expect(columnas()).toEqual(['Estado Pendiente', 'Estado En curso', 'Estado Hecho'])
+        expect(localStorage.getItem(CLAVE_VISTA)).toBe('tablero')
+
+        envoltorio.unmount()
+        contenedor = null
+        document.body.innerHTML = ''
+        await montar(TAREAS_GRUPO, GRUPOS)
+        expect(botonVista('Ver como tablero').getAttribute('aria-pressed')).toBe('true')
+        expect(columnas()).toHaveLength(3)
+
+        botonVista('Ver como lista').click()
+        await flushPromises()
+        expect(document.body.querySelector('table')).not.toBeNull()
+        expect(localStorage.getItem(CLAVE_VISTA)).toBe('lista')
+      })
+
+      it('con una preferencia no válida muestra la lista', async () => {
+        localStorage.setItem(CLAVE_VISTA, 'mosaico')
+        await montar(TAREAS_GRUPO, GRUPOS)
+
+        expect(botonVista('Ver como lista').getAttribute('aria-pressed')).toBe('true')
+      })
+    })
+
+    describe('tablero', () => {
+      it('muestra una columna por estado, en orden, con su contador y las tareas del grupo', async () => {
+        await montarTablero()
+
+        expect(tarjetas('Pendiente')).toEqual(['Escribir informe'])
+        expect(tarjetas('En curso')).toEqual(['Leer artículo'])
+        expect(tarjetas('Hecho')).toEqual([])
+        expect([contador('Pendiente'), contador('En curso'), contador('Hecho')]).toEqual([
+          '1',
+          '1',
+          '0',
+        ])
+        expect(columna('Pendiente').querySelector('ul')?.getAttribute('aria-label')).toBe(
+          'Tareas en Pendiente',
+        )
+        // La tarea sin grupo no aparece en el tablero.
+        expect(document.body.textContent).not.toContain('Sin grupo')
+      })
+
+      it('cada tarjeta muestra asignados, vencimiento y etiquetas', async () => {
+        await montarTablero()
+
+        const tarjeta = columna('Pendiente').querySelector('[data-tarjeta]')!
+        expect(tarjeta.textContent).toContain('Ana')
+        expect(tarjeta.textContent).toContain('20/11/2026 18:00:00')
+        expect(tarjeta.textContent).toContain('Vence en')
+        const chips = [...tarjeta.querySelectorAll('ul[aria-label="Etiquetas"] li')].map((c) =>
+          c.textContent?.trim(),
+        )
+        expect(chips).toEqual(['Backend', 'Urgente'])
+      })
+
+      it('"Grupo del tablero" empieza en el primer grupo, cambia de grupo y lo recuerda', async () => {
+        await montarTablero()
+
+        const selector = document.body.querySelector<HTMLSelectElement>('#tablero-grupo')!
+        expect(document.body.querySelector('label[for="tablero-grupo"]')?.textContent?.trim()).toBe(
+          'Grupo del tablero',
+        )
+        expect(selector.value).toBe('1')
+        selector.value = '2'
+        selector.dispatchEvent(new Event('change'))
+        await flushPromises()
+
+        expect(columnas()).toEqual(['Estado Abierta'])
+        expect(document.body.textContent).toContain('No hay tareas en este grupo.')
+        expect(localStorage.getItem(CLAVE_GRUPO)).toBe('2')
+      })
+
+      it('recuerda el grupo elegido al volver y, si ya no existe, usa el primero', async () => {
+        localStorage.setItem(CLAVE_VISTA, 'tablero')
+        localStorage.setItem(CLAVE_GRUPO, '2')
+        await montar(TAREAS_GRUPO, GRUPOS)
+        expect(columnas()).toEqual(['Estado Abierta'])
+
+        contenedor?.unmount()
+        contenedor = null
+        document.body.innerHTML = ''
+        localStorage.setItem(CLAVE_GRUPO, '99')
+        await montar(TAREAS_GRUPO, GRUPOS)
+        expect(columnas()).toEqual(['Estado Pendiente', 'Estado En curso', 'Estado Hecho'])
+      })
+
+      it('un grupo sin estados lo indica', async () => {
+        localStorage.setItem(CLAVE_GRUPO, '3')
+        await montarTablero()
+
+        expect(columnas()).toEqual([])
+        expect(document.body.textContent).toContain('Este grupo no tiene estados.')
+      })
+
+      it('sin grupos invita a crear uno en Ajustes', async () => {
+        await montarTablero(TAREAS_GRUPO, [])
+
+        const enlace = document.body.querySelector('a[href="/ajustes/grupos-estados"]')
+        expect(enlace?.textContent).toContain('Crea un grupo de estados en Ajustes')
+        expect(document.body.querySelector('#tablero-grupo')).toBeNull()
+      })
+
+      it('pulsar la tarjeta abre el detalle de la tarea', async () => {
+        await montarTablero()
+
+        columna('Pendiente').querySelector<HTMLButtonElement>('[data-nombre-tarjeta]')!.click()
+        await flushPromises()
+
+        expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
+      })
+
+      it('los filtros y la búsqueda se aplican al tablero', async () => {
+        await montarTablero()
+
+        await escribir(campo<HTMLInputElement>(document.body, '#filtro-buscar'), 'informe')
+
+        expect(tarjetas('Pendiente')).toEqual(['Escribir informe'])
+        expect(tarjetas('En curso')).toEqual([])
+        expect(contador('En curso')).toBe('0')
+      })
+
+      describe('mover tareas', () => {
+        const MOVIDA = { ...INFORME, estado: { id: 12, nombre: 'Hecho' } }
+
+        it('"Mover a…" ofrece los otros estados y mueve la tarjeta con PATCH, sin perder el foco', async () => {
+          await montarTablero()
+          vi.mocked(clienteApi.parchear).mockResolvedValue(structuredClone(MOVIDA))
+
+          const mover = botonEn(columna('Pendiente'), 'Mover a… (Escribir informe)')
+          expect(mover.textContent?.trim()).toBe('Mover a…')
+          mover.focus()
+          mover.click()
+          await flushPromises()
+          const menu = document.body.querySelector<HTMLElement>('[data-menu-mover]')!
+          const opciones = [...menu.querySelectorAll('button')].map((b) => b.textContent?.trim())
+          expect(opciones).toEqual(['En curso', 'Hecho'])
+          ;[...menu.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Hecho')!
+            .click()
+          await flushPromises()
+
+          expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/estado', { estado_id: 12 })
+          expect(tarjetas('Pendiente')).toEqual([])
+          expect(tarjetas('Hecho')).toEqual(['Escribir informe'])
+          expect(contador('Hecho')).toBe('1')
+          expect(document.activeElement?.getAttribute('aria-label')).toBe(
+            'Mover a… (Escribir informe)',
+          )
+          expect(columna('Hecho').contains(document.activeElement)).toBe(true)
+          expect(document.body.querySelector('[data-anuncio-tablero]')?.textContent).toBe(
+            'Escribir informe movida a Hecho',
+          )
+        })
+
+        it('arrastrar una tarjeta a otra columna la mueve con PATCH', async () => {
+          await montarTablero()
+          vi.mocked(clienteApi.parchear).mockResolvedValue(structuredClone(MOVIDA))
+          const tarjeta = columna('Pendiente').querySelector('[data-tarjeta]')!
+          expect(tarjeta.getAttribute('draggable')).toBe('true')
+          const dataTransfer = crearDataTransfer()
+
+          lanzarEventoArrastre(tarjeta, 'dragstart', dataTransfer)
+          lanzarEventoArrastre(columna('Hecho'), 'dragover', dataTransfer)
+          await flushPromises()
+          expect(columna('Hecho').getAttribute('data-destino')).toBe('true')
+          lanzarEventoArrastre(columna('Hecho'), 'drop', dataTransfer)
+          lanzarEventoArrastre(tarjeta, 'dragend', dataTransfer)
+          await flushPromises()
+
+          expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/estado', { estado_id: 12 })
+          expect(tarjetas('Hecho')).toEqual(['Escribir informe'])
+          expect(document.body.querySelector('[data-destino="true"]')).toBeNull()
+        })
+
+        it('soltar en la misma columna no llama a la API', async () => {
+          await montarTablero()
+          const tarjeta = columna('Pendiente').querySelector('[data-tarjeta]')!
+          const dataTransfer = crearDataTransfer()
+
+          lanzarEventoArrastre(tarjeta, 'dragstart', dataTransfer)
+          lanzarEventoArrastre(columna('Pendiente'), 'dragover', dataTransfer)
+          lanzarEventoArrastre(columna('Pendiente'), 'drop', dataTransfer)
+          await flushPromises()
+
+          expect(clienteApi.parchear).not.toHaveBeenCalled()
+        })
+
+        it('si la API falla, la tarjeta se queda donde estaba y se muestra el error', async () => {
+          await montarTablero()
+          vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('El estado no es del grupo'))
+
+          botonEn(columna('Pendiente'), 'Mover a… (Escribir informe)').click()
+          await flushPromises()
+          const menu = document.body.querySelector<HTMLElement>('[data-menu-mover]')!
+          ;[...menu.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Hecho')!
+            .click()
+          await flushPromises()
+
+          expect(tarjetas('Pendiente')).toEqual(['Escribir informe'])
+          expect(document.body.querySelector('[role="alert"]')?.textContent).toContain(
+            'El estado no es del grupo',
+          )
+        })
+      })
+
+      describe('"Añadir tarea" en una columna', () => {
+        it('abre el alta con el grupo del tablero y, en la primera columna, no recoloca la tarea', async () => {
+          const envoltorio = await montarTablero()
+          vi.mocked(clienteApi.crear).mockResolvedValue({ ...INFORME, id: 9, nombre: 'Nueva' })
+
+          botonEn(columna('Pendiente'), 'Añadir tarea en Pendiente').click()
+          await flushPromises()
+          const panel = panelActual()
+          expect(panel.textContent).toContain('Crear tarea')
+          expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('1')
+          await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Nueva')
+          await escribir(campo(panel, 'textarea[placeholder="Descripción"]'), 'Detalle')
+          await enviar(panel)
+
+          expect(clienteApi.crear).toHaveBeenCalledWith(
+            '/tareas',
+            expect.objectContaining({ grupo_estados_id: 1 }),
+          )
+          expect(clienteApi.parchear).not.toHaveBeenCalled()
+          expect(tarjetas('Pendiente')).toEqual(['Escribir informe', 'Nueva'])
+          expect(envoltorio.exists()).toBe(true)
+        })
+
+        it('en otra columna, tras crearla, la coloca en ese estado con PATCH', async () => {
+          await montarTablero()
+          const creada = { ...INFORME, id: 9, nombre: 'Nueva' }
+          vi.mocked(clienteApi.crear).mockResolvedValue(creada)
+          vi.mocked(clienteApi.parchear).mockResolvedValue({
+            ...creada,
+            estado: { id: 11, nombre: 'En curso' },
+          })
+
+          botonEn(columna('En curso'), 'Añadir tarea en En curso').click()
+          await flushPromises()
+          const panel = panelActual()
+          await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Nueva')
+          await escribir(campo(panel, 'textarea[placeholder="Descripción"]'), 'Detalle')
+          await enviar(panel)
+
+          expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/9/estado', { estado_id: 11 })
+          expect(tarjetas('En curso')).toEqual(['Leer artículo', 'Nueva'])
+        })
+
+        it('si se cambia el grupo en el formulario, no la recoloca', async () => {
+          await montarTablero()
+          vi.mocked(clienteApi.crear).mockResolvedValue({
+            ...INFORME,
+            id: 9,
+            nombre: 'Nueva',
+            grupo_estados: { id: 2, nombre: 'Soporte' },
+            estado: { id: 20, nombre: 'Abierta' },
+          })
+
+          botonEn(columna('En curso'), 'Añadir tarea en En curso').click()
+          await flushPromises()
+          const panel = panelActual()
+          await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Nueva')
+          await escribir(campo(panel, 'textarea[placeholder="Descripción"]'), 'Detalle')
+          await elegirGrupo(panel, '2')
+          await enviar(panel)
+
+          expect(clienteApi.parchear).not.toHaveBeenCalled()
+        })
+      })
+    })
+  })
+
+  describe('calendario', () => {
+    const CLAVE_VISTA = 'gestor-tareas:vista-tareas'
+
+    // Hoy (AHORA) es el lunes 9 de noviembre de 2026.
+    const NOCHE = {
+      ...TAREAS[1],
+      id: 5,
+      nombre: 'Cerrar caja',
+      fecha_vencimiento: '2026-11-11T23:59:00',
+    }
+    const MADRUGADA = {
+      ...TAREAS[1],
+      id: 6,
+      nombre: 'Copia de seguridad',
+      fecha_vencimiento: '2026-11-12T00:30:00',
+      completada: true,
+    }
+    const DICIEMBRE = {
+      ...TAREAS[1],
+      id: 7,
+      nombre: 'Cena de empresa',
+      fecha_vencimiento: '2026-12-18T21:00:00',
+    }
+    // TAREAS[0] vence el 20/11/2026 a las 18:00; TAREAS[1] no tiene vencimiento.
+    const TAREAS_CALENDARIO = [TAREAS[0], TAREAS[1], NOCHE, MADRUGADA, DICIEMBRE]
+
+    type AvisoTamano = (
+      entradas: { borderBoxSize: { inlineSize: number; blockSize: number }[] }[],
+    ) => void
+
+    // jsdom no maqueta: se sustituye ResizeObserver por uno que informa del ancho dado.
+    function fijarAncho(ancho: number): void {
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          constructor(private readonly llamada: AvisoTamano) {}
+          observe(): void {
+            this.llamada([{ borderBoxSize: [{ inlineSize: ancho, blockSize: 600 }] }])
+          }
+          unobserve(): void {}
+          disconnect(): void {}
+        },
+      )
+    }
+
+    beforeEach(() => localStorage.removeItem(CLAVE_VISTA))
+    afterEach(() => {
+      localStorage.removeItem(CLAVE_VISTA)
+      vi.unstubAllGlobals()
+    })
+
+    function botonPorEtiqueta(etiqueta: string): HTMLButtonElement {
+      const boton = document.body.querySelector<HTMLButtonElement>(
+        `button[aria-label="${etiqueta}"]`,
+      )
+      if (!boton) throw new Error(`No se encontró el botón "${etiqueta}"`)
+      return boton
+    }
+
+    function botonPorTexto(texto: string): HTMLButtonElement {
+      const boton = [...document.body.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === texto,
+      )
+      if (!boton) throw new Error(`No se encontró el botón "${texto}"`)
+      return boton
+    }
+
+    async function montarCalendario(tareas: unknown[] = TAREAS_CALENDARIO) {
+      const envoltorio = await montar(tareas)
+      botonPorEtiqueta('Ver como calendario').click()
+      await flushPromises()
+      return envoltorio
+    }
+
+    function dia(nombre: string): HTMLElement {
+      const elemento = document.body.querySelector<HTMLElement>(`[aria-label="${nombre}"]`)
+      if (!elemento) throw new Error(`No se encontró el día "${nombre}"`)
+      return elemento
+    }
+
+    function tareasDe(nombre: string): string[] {
+      return [...dia(nombre).querySelectorAll('[data-tarea-calendario]')].map((t) =>
+        t.textContent!.replace(/\s+/g, ' ').trim(),
+      )
+    }
+
+    function titulo(): string {
+      return document.body.querySelector('[data-titulo-mes]')!.textContent!.trim()
+    }
+
+    it('"Ver como calendario" muestra el calendario y recuerda la elección', async () => {
+      const envoltorio = await montarCalendario()
+
+      const boton = botonPorEtiqueta('Ver como calendario')
+      expect(boton.getAttribute('title')).toBe('Ver como calendario')
+      expect(boton.getAttribute('aria-pressed')).toBe('true')
+      expect(botonPorEtiqueta('Ver como lista').getAttribute('aria-pressed')).toBe('false')
+      expect(botonPorEtiqueta('Ver como tablero').getAttribute('aria-pressed')).toBe('false')
+      expect(document.body.querySelector('[data-testid="calendario-tareas"]')).not.toBeNull()
+      expect(localStorage.getItem(CLAVE_VISTA)).toBe('calendario')
+
+      envoltorio.unmount()
+      contenedor = null
+      document.body.innerHTML = ''
+      await montar(TAREAS_CALENDARIO)
+      expect(botonPorEtiqueta('Ver como calendario').getAttribute('aria-pressed')).toBe('true')
+      expect(titulo()).toBe('noviembre de 2026')
+    })
+
+    it('abre en el mes de hoy, con semanas de lunes a domingo y hoy marcado', async () => {
+      await montarCalendario()
+
+      expect(titulo()).toBe('noviembre de 2026')
+      const cabeceras = [...document.body.querySelectorAll('thead th')].map((th) =>
+        th.textContent?.trim(),
+      )
+      expect(cabeceras).toEqual([
+        'lunes',
+        'martes',
+        'miércoles',
+        'jueves',
+        'viernes',
+        'sábado',
+        'domingo',
+      ])
+      // El 1 de noviembre de 2026 es domingo: última columna de la primera semana.
+      const primeraSemana = document.body.querySelectorAll('tbody tr')[0]!.querySelectorAll('td')
+      expect(primeraSemana[6]!.querySelector('[aria-label]')?.getAttribute('aria-label')).toBe(
+        'domingo, 1 de noviembre de 2026',
+      )
+      expect(primeraSemana[0]!.querySelector('[aria-label]')).toBeNull()
+      const hoy = document.body.querySelectorAll('[aria-current="date"]')
+      expect(hoy).toHaveLength(1)
+      expect(hoy[0]!.getAttribute('aria-label')).toBe('lunes, 9 de noviembre de 2026')
+    })
+
+    it('coloca cada tarea en el día local de su vencimiento y muestra la hora', async () => {
+      await montarCalendario()
+
+      expect(tareasDe('miércoles, 11 de noviembre de 2026')).toEqual(['23:59 Cerrar caja'])
+      expect(tareasDe('jueves, 12 de noviembre de 2026')).toEqual(['00:30 Copia de seguridad'])
+      expect(tareasDe('viernes, 20 de noviembre de 2026')).toEqual(['18:00 Escribir informe'])
+      expect(
+        dia('miércoles, 11 de noviembre de 2026').querySelector('ul')?.getAttribute('aria-label'),
+      ).toBe('Tareas del miércoles, 11 de noviembre de 2026')
+    })
+
+    it('las tareas completadas aparecen tachadas', async () => {
+      await montarCalendario()
+
+      const completada = dia('jueves, 12 de noviembre de 2026').querySelector(
+        '[data-tarea-calendario]',
+      )!
+      const pendiente = dia('miércoles, 11 de noviembre de 2026').querySelector(
+        '[data-tarea-calendario]',
+      )!
+      expect(completada.className).toContain('line-through')
+      expect(pendiente.className).not.toContain('line-through')
+    })
+
+    it('avisa de las tareas sin fecha de vencimiento', async () => {
+      await montarCalendario()
+
+      expect(document.body.textContent).toContain('1 tarea sin fecha de vencimiento')
+    })
+
+    it('"Mes siguiente", "Mes anterior" y "Hoy" cambian el mes mostrado', async () => {
+      await montarCalendario()
+
+      botonPorTexto('Mes siguiente').click()
+      await flushPromises()
+      expect(titulo()).toBe('diciembre de 2026')
+      expect(tareasDe('viernes, 18 de diciembre de 2026')).toEqual(['21:00 Cena de empresa'])
+      expect(document.body.querySelector('[aria-current="date"]')).toBeNull()
+
+      botonPorTexto('Mes siguiente').click()
+      await flushPromises()
+      expect(titulo()).toBe('enero de 2027')
+
+      for (let vez = 0; vez < 3; vez++) botonPorTexto('Mes anterior').click()
+      await flushPromises()
+      expect(titulo()).toBe('octubre de 2026')
+
+      botonPorTexto('Hoy').click()
+      await flushPromises()
+      expect(titulo()).toBe('noviembre de 2026')
+    })
+
+    it('un día con más de 3 tareas muestra 3 y "+N más" despliega el resto', async () => {
+      const mismoDia = [1, 2, 3, 4, 5].map((numero) => ({
+        ...TAREAS[1],
+        id: 20 + numero,
+        nombre: `Tarea ${numero}`,
+        fecha_vencimiento: `2026-11-16T0${numero}:00:00`,
+      }))
+      await montarCalendario(mismoDia)
+      const lunes = 'lunes, 16 de noviembre de 2026'
+
+      expect(tareasDe(lunes)).toEqual(['01:00 Tarea 1', '02:00 Tarea 2', '03:00 Tarea 3'])
+      const mas = botonPorEtiqueta(`+2 más (${lunes})`)
+      expect(mas.textContent?.trim()).toBe('+2 más')
+      mas.focus()
+      mas.click()
+      await flushPromises()
+
+      expect(tareasDe(lunes)).toHaveLength(5)
+      // El botón desaparece: el foco va a la primera tarea que estaba oculta.
+      expect(document.activeElement?.textContent?.replace(/\s+/g, ' ').trim()).toBe('04:00 Tarea 4')
+    })
+
+    it('los filtros y la búsqueda se aplican al calendario', async () => {
+      await montarCalendario()
+
+      await escribir(campo<HTMLInputElement>(document.body, '#filtro-buscar'), 'caja')
+
+      expect(tareasDe('miércoles, 11 de noviembre de 2026')).toEqual(['23:59 Cerrar caja'])
+      expect(tareasDe('viernes, 20 de noviembre de 2026')).toEqual([])
+      expect(document.body.textContent).not.toContain('sin fecha de vencimiento')
+    })
+
+    it('pulsar una tarea abre su detalle', async () => {
+      await montarCalendario()
+
+      dia('viernes, 20 de noviembre de 2026')
+        .querySelector<HTMLButtonElement>('[data-tarea-calendario]')!
+        .click()
+      await flushPromises()
+
+      expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
+    })
+
+    it('en un contenedor estrecho muestra una agenda con los días del mes que tienen tareas', async () => {
+      fijarAncho(500)
+      await montarCalendario()
+
+      expect(document.body.querySelector('[data-testid="calendario-tareas"] table')).toBeNull()
+      const encabezados = [...document.body.querySelectorAll('[data-agenda] h3')].map((h) =>
+        h.textContent?.trim(),
+      )
+      expect(encabezados).toEqual([
+        'miércoles, 11 de noviembre de 2026',
+        'jueves, 12 de noviembre de 2026',
+        'viernes, 20 de noviembre de 2026',
+      ])
+      expect(tareasDe('miércoles, 11 de noviembre de 2026')).toEqual(['23:59 Cerrar caja'])
+    })
+
+    it('con ancho suficiente muestra la cuadrícula', async () => {
+      fijarAncho(900)
+      await montarCalendario()
+
+      expect(document.body.querySelector('[data-testid="calendario-tareas"] table')).not.toBeNull()
+      expect(document.body.querySelector('[data-agenda]')).toBeNull()
     })
   })
 })
