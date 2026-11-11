@@ -1896,5 +1896,222 @@ describe('VistaTareas', () => {
       expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
       expect(disparador(envoltorio, 'Filtrar por tipo').text()).toBe('Todos los tipos')
     })
+
+    describe('estado', () => {
+      // "Revisar código" está completada; las otras dos, no.
+      const CON_COMPLETADA = TAREAS_FILTRO.map((tarea) =>
+        tarea.id === 2 ? { ...tarea, completada: true } : tarea,
+      )
+
+      function opcionEstado(envoltorio: VueWrapper, etiqueta: string) {
+        const grupo = envoltorio.get('[role="radiogroup"][aria-labelledby="filtro-estado-titulo"]')
+        const opcion = grupo
+          .findAll('input[type="radio"]')
+          .find(
+            (radio) => envoltorio.get(`label[for="${radio.attributes('id')}"]`).text() === etiqueta,
+          )
+        if (!opcion) throw new Error(`No hay opción de estado «${etiqueta}»`)
+        return opcion
+      }
+
+      it('por defecto muestra todas las tareas, completadas o no', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+
+        expect(envoltorio.get('#filtro-estado-titulo').text()).toBe('Estado')
+        expect((opcionEstado(envoltorio, 'Todas').element as HTMLInputElement).checked).toBe(true)
+        expect((opcionEstado(envoltorio, 'Completadas').element as HTMLInputElement).checked).toBe(
+          false,
+        )
+        expect(
+          (opcionEstado(envoltorio, 'No completadas').element as HTMLInputElement).checked,
+        ).toBe(false)
+        expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+      })
+
+      it('"Completadas" muestra solo las tareas completadas', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+
+        await opcionEstado(envoltorio, 'Completadas').setValue(true)
+        await flushPromises()
+
+        expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código'])
+      })
+
+      it('"No completadas" muestra solo las tareas sin completar', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+
+        await opcionEstado(envoltorio, 'No completadas').setValue(true)
+        await flushPromises()
+
+        expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Comprar café'])
+      })
+
+      it('se combina con los demás filtros', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+
+        await opcionEstado(envoltorio, 'No completadas').setValue(true)
+        await escribir(entrada(envoltorio, 'filtro-buscar'), 'café')
+
+        expect(nombresEnTabla(envoltorio)).toEqual(['Comprar café'])
+      })
+
+      it('"Limpiar filtros" vuelve a "Todas"', async () => {
+        const envoltorio = await montar(CON_COMPLETADA)
+        await opcionEstado(envoltorio, 'Completadas').setValue(true)
+        await flushPromises()
+
+        const boton = envoltorio.findAll('button').find((b) => b.text() === 'Limpiar filtros')!
+        await boton.trigger('click')
+        await flushPromises()
+
+        expect((opcionEstado(envoltorio, 'Todas').element as HTMLInputElement).checked).toBe(true)
+        expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+      })
+    })
+  })
+
+  describe('columnas visibles', () => {
+    const CLAVE = 'gestor-tareas:columnas-ocultas-tareas'
+
+    beforeEach(() => localStorage.removeItem(CLAVE))
+    afterEach(() => localStorage.removeItem(CLAVE))
+
+    function botonColumnas(envoltorio: VueWrapper) {
+      const boton = envoltorio.find('button[aria-label="Elegir columnas visibles"]')
+      if (!boton.exists()) throw new Error('No se encontró el botón de columnas')
+      return boton
+    }
+
+    // Casilla del desplegable (teletransportado al `body`) con esa etiqueta visible.
+    function casillaColumna(texto: string): HTMLElement {
+      const etiqueta = [
+        ...document.body.querySelectorAll<HTMLLabelElement>('[data-slot="popover-content"] label'),
+      ].find((label) => label.textContent?.trim() === texto)
+      const elemento = etiqueta ? document.getElementById(etiqueta.htmlFor) : null
+      if (!elemento) throw new Error(`No se encontró la casilla "${texto}"`)
+      return elemento
+    }
+
+    function cabeceras(envoltorio: VueWrapper): string[] {
+      return envoltorio
+        .findAll('thead th')
+        .map((th) => th.text().trim())
+        .filter((texto) => texto !== '' && texto !== 'Acciones')
+    }
+
+    async function abrirColumnas(envoltorio: VueWrapper): Promise<void> {
+      await botonColumnas(envoltorio).trigger('click')
+      await flushPromises()
+    }
+
+    const TODAS_LAS_COLUMNAS = [
+      'Nombre',
+      'Prioridad',
+      'Descripción',
+      'Etiquetas',
+      'Asignado a',
+      'Fecha de creación',
+      'Fecha de vencimiento',
+      'Tipo',
+    ]
+
+    it('por defecto muestra todas las columnas y las lista marcadas; "Nombre" no se puede ocultar', async () => {
+      const envoltorio = await montar()
+
+      expect(cabeceras(envoltorio)).toEqual(TODAS_LAS_COLUMNAS)
+      await abrirColumnas(envoltorio)
+      for (const columna of TODAS_LAS_COLUMNAS) {
+        expect(casillaColumna(columna).getAttribute('data-state')).toBe('checked')
+      }
+      expect(casillaColumna('Nombre').hasAttribute('disabled')).toBe(true)
+    })
+
+    it('al desmarcar una columna se ocultan su cabecera y sus celdas, y al marcarla vuelve', async () => {
+      const envoltorio = await montar()
+      const celdasPorFila = filasTabla(envoltorio)[0]!.length
+
+      await abrirColumnas(envoltorio)
+      casillaColumna('Descripción').click()
+      await flushPromises()
+
+      expect(cabeceras(envoltorio)).toEqual(TODAS_LAS_COLUMNAS.filter((c) => c !== 'Descripción'))
+      expect(filasTabla(envoltorio)[0]!.length).toBe(celdasPorFila - 1)
+      expect(envoltorio.text()).not.toContain(TAREAS[0]!.descripcion)
+
+      casillaColumna('Descripción').click()
+      await flushPromises()
+      expect(cabeceras(envoltorio)).toEqual(TODAS_LAS_COLUMNAS)
+      expect(filasTabla(envoltorio)[0]!.length).toBe(celdasPorFila)
+    })
+
+    it('oculta también las columnas de chips (etiquetas y asignados)', async () => {
+      const envoltorio = await montar()
+
+      await abrirColumnas(envoltorio)
+      casillaColumna('Etiquetas').click()
+      casillaColumna('Asignado a').click()
+      await flushPromises()
+
+      expect(cabeceras(envoltorio)).toEqual(
+        TODAS_LAS_COLUMNAS.filter((c) => c !== 'Etiquetas' && c !== 'Asignado a'),
+      )
+      expect(envoltorio.findAll('[data-testid="chip-tabla"]')).toHaveLength(0)
+    })
+
+    it('"Mostrar todas" vuelve a mostrar todas las columnas', async () => {
+      const envoltorio = await montar()
+      await abrirColumnas(envoltorio)
+      casillaColumna('Prioridad').click()
+      casillaColumna('Tipo').click()
+      await flushPromises()
+
+      const mostrarTodas = [
+        ...document.body.querySelectorAll<HTMLButtonElement>(
+          '[data-slot="popover-content"] button',
+        ),
+      ].find((b) => b.textContent?.trim() === 'Mostrar todas')!
+      mostrarTodas.click()
+      await flushPromises()
+
+      expect(cabeceras(envoltorio)).toEqual(TODAS_LAS_COLUMNAS)
+    })
+
+    it('recuerda las columnas ocultas al volver a la vista', async () => {
+      const primera = await montar()
+      await abrirColumnas(primera)
+      casillaColumna('Descripción').click()
+      await flushPromises()
+      expect(JSON.parse(localStorage.getItem(CLAVE)!)).toEqual(['descripcion'])
+      primera.unmount()
+      document.body.innerHTML = ''
+
+      const segunda = await montar()
+      expect(cabeceras(segunda)).toEqual(TODAS_LAS_COLUMNAS.filter((c) => c !== 'Descripción'))
+    })
+
+    it('ignora un valor guardado no válido y muestra todas las columnas', async () => {
+      localStorage.setItem(CLAVE, '{no es json')
+      const envoltorio = await montar()
+
+      expect(cabeceras(envoltorio)).toEqual(TODAS_LAS_COLUMNAS)
+    })
+
+    it('exporta solo las columnas visibles, en el mismo orden', async () => {
+      const envoltorio = await montar()
+      await abrirColumnas(envoltorio)
+      casillaColumna('Descripción').click()
+      casillaColumna('Tipo').click()
+      await flushPromises()
+      await botonColumnas(envoltorio).trigger('click')
+      await flushPromises()
+
+      await envoltorio.get('button[aria-label="Exportar a Excel"]').trigger('click')
+      await flushPromises()
+
+      const [, columnas, filas] = vi.mocked(exportarTablaExcel).mock.calls[0]!
+      const esperadas = TODAS_LAS_COLUMNAS.filter((c) => c !== 'Descripción' && c !== 'Tipo')
+      expect(columnas).toEqual(esperadas)
+      for (const fila of filas as unknown[][]) expect(fila).toHaveLength(esperadas.length)
+    })
   })
 })
