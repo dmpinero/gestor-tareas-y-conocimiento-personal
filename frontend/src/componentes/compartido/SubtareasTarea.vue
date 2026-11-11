@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Circle, CircleCheck, Pencil, Plus, Trash } from '@lucide/vue'
-import { computed, nextTick, reactive, ref } from 'vue'
+import { createReusableTemplate, useElementSize } from '@vueuse/core'
+import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
 
 import type { DatosEdicionSubtarea, DatosSubtarea, Subtarea, Tarea } from '@/api/tipos'
 import { Button } from '@/componentes/ui/button'
@@ -34,6 +35,27 @@ const ERROR_PRIORIDAD = 'La prioridad debe ser un número entero del 1 al 5.'
 
 const idBase = computed(() => `subtareas-tarea-${props.tarea.id}`)
 const idPersonas = computed(() => `${idBase.value}-personas`)
+
+// --- Tabla o tarjetas según el ancho disponible ---------------------------
+// La tabla necesita unos 380 px con la columna de acciones (más si los nombres
+// son largos); por debajo de 32rem (512 px) se desborda o queda justa, así que
+// se pasa a una lista de tarjetas. Se mide el contenedor y no la ventana: en el
+// detalle, la columna de comentarios estrecha el hueco aunque la ventana sea
+// ancha. Se pinta una sola de las dos vistas (v-if) para no duplicar controles
+// ni nombres accesibles. Sin medida (ancho 0, p. ej. en jsdom) se usa la tabla.
+const ANCHO_MINIMO_TABLA = 512
+const raiz = useTemplateRef<HTMLElement>('raiz')
+const { width: ancho } = useElementSize(raiz, undefined, { box: 'border-box' })
+const enTarjetas = computed(() => ancho.value > 0 && ancho.value < ANCHO_MINIMO_TABLA)
+
+// Piezas compartidas por la tabla y las tarjetas, para no duplicar el marcado.
+const plantillaAlternar = createReusableTemplate<{ subtarea: Subtarea }>()
+const plantillaAcciones = createReusableTemplate<{ subtarea: Subtarea }>()
+const plantillaEdicion = createReusableTemplate<{ subtarea: Subtarea }>()
+
+function claseResuelta(subtarea: Subtarea): string {
+  return subtarea.resuelta ? 'text-muted-foreground line-through' : ''
+}
 
 const sinResolver = computed(
   () => props.tarea.subtareas.filter((subtarea) => !subtarea.resuelta).length,
@@ -254,7 +276,159 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
 </script>
 
 <template>
-  <section :aria-labelledby="`${idBase}-titulo`">
+  <section ref="raiz" class="@container" :aria-labelledby="`${idBase}-titulo`">
+    <plantillaAlternar.define v-slot="{ subtarea }">
+      <Button
+        variant="ghost"
+        size="icon"
+        class="size-8 shrink-0"
+        :aria-pressed="subtarea.resuelta ? 'true' : 'false'"
+        :aria-label="`Marcar como resuelta la subtarea ${subtarea.nombre}`"
+        @click="alternar(subtarea)"
+      >
+        <CircleCheck v-if="subtarea.resuelta" class="text-success" aria-hidden="true" />
+        <Circle v-else aria-hidden="true" />
+      </Button>
+    </plantillaAlternar.define>
+
+    <plantillaAcciones.define v-slot="{ subtarea }">
+      <div
+        v-if="idConfirmando === subtarea.id"
+        role="group"
+        :aria-label="`¿Eliminar la subtarea ${subtarea.nombre}?`"
+        class="flex items-center justify-end gap-2"
+        @keydown.esc.stop.prevent="cancelarEliminacion(subtarea)"
+      >
+        <Button variant="destructive" size="sm" @click="confirmarEliminacion(subtarea)"
+          >Eliminar</Button
+        >
+        <Button
+          :id="`${idBase}-cancelar-eliminar`"
+          variant="outline"
+          size="sm"
+          @click="cancelarEliminacion(subtarea)"
+          >Cancelar</Button
+        >
+      </div>
+      <div v-else class="flex items-center justify-end gap-1">
+        <Button
+          :id="idBotonEditar(subtarea.id)"
+          variant="ghost"
+          size="icon"
+          class="size-8"
+          :aria-label="`Editar subtarea ${subtarea.nombre}`"
+          @click="abrirEdicion(subtarea)"
+        >
+          <Pencil aria-hidden="true" />
+        </Button>
+        <Button
+          :id="idBotonEliminar(subtarea)"
+          variant="ghost"
+          size="icon"
+          class="size-8"
+          :aria-label="`Eliminar subtarea ${subtarea.nombre}`"
+          @click="pedirConfirmacion(subtarea)"
+        >
+          <Trash aria-hidden="true" />
+        </Button>
+      </div>
+    </plantillaAcciones.define>
+
+    <!-- Las columnas dependen del ancho del contenedor (@lg = 32rem), no de la
+         ventana: en un hueco estrecho los campos se apilan a todo lo ancho. -->
+    <plantillaEdicion.define v-slot="{ subtarea }">
+      <form
+        class="grid gap-3 @lg:grid-cols-[1fr_12rem_7rem] @lg:items-end"
+        :aria-label="`Editar subtarea ${subtarea.nombre}`"
+        novalidate
+        @submit.prevent="pedirConfirmacionEdicion"
+        @keydown.esc.stop.prevent="cancelarEdicion(subtarea)"
+      >
+        <div class="flex min-w-0 flex-col gap-1.5">
+          <Label :for="idCampoEdicion(subtarea, 'nombre')"
+            >Nuevo nombre de la subtarea {{ subtarea.nombre }}</Label
+          >
+          <Input
+            :id="idCampoEdicion(subtarea, 'nombre')"
+            v-model="edicion.nombre"
+            :maxlength="MAX_NOMBRE"
+            required
+            :readonly="confirmandoEdicion"
+            :aria-invalid="errorEdicion === ERROR_NOMBRE_OBLIGATORIO ? 'true' : undefined"
+            :aria-describedby="errorEdicion ? `${idBase}-error-edicion` : undefined"
+          />
+        </div>
+        <div class="flex min-w-0 flex-col gap-1.5">
+          <Label :for="idCampoEdicion(subtarea, 'asignado')"
+            >Nueva persona asignada de la subtarea {{ subtarea.nombre }}</Label
+          >
+          <Input
+            :id="idCampoEdicion(subtarea, 'asignado')"
+            v-model="edicion.asignado"
+            :maxlength="MAX_PERSONA"
+            :list="idPersonas"
+            autocomplete="off"
+            :readonly="confirmandoEdicion"
+          />
+        </div>
+        <div class="flex min-w-0 flex-col gap-1.5">
+          <Label :for="idCampoEdicion(subtarea, 'prioridad')"
+            >Nueva prioridad de la subtarea {{ subtarea.nombre }}</Label
+          >
+          <Input
+            :id="idCampoEdicion(subtarea, 'prioridad')"
+            v-model="edicion.prioridad"
+            type="number"
+            min="1"
+            max="5"
+            step="1"
+            :readonly="confirmandoEdicion"
+            :aria-invalid="errorEdicion === ERROR_PRIORIDAD ? 'true' : undefined"
+          />
+        </div>
+        <div
+          v-if="confirmandoEdicion"
+          role="group"
+          :aria-label="`¿Guardar los cambios de la subtarea ${subtarea.nombre}?`"
+          class="flex flex-wrap items-center gap-2 @lg:col-span-3"
+          @keydown.esc.stop.prevent="volverAEdicion(subtarea)"
+        >
+          <span class="text-sm [overflow-wrap:anywhere]" aria-hidden="true"
+            >¿Guardar los cambios de la subtarea {{ subtarea.nombre }}?</span
+          >
+          <Button
+            type="button"
+            size="sm"
+            :disabled="guardandoEdicion"
+            @click="confirmarEdicion(subtarea)"
+            >Guardar</Button
+          >
+          <Button
+            :id="`${idBase}-cancelar-guardar`"
+            type="button"
+            variant="outline"
+            size="sm"
+            @click="volverAEdicion(subtarea)"
+            >Cancelar</Button
+          >
+        </div>
+        <div v-else class="flex gap-2 @lg:col-span-3">
+          <Button type="submit" size="sm">Guardar</Button>
+          <Button type="button" variant="outline" size="sm" @click="cancelarEdicion(subtarea)"
+            >Cancelar</Button
+          >
+        </div>
+        <p
+          v-if="errorEdicion"
+          :id="`${idBase}-error-edicion`"
+          role="alert"
+          class="text-destructive text-sm @lg:col-span-3"
+        >
+          {{ errorEdicion }}
+        </p>
+      </form>
+    </plantillaEdicion.define>
+
     <div class="mb-3 flex items-baseline gap-2">
       <h3 :id="`${idBase}-titulo`" class="text-base font-semibold">Subtareas</h3>
       <span data-testid="contador-subtareas" class="text-muted-foreground text-sm"
@@ -262,7 +436,46 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
       >
     </div>
 
-    <Table v-if="props.tarea.subtareas.length > 0" data-testid="tabla-subtareas">
+    <p v-if="props.tarea.subtareas.length === 0" class="text-muted-foreground text-sm">
+      Esta tarea no tiene subtareas.
+    </p>
+    <ul v-else-if="enTarjetas" data-testid="tarjetas-subtareas" class="grid gap-2">
+      <li
+        v-for="subtarea in props.tarea.subtareas"
+        :key="subtarea.id"
+        data-testid="tarjeta-subtarea"
+        class="min-w-0 rounded-md border p-3"
+      >
+        <plantillaEdicion.reuse v-if="idEditando === subtarea.id" :subtarea="subtarea" />
+        <template v-else>
+          <div class="flex items-center gap-2">
+            <plantillaAlternar.reuse :subtarea="subtarea" />
+            <span
+              data-testid="nombre-subtarea"
+              class="min-w-0 font-medium [overflow-wrap:anywhere]"
+              :class="claseResuelta(subtarea)"
+              >{{ subtarea.nombre }}</span
+            >
+          </div>
+          <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+            <dt class="text-muted-foreground">Persona asignada</dt>
+            <dd class="min-w-0">
+              <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
+                textoOVacio(subtarea.asignado)
+              }}</span>
+            </dd>
+            <dt class="text-muted-foreground">Prioridad</dt>
+            <dd>
+              <span :class="claseResuelta(subtarea)">{{ textoOVacio(subtarea.prioridad) }}</span>
+            </dd>
+          </dl>
+          <div class="mt-2">
+            <plantillaAcciones.reuse :subtarea="subtarea" />
+          </div>
+        </template>
+      </li>
+    </ul>
+    <Table v-else data-testid="tabla-subtareas">
       <TableHeader>
         <TableRow>
           <TableHead>Nombre</TableHead>
@@ -274,191 +487,47 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
       <TableBody>
         <TableRow v-for="subtarea in props.tarea.subtareas" :key="subtarea.id">
           <TableCell v-if="idEditando === subtarea.id" colspan="4" class="whitespace-normal">
-            <form
-              class="grid gap-3 sm:grid-cols-[1fr_12rem_7rem] sm:items-end"
-              :aria-label="`Editar subtarea ${subtarea.nombre}`"
-              novalidate
-              @submit.prevent="pedirConfirmacionEdicion"
-              @keydown.esc.stop.prevent="cancelarEdicion(subtarea)"
-            >
-              <div class="flex flex-col gap-1.5">
-                <Label :for="idCampoEdicion(subtarea, 'nombre')"
-                  >Nuevo nombre de la subtarea {{ subtarea.nombre }}</Label
-                >
-                <Input
-                  :id="idCampoEdicion(subtarea, 'nombre')"
-                  v-model="edicion.nombre"
-                  :maxlength="MAX_NOMBRE"
-                  required
-                  :readonly="confirmandoEdicion"
-                  :aria-invalid="errorEdicion === ERROR_NOMBRE_OBLIGATORIO ? 'true' : undefined"
-                  :aria-describedby="errorEdicion ? `${idBase}-error-edicion` : undefined"
-                />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <Label :for="idCampoEdicion(subtarea, 'asignado')"
-                  >Nueva persona asignada de la subtarea {{ subtarea.nombre }}</Label
-                >
-                <Input
-                  :id="idCampoEdicion(subtarea, 'asignado')"
-                  v-model="edicion.asignado"
-                  :maxlength="MAX_PERSONA"
-                  :list="idPersonas"
-                  autocomplete="off"
-                  :readonly="confirmandoEdicion"
-                />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <Label :for="idCampoEdicion(subtarea, 'prioridad')"
-                  >Nueva prioridad de la subtarea {{ subtarea.nombre }}</Label
-                >
-                <Input
-                  :id="idCampoEdicion(subtarea, 'prioridad')"
-                  v-model="edicion.prioridad"
-                  type="number"
-                  min="1"
-                  max="5"
-                  step="1"
-                  :readonly="confirmandoEdicion"
-                  :aria-invalid="errorEdicion === ERROR_PRIORIDAD ? 'true' : undefined"
-                />
-              </div>
-              <div
-                v-if="confirmandoEdicion"
-                role="group"
-                :aria-label="`¿Guardar los cambios de la subtarea ${subtarea.nombre}?`"
-                class="flex flex-wrap items-center gap-2 sm:col-span-3"
-                @keydown.esc.stop.prevent="volverAEdicion(subtarea)"
-              >
-                <span class="text-sm" aria-hidden="true"
-                  >¿Guardar los cambios de la subtarea {{ subtarea.nombre }}?</span
-                >
-                <Button
-                  type="button"
-                  size="sm"
-                  :disabled="guardandoEdicion"
-                  @click="confirmarEdicion(subtarea)"
-                  >Guardar</Button
-                >
-                <Button
-                  :id="`${idBase}-cancelar-guardar`"
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  @click="volverAEdicion(subtarea)"
-                  >Cancelar</Button
-                >
-              </div>
-              <div v-else class="flex gap-2 sm:col-span-3">
-                <Button type="submit" size="sm">Guardar</Button>
-                <Button type="button" variant="outline" size="sm" @click="cancelarEdicion(subtarea)"
-                  >Cancelar</Button
-                >
-              </div>
-              <p
-                v-if="errorEdicion"
-                :id="`${idBase}-error-edicion`"
-                role="alert"
-                class="text-destructive text-sm sm:col-span-3"
-              >
-                {{ errorEdicion }}
-              </p>
-            </form>
+            <plantillaEdicion.reuse :subtarea="subtarea" />
           </TableCell>
           <template v-else>
             <TableCell class="whitespace-normal">
               <div class="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  :aria-pressed="subtarea.resuelta ? 'true' : 'false'"
-                  :aria-label="`Marcar como resuelta la subtarea ${subtarea.nombre}`"
-                  @click="alternar(subtarea)"
-                >
-                  <CircleCheck v-if="subtarea.resuelta" class="text-success" aria-hidden="true" />
-                  <Circle v-else aria-hidden="true" />
-                </Button>
-                <span
-                  class="[overflow-wrap:anywhere]"
-                  :class="subtarea.resuelta ? 'text-muted-foreground line-through' : ''"
-                  >{{ subtarea.nombre }}</span
-                >
+                <plantillaAlternar.reuse :subtarea="subtarea" />
+                <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
+                  subtarea.nombre
+                }}</span>
               </div>
             </TableCell>
             <TableCell class="whitespace-normal">
-              <span
-                class="[overflow-wrap:anywhere]"
-                :class="subtarea.resuelta ? 'text-muted-foreground line-through' : ''"
-                >{{ textoOVacio(subtarea.asignado) }}</span
-              >
-            </TableCell>
-            <TableCell>
-              <span :class="subtarea.resuelta ? 'text-muted-foreground line-through' : ''">{{
-                textoOVacio(subtarea.prioridad)
+              <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
+                textoOVacio(subtarea.asignado)
               }}</span>
             </TableCell>
+            <TableCell>
+              <span :class="claseResuelta(subtarea)">{{ textoOVacio(subtarea.prioridad) }}</span>
+            </TableCell>
             <TableCell class="text-right">
-              <div
-                v-if="idConfirmando === subtarea.id"
-                role="group"
-                :aria-label="`¿Eliminar la subtarea ${subtarea.nombre}?`"
-                class="flex items-center justify-end gap-2"
-                @keydown.esc.stop.prevent="cancelarEliminacion(subtarea)"
-              >
-                <Button variant="destructive" size="sm" @click="confirmarEliminacion(subtarea)"
-                  >Eliminar</Button
-                >
-                <Button
-                  :id="`${idBase}-cancelar-eliminar`"
-                  variant="outline"
-                  size="sm"
-                  @click="cancelarEliminacion(subtarea)"
-                  >Cancelar</Button
-                >
-              </div>
-              <div v-else class="flex items-center justify-end gap-1">
-                <Button
-                  :id="idBotonEditar(subtarea.id)"
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  :aria-label="`Editar subtarea ${subtarea.nombre}`"
-                  @click="abrirEdicion(subtarea)"
-                >
-                  <Pencil aria-hidden="true" />
-                </Button>
-                <Button
-                  :id="idBotonEliminar(subtarea)"
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  :aria-label="`Eliminar subtarea ${subtarea.nombre}`"
-                  @click="pedirConfirmacion(subtarea)"
-                >
-                  <Trash aria-hidden="true" />
-                </Button>
-              </div>
+              <plantillaAcciones.reuse :subtarea="subtarea" />
             </TableCell>
           </template>
         </TableRow>
       </TableBody>
     </Table>
-    <p v-else class="text-muted-foreground text-sm">Esta tarea no tiene subtareas.</p>
 
     <!-- Sugerencias de personas compartidas por la fila de alta y la de edición. -->
     <datalist :id="idPersonas">
       <option v-for="persona in tienda.personas" :key="persona" :value="persona" />
     </datalist>
 
+    <!-- Cuatro columnas solo con hueco de sobra (@2xl = 42rem); si no, apilado. -->
     <form
       v-if="anadiendo"
-      class="mt-3 grid gap-3 sm:grid-cols-[1fr_12rem_7rem_auto] sm:items-end"
+      class="mt-3 grid gap-3 @2xl:grid-cols-[1fr_12rem_7rem_auto] @2xl:items-end"
       novalidate
       @submit.prevent="guardar"
       @keydown.esc.stop.prevent="cancelarAlta"
     >
-      <div class="flex flex-col gap-1.5">
+      <div class="flex min-w-0 flex-col gap-1.5">
         <Label :for="`${idBase}-nombre`">Nombre de la subtarea</Label>
         <Input
           :id="`${idBase}-nombre`"
@@ -469,7 +538,7 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
           :aria-describedby="errorAlta ? `${idBase}-error` : undefined"
         />
       </div>
-      <div class="flex flex-col gap-1.5">
+      <div class="flex min-w-0 flex-col gap-1.5">
         <Label :for="`${idBase}-asignado`">Persona asignada</Label>
         <Input
           :id="`${idBase}-asignado`"
@@ -479,7 +548,7 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
           autocomplete="off"
         />
       </div>
-      <div class="flex flex-col gap-1.5">
+      <div class="flex min-w-0 flex-col gap-1.5">
         <Label :for="`${idBase}-prioridad`">Prioridad de la subtarea</Label>
         <Input
           :id="`${idBase}-prioridad`"
@@ -499,7 +568,7 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
         v-if="errorAlta"
         :id="`${idBase}-error`"
         role="alert"
-        class="text-destructive text-sm sm:col-span-4"
+        class="text-destructive text-sm @2xl:col-span-4"
       >
         {{ errorAlta }}
       </p>

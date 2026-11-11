@@ -673,3 +673,53 @@ test('edita y borra subtareas y comentarios pidiendo confirmación', async ({ pa
   await expect(detalle.getByText('Esta tarea no tiene subtareas.')).toBeVisible()
   await expect(detalle.getByText('Todavía no hay comentarios.')).toBeVisible()
 })
+
+test('en pantallas estrechas muestra las subtareas como tarjetas sin desbordar', async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const nombre = `Tarjetas ${Date.now()}`
+  const creada = await request.post('/api/v1/tareas', {
+    data: { nombre, descripcion: 'Vista móvil', fecha_creacion: '2026-01-01T09:00:00' },
+  })
+  const { id } = (await creada.json()) as { id: number }
+  expect(
+    (
+      await request.post(`/api/v1/tareas/${id}/subtareas`, {
+        data: { nombre: 'Comprar cajas', asignado: 'Ana', prioridad: 2 },
+      })
+    ).status(),
+  ).toBe(201)
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: nombre })
+  const tarjetas = detalle.getByTestId('tarjetas-subtareas')
+  await expect(tarjetas).toBeVisible()
+  await expect(detalle.getByTestId('tabla-subtareas')).toHaveCount(0)
+  await expect(tarjetas.getByTestId('tarjeta-subtarea')).toContainText('Ana')
+
+  const sinDesbordar = async (): Promise<boolean> =>
+    tarjetas.evaluate((elemento) => elemento.scrollWidth <= elemento.clientWidth)
+  expect(await sinDesbordar()).toBe(true)
+
+  await detalle.getByRole('button', { name: 'Editar subtarea Comprar cajas' }).click()
+  const campo = detalle.getByLabel('Nuevo nombre de la subtarea Comprar cajas')
+  await expect(campo).toBeVisible()
+  expect(await sinDesbordar()).toBe(true)
+  const caja = await campo.boundingBox()
+  const cajaDialogo = await detalle.boundingBox()
+  expect(caja && cajaDialogo && caja.x + caja.width <= cajaDialogo.x + cajaDialogo.width).toBe(true)
+  await page.screenshot({ path: 'e2e/capturas/tareas-12-subtareas-movil.png' })
+
+  await campo.fill('Comprar cajas grandes')
+  await detalle.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await detalle
+    .getByRole('group', { name: '¿Guardar los cambios de la subtarea Comprar cajas?' })
+    .getByRole('button', { name: 'Guardar' })
+    .click()
+  await expect(
+    detalle.getByRole('button', { name: 'Editar subtarea Comprar cajas grandes' }),
+  ).toBeVisible()
+})
