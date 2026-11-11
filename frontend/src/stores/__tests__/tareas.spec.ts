@@ -26,7 +26,6 @@ const tareaEjemplo = {
   tipo: null,
   oportunidad: null,
   completada: false,
-  pasos_oportunidad: [],
   subtareas: [],
 }
 
@@ -332,75 +331,77 @@ describe('useTiendaTareas', () => {
     })
   })
 
-  describe('alternarPasoTarea', () => {
-    const PASOS = [
-      { id: 10, numero: 1, nombre: 'Contactar', hecho: false },
-      { id: 11, numero: 2, nombre: 'Enviar propuesta', hecho: true },
-    ]
-    const oportunidad = {
-      ...tareaEjemplo,
-      tipo: 'oportunidad' as const,
-      oportunidad: { codigo: 'OP-1', descripcion: null, observaciones: null },
-      pasos_oportunidad: PASOS,
-    }
+  it('ya no ofrece la acción de alternar pasos del workflow', () => {
+    expect('alternarPasoTarea' in useTiendaTareas()).toBe(false)
+  })
 
-    it('marca como hecho un paso pendiente con PATCH /tareas/{id}/pasos/{id_paso} y reemplaza la tarea', async () => {
-      const otra = { ...tareaEjemplo, id: 2, nombre: 'Otra' }
-      vi.mocked(clienteApi.obtener).mockResolvedValue([oportunidad, otra])
-      const actualizada = {
-        ...oportunidad,
-        pasos_oportunidad: [{ ...PASOS[0]!, hecho: true }, PASOS[1]!],
-      }
-      vi.mocked(clienteApi.parchear).mockResolvedValue(actualizada)
+  describe('eliminarTarea', () => {
+    const otra = { ...tareaEjemplo, id: 2, nombre: 'Otra' }
+
+    it('envía DELETE /tareas/{id}, la quita de la lista y devuelve true', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo, otra])
+      vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
 
       const tienda = useTiendaTareas()
       await tienda.cargar()
-      await tienda.alternarPasoTarea(1, 10)
+      const resultado = await tienda.eliminarTarea(1)
 
-      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/pasos/10', { hecho: true })
-      expect(tienda.tareas).toEqual([actualizada, otra])
+      expect(resultado).toBe(true)
+      expect(clienteApi.eliminar).toHaveBeenCalledWith('/tareas/1')
+      expect(tienda.tareas).toEqual([otra])
       expect(tienda.error).toBeNull()
     })
 
-    it('vuelve a pendiente un paso hecho enviando el valor negado', async () => {
-      vi.mocked(clienteApi.obtener).mockResolvedValue([oportunidad])
-      vi.mocked(clienteApi.parchear).mockResolvedValue(oportunidad)
+    it('si la API falla guarda el mensaje, conserva la tarea y devuelve false', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo, otra])
+      vi.mocked(clienteApi.eliminar).mockRejectedValue(new Error('Tarea no encontrada'))
 
       const tienda = useTiendaTareas()
       await tienda.cargar()
-      await tienda.alternarPasoTarea(1, 11)
+      const resultado = await tienda.eliminarTarea(1)
 
-      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/pasos/11', { hecho: false })
-    })
-
-    it('si la API falla guarda el mensaje de error y no altera la lista', async () => {
-      vi.mocked(clienteApi.obtener).mockResolvedValue([oportunidad])
-      vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('Paso no encontrado'))
-
-      const tienda = useTiendaTareas()
-      await tienda.cargar()
-      await tienda.alternarPasoTarea(1, 10)
-
-      expect(tienda.error).toBe('Paso no encontrado')
-      expect(tienda.tareas).toEqual([oportunidad])
-    })
-
-    it('con una tarea o un paso que no están en la lista no llama a la API', async () => {
-      vi.mocked(clienteApi.obtener).mockResolvedValue([oportunidad])
-
-      const tienda = useTiendaTareas()
-      await tienda.cargar()
-      await tienda.alternarPasoTarea(99, 10)
-      await tienda.alternarPasoTarea(1, 99)
-
-      expect(clienteApi.parchear).not.toHaveBeenCalled()
-      expect(tienda.tareas).toEqual([oportunidad])
+      expect(resultado).toBe(false)
+      expect(tienda.error).toBe('Tarea no encontrada')
+      expect(tienda.tareas).toEqual([tareaEjemplo, otra])
     })
   })
+
+  describe('fijarComentariosSubtarea', () => {
+    it('cambia solo el número de comentarios de esa subtarea, sin llamar a la API', async () => {
+      const subtareas = [
+        { id: 20, nombre: 'A', asignado: null, prioridad: null, resuelta: false, comentarios: 0 },
+        { id: 21, nombre: 'B', asignado: null, prioridad: null, resuelta: false, comentarios: 1 },
+      ]
+      vi.mocked(clienteApi.obtener).mockResolvedValue([{ ...tareaEjemplo, subtareas }])
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      tienda.fijarComentariosSubtarea(1, 21, 4)
+      tienda.fijarComentariosSubtarea(99, 21, 7)
+
+      expect(tienda.tareas[0]!.subtareas.map((s) => s.comentarios)).toEqual([0, 4])
+      expect(clienteApi.parchear).not.toHaveBeenCalled()
+    })
+  })
+
   describe('subtareas', () => {
     const SUBTAREAS = [
-      { id: 20, nombre: 'Redactar índice', asignado: 'Ana', prioridad: 2, resuelta: false },
-      { id: 21, nombre: 'Revisar cifras', asignado: null, prioridad: null, resuelta: true },
+      {
+        id: 20,
+        nombre: 'Redactar índice',
+        asignado: 'Ana',
+        prioridad: 2,
+        resuelta: false,
+        comentarios: 0,
+      },
+      {
+        id: 21,
+        nombre: 'Revisar cifras',
+        asignado: null,
+        prioridad: null,
+        resuelta: true,
+        comentarios: 0,
+      },
     ]
     const conSubtareas = { ...tareaEjemplo, subtareas: SUBTAREAS }
     const otra = { ...tareaEjemplo, id: 2, nombre: 'Otra' }

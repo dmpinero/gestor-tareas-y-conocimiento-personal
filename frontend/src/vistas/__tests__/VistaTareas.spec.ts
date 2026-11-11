@@ -18,6 +18,7 @@ vi.mock('@/api/cliente', () => ({
     crear: vi.fn<(...args: unknown[]) => unknown>(),
     actualizar: vi.fn<(...args: unknown[]) => unknown>(),
     parchear: vi.fn<(...args: unknown[]) => unknown>(),
+    eliminar: vi.fn<(...args: unknown[]) => unknown>(),
   },
 }))
 
@@ -34,7 +35,6 @@ const TAREAS = [
     tipo: null,
     oportunidad: null,
     completada: false,
-    pasos_oportunidad: [],
     subtareas: [],
   },
   {
@@ -49,7 +49,6 @@ const TAREAS = [
     tipo: null,
     oportunidad: null,
     completada: false,
-    pasos_oportunidad: [],
     subtareas: [],
   },
 ]
@@ -79,13 +78,28 @@ const OPORTUNIDAD = {
 }
 // "Escribir informe" convertida en una oportunidad.
 const TAREA_OPORTUNIDAD = { ...TAREAS[0], tipo: 'oportunidad', oportunidad: OPORTUNIDAD }
-// Pasos del workflow copiados en una oportunidad: 1 de 3 hechos.
-const PASOS = [
-  { id: 10, numero: 1, nombre: 'Contactar', hecho: true },
-  { id: 11, numero: 2, nombre: 'Enviar propuesta', hecho: false },
-  { id: 12, numero: 3, nombre: 'Firmar contrato', hecho: false },
+// Subtareas de una oportunidad (los pasos del workflow se crean como
+// subtareas): 1 de 3 resueltas.
+const SUBTAREAS = [
+  { id: 10, nombre: 'Contactar', asignado: null, prioridad: null, resuelta: true, comentarios: 0 },
+  {
+    id: 11,
+    nombre: 'Enviar propuesta',
+    asignado: null,
+    prioridad: null,
+    resuelta: false,
+    comentarios: 0,
+  },
+  {
+    id: 12,
+    nombre: 'Firmar contrato',
+    asignado: null,
+    prioridad: null,
+    resuelta: false,
+    comentarios: 0,
+  },
 ]
-const OPORTUNIDAD_CON_PASOS = { ...TAREA_OPORTUNIDAD, pasos_oportunidad: PASOS }
+const OPORTUNIDAD_CON_SUBTAREAS = { ...TAREA_OPORTUNIDAD, subtareas: SUBTAREAS }
 
 // Fecha y hora "actuales" fijas para que el valor por defecto sea determinista.
 const AHORA = new Date(2026, 10, 9, 18, 45, 30)
@@ -289,13 +303,43 @@ describe('VistaTareas', () => {
     expect(envoltorio.find('table').exists()).toBe(false)
   })
 
-  it('el botón "Crear tarea" abre el panel lateral con el título "Crear tarea"', async () => {
+  it('el botón "Crear tarea" abre una ventana modal centrada, no el panel lateral, con el título "Crear tarea"', async () => {
     const envoltorio = await montar()
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
 
     const panel = await abrirPanel(envoltorio)
 
     expect(panel.querySelector('h2')?.textContent?.trim()).toBe('Crear tarea')
+    expect(panel.getAttribute('data-slot')).toBe('dialog-content')
+    expect(document.body.querySelector('[data-slot="sheet-content"]')).toBeNull()
+    expect(panel.className).toContain('w-[90vw]')
+    // El cuerpo del formulario desplaza; los botones quedan fijos al pie.
+    expect(campo(panel, '[data-testid="cuerpo-formulario-tarea"]').className).toContain(
+      'overflow-y-scroll',
+    )
+    expect([...panel.querySelectorAll('button')].map((boton) => boton.textContent?.trim())).toEqual(
+      expect.arrayContaining(['Guardar', 'Cancelar']),
+    )
+  })
+
+  it('"Cancelar" cierra la ventana de alta sin crear nada', async () => {
+    const panel = await abrirPanel(await montar())
+
+    ;[...panel.querySelectorAll('button')]
+      .find((b) => b.textContent?.trim() === 'Cancelar')!
+      .click()
+    await flushPromises()
+
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+    expect(clienteApi.crear).not.toHaveBeenCalled()
+  })
+
+  it('"Editar" sigue abriendo el panel lateral con el título "Editar tarea"', async () => {
+    const panel = await abrirPanelEdicion(await montar(), 'Escribir informe')
+
+    expect(panel.querySelector('h2')?.textContent?.trim()).toBe('Editar tarea')
+    expect(panel.getAttribute('data-slot')).toBe('sheet-content')
+    expect(document.body.querySelector('[data-slot="dialog-content"]')).toBeNull()
   })
 
   it('los campos del formulario tienen sus restricciones', async () => {
@@ -743,7 +787,6 @@ describe('VistaTareas', () => {
         ...SIN_EXTRAS,
         tipo: 'oportunidad',
         oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
-        pasos_oportunidad: [],
         subtareas: [],
       })
       const panel = await abrirPanel(envoltorio)
@@ -780,7 +823,6 @@ describe('VistaTareas', () => {
         ...SIN_EXTRAS,
         tipo: 'oportunidad',
         oportunidad: OPORTUNIDAD,
-        pasos_oportunidad: [],
         subtareas: [],
       })
       const panel = await abrirPanel(envoltorio)
@@ -863,8 +905,8 @@ describe('VistaTareas', () => {
       expect(envoltorio.find('table').text()).not.toContain('Contrato de soporte')
     })
 
-    it('junto al tipo muestra cuántos pasos de la oportunidad están hechos', async () => {
-      const envoltorio = await montar([OPORTUNIDAD_CON_PASOS, TAREA_OPORTUNIDAD, TAREAS[1]])
+    it('junto al tipo muestra cuántas subtareas de la oportunidad están resueltas', async () => {
+      const envoltorio = await montar([OPORTUNIDAD_CON_SUBTAREAS, TAREA_OPORTUNIDAD, TAREAS[1]])
 
       expect(filasTabla(envoltorio).map((fila) => fila[7])).toEqual([
         'Oportunidad · 1/3',
@@ -952,6 +994,7 @@ describe('VistaTareas', () => {
           'Editar tarea Escribir informe',
           'Ver detalle de la tarea Escribir informe',
           'Marcar como completada la tarea Escribir informe',
+          'Eliminar la tarea Escribir informe',
         ])
         const completar = botonCompletar(envoltorio, 'Escribir informe')
         expect(completar.attributes('aria-pressed')).toBe('false')
@@ -1045,7 +1088,7 @@ describe('VistaTareas', () => {
       })
     })
 
-    describe('pasos del workflow', () => {
+    describe('avance de las subtareas', () => {
       async function abrirDetalle(envoltorio: VueWrapper): Promise<HTMLElement> {
         await envoltorio
           .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
@@ -1054,54 +1097,188 @@ describe('VistaTareas', () => {
         return panelActual()
       }
 
-      function casillas(modal: HTMLElement): HTMLElement[] {
-        return [...modal.querySelectorAll<HTMLElement>('[role="checkbox"]')]
-      }
+      it('el detalle no muestra pasos del workflow sino las subtareas', async () => {
+        const envoltorio = await montar([OPORTUNIDAD_CON_SUBTAREAS])
+        const modal = await abrirDetalle(envoltorio)
 
-      it('al marcar un paso en el detalle lo guarda y actualiza la modal y el avance de la tabla', async () => {
+        expect(modal.textContent).not.toContain('Pasos del workflow')
+        expect(modal.querySelector('[role="checkbox"]')).toBeNull()
+        expect(
+          modal.querySelector('button[aria-label="Marcar como resuelta la subtarea Contactar"]'),
+        ).not.toBeNull()
+      })
+
+      it('al resolver una subtarea en el detalle se actualiza el avance de la tabla', async () => {
         vi.mocked(clienteApi.parchear).mockImplementation((ruta, cuerpo) => {
-          const idPaso = Number(String(ruta).split('/').pop())
-          const { hecho } = cuerpo as { hecho: boolean }
+          // Ruta: /tareas/{id}/subtareas/{id_subtarea}/resuelta
+          const idSubtarea = Number(String(ruta).split('/')[4])
+          const { resuelta } = cuerpo as { resuelta: boolean }
           return Promise.resolve({
-            ...structuredClone(OPORTUNIDAD_CON_PASOS),
-            pasos_oportunidad: PASOS.map((paso) =>
-              paso.id === idPaso ? { ...paso, hecho } : paso,
+            ...structuredClone(OPORTUNIDAD_CON_SUBTAREAS),
+            subtareas: SUBTAREAS.map((subtarea) =>
+              subtarea.id === idSubtarea ? { ...subtarea, resuelta } : subtarea,
             ),
           })
         })
-        const envoltorio = await montar([OPORTUNIDAD_CON_PASOS])
+        const envoltorio = await montar([OPORTUNIDAD_CON_SUBTAREAS])
         const modal = await abrirDetalle(envoltorio)
-        expect(casillas(modal).map((c) => c.getAttribute('aria-checked'))).toEqual([
-          'true',
-          'false',
-          'false',
-        ])
 
-        casillas(modal)[1]!.click()
+        modal
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="Marcar como resuelta la subtarea Enviar propuesta"]',
+          )!
+          .click()
         await flushPromises()
 
-        expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/pasos/11', { hecho: true })
-        expect(casillas(panelActual()).map((c) => c.getAttribute('aria-checked'))).toEqual([
-          'true',
-          'true',
-          'false',
-        ])
+        expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/subtareas/11/resuelta', {
+          resuelta: true,
+        })
         expect(filasTabla(envoltorio)[0]![7]).toBe('Oportunidad · 2/3')
       })
+    })
 
-      it('si la API falla muestra el error dentro de la modal y el paso no cambia', async () => {
-        vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('Paso no encontrado'))
-        const envoltorio = await montar([OPORTUNIDAD_CON_PASOS])
-        const modal = await abrirDetalle(envoltorio)
+    describe('eliminar tarea', () => {
+      function botonEliminar(envoltorio: VueWrapper, nombre: string) {
+        const boton = envoltorio.find(`button[aria-label="Eliminar la tarea ${nombre}"]`)
+        if (!boton.exists()) throw new Error(`No se encontró el botón de eliminar de "${nombre}"`)
+        return boton
+      }
 
-        casillas(modal)[1]!.click()
+      function confirmacion(): HTMLElement {
+        const dialogo = document.body.querySelector<HTMLElement>('[role="alertdialog"]')
+        if (!dialogo) throw new Error('No se abrió la confirmación')
+        return dialogo
+      }
+
+      function botonDe(contenedorBotones: HTMLElement, texto: string): HTMLButtonElement {
+        const boton = [...contenedorBotones.querySelectorAll('button')].find(
+          (b) => b.textContent?.trim() === texto,
+        )
+        if (!boton) throw new Error(`No se encontró el botón "${texto}"`)
+        return boton
+      }
+
+      it('cada fila tiene un botón con icono "Eliminar la tarea X"', async () => {
+        const envoltorio = await montar()
+
+        const eliminar = botonEliminar(envoltorio, 'Escribir informe')
+        expect(eliminar.attributes('title')).toBe('Eliminar')
+        expect(eliminar.text()).toBe('')
+        expect(eliminar.find('svg').exists()).toBe(true)
+        expect(botonEliminar(envoltorio, 'Leer artículo').exists()).toBe(true)
+      })
+
+      it('desde la lista pide confirmación y al confirmar la elimina y lleva el foco a la siguiente fila', async () => {
+        vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
+        const envoltorio = await montar()
+
+        await botonEliminar(envoltorio, 'Escribir informe').trigger('click')
         await flushPromises()
 
-        expect(panelActual().querySelector('[role="alert"]')?.textContent?.trim()).toBe(
-          'Paso no encontrado',
+        const dialogo = confirmacion()
+        expect(dialogo.querySelector('h2')?.textContent?.trim()).toBe(
+          '¿Eliminar la tarea Escribir informe?',
         )
-        expect(casillas(panelActual())[1]!.getAttribute('aria-checked')).toBe('false')
-        expect(filasTabla(envoltorio)[0]![7]).toBe('Oportunidad · 1/3')
+        expect(dialogo.textContent).toContain('También se eliminarán sus subtareas y comentarios.')
+        expect(clienteApi.eliminar).not.toHaveBeenCalled()
+        // El foco empieza en "Cancelar", la opción que no destruye nada.
+        expect(document.activeElement?.textContent?.trim()).toBe('Cancelar')
+        expect(botonDe(dialogo, 'Eliminar').className).toContain('bg-destructive')
+
+        botonDe(dialogo, 'Eliminar').click()
+        await flushPromises()
+
+        expect(clienteApi.eliminar).toHaveBeenCalledWith('/tareas/1')
+        expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+        expect(filasTabla(envoltorio).map((fila) => fila[0])).toEqual(['Leer artículo'])
+        expect(document.activeElement?.getAttribute('aria-label')).toBe(
+          'Eliminar la tarea Leer artículo',
+        )
+      })
+
+      it('al eliminar la última fila el foco pasa al título de la lista', async () => {
+        vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
+        const envoltorio = await montar([TAREAS[0]])
+
+        await botonEliminar(envoltorio, 'Escribir informe').trigger('click')
+        await flushPromises()
+        botonDe(confirmacion(), 'Eliminar').click()
+        await flushPromises()
+
+        expect(envoltorio.text()).toContain('Todavía no hay tareas.')
+        expect(document.activeElement?.tagName).toBe('H2')
+        expect(document.activeElement?.textContent?.trim()).toBe('Tareas')
+      })
+
+      it('"Cancelar" cierra la confirmación sin eliminar y devuelve el foco al botón', async () => {
+        const envoltorio = await montar()
+        const eliminar = botonEliminar(envoltorio, 'Escribir informe')
+        ;(eliminar.element as HTMLButtonElement).focus()
+
+        await eliminar.trigger('click')
+        await flushPromises()
+        botonDe(confirmacion(), 'Cancelar').click()
+        await flushPromises()
+
+        expect(clienteApi.eliminar).not.toHaveBeenCalled()
+        expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+        expect(filasTabla(envoltorio)).toHaveLength(2)
+        expect(document.activeElement).toBe(eliminar.element)
+      })
+
+      it('si la API falla muestra el error en la confirmación y conserva la tarea', async () => {
+        vi.mocked(clienteApi.eliminar).mockRejectedValue(new Error('Tarea no encontrada'))
+        const envoltorio = await montar()
+
+        await botonEliminar(envoltorio, 'Escribir informe').trigger('click')
+        await flushPromises()
+        botonDe(confirmacion(), 'Eliminar').click()
+        await flushPromises()
+
+        expect(confirmacion().querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+          'Tarea no encontrada',
+        )
+        expect(filasTabla(envoltorio)).toHaveLength(2)
+      })
+
+      it('desde el detalle pide confirmación; cancelar mantiene el detalle y confirmar lo cierra', async () => {
+        vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
+        const envoltorio = await montar()
+        await envoltorio
+          .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
+          .trigger('click')
+        await flushPromises()
+
+        const detalle = panelActual()
+        detalle
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="Eliminar la tarea Escribir informe"]',
+          )!
+          .click()
+        await flushPromises()
+        botonDe(confirmacion(), 'Cancelar').click()
+        await flushPromises()
+
+        expect(clienteApi.eliminar).not.toHaveBeenCalled()
+        expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
+
+        panelActual()
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="Eliminar la tarea Escribir informe"]',
+          )!
+          .click()
+        await flushPromises()
+        botonDe(confirmacion(), 'Eliminar').click()
+        await flushPromises()
+
+        expect(clienteApi.eliminar).toHaveBeenCalledWith('/tareas/1')
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+        expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+        expect(filasTabla(envoltorio).map((fila) => fila[0])).toEqual(['Leer artículo'])
+        expect(document.activeElement).not.toBe(document.body)
+        expect(document.activeElement?.getAttribute('aria-label')).toBe(
+          'Eliminar la tarea Leer artículo',
+        )
       })
     })
   })
@@ -1120,7 +1297,6 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
-        pasos_oportunidad: [],
         subtareas: [],
       },
       {
@@ -1135,7 +1311,6 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
-        pasos_oportunidad: [],
         subtareas: [],
       },
       {
@@ -1151,7 +1326,6 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
-        pasos_oportunidad: [],
         subtareas: [],
       },
     ]
@@ -1270,7 +1444,7 @@ describe('VistaTareas', () => {
       expect(thDe(envoltorio, 'Tipo').attributes('aria-sort')).toBe('descending')
     })
 
-    it('ordena por tipo usando solo su texto, sin tener en cuenta el avance de los pasos', async () => {
+    it('ordena por tipo usando solo su texto, sin tener en cuenta el avance de las subtareas', async () => {
       const envoltorio = await montar([
         // Con el avance, "Oportunidad · 1/3" iría detrás de "Oportunidad"; empatan y
         // se conserva el orden de llegada.
@@ -1278,7 +1452,7 @@ describe('VistaTareas', () => {
           ...TAREAS_ORDEN[0],
           tipo: 'oportunidad',
           oportunidad: OPORTUNIDAD,
-          pasos_oportunidad: PASOS,
+          subtareas: SUBTAREAS,
         },
         TAREAS_ORDEN[1],
         { ...TAREAS_ORDEN[2], tipo: 'oportunidad', oportunidad: OPORTUNIDAD },
@@ -1378,8 +1552,8 @@ describe('VistaTareas', () => {
       expect(JSON.stringify(filas)).not.toContain('OP-1')
     })
 
-    it('exporta solo el texto del tipo, sin el avance de los pasos', async () => {
-      const envoltorio = await montar([OPORTUNIDAD_CON_PASOS, TAREAS[1]])
+    it('exporta solo el texto del tipo, sin el avance de las subtareas', async () => {
+      const envoltorio = await montar([OPORTUNIDAD_CON_SUBTAREAS, TAREAS[1]])
 
       await botonExportar(envoltorio, 'Exportar a Excel').trigger('click')
 
@@ -1403,7 +1577,6 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
-        pasos_oportunidad: [],
         subtareas: [],
       },
       {
@@ -1418,7 +1591,6 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
-        pasos_oportunidad: [],
         subtareas: [],
       },
       {
@@ -1433,7 +1605,6 @@ describe('VistaTareas', () => {
         tipo: null,
         oportunidad: null,
         completada: false,
-        pasos_oportunidad: [],
         subtareas: [],
       },
     ]

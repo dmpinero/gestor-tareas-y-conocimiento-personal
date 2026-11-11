@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Circle, CircleCheck, Pencil, Plus, Trash } from '@lucide/vue'
+import { Circle, CircleCheck, MessageSquare, Pencil, Plus, Trash } from '@lucide/vue'
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
 
 import type { DatosEdicionSubtarea, DatosSubtarea, Subtarea, Tarea } from '@/api/tipos'
+import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
@@ -18,7 +19,8 @@ import {
 import { useTiendaTareas } from '@/stores/tareas'
 
 // Subtareas de una tarea: listado, alta en línea, edición en línea (con
-// confirmación), marcar como resuelta y eliminar (con confirmación). Lee y escribe a través del almacén de tareas; la tarea actualizada
+// confirmación), marcar como resuelta, eliminar (con confirmación) y un panel
+// de comentarios por subtarea. Lee y escribe a través del almacén de tareas; la tarea actualizada
 // llega de vuelta por `tarea` (el almacén la reemplaza con la respuesta). Los
 // fallos de la API quedan en `tienda.error`, que muestra el detalle.
 const props = defineProps<{ tarea: Tarea }>()
@@ -52,6 +54,7 @@ const enTarjetas = computed(() => ancho.value > 0 && ancho.value < ANCHO_MINIMO_
 const plantillaAlternar = createReusableTemplate<{ subtarea: Subtarea }>()
 const plantillaAcciones = createReusableTemplate<{ subtarea: Subtarea }>()
 const plantillaEdicion = createReusableTemplate<{ subtarea: Subtarea }>()
+const plantillaComentarios = createReusableTemplate<{ subtarea: Subtarea }>()
 
 function claseResuelta(subtarea: Subtarea): string {
   return subtarea.resuelta ? 'text-muted-foreground line-through' : ''
@@ -67,6 +70,25 @@ function textoOVacio(valor: string | number | null): string {
 
 async function alternar(subtarea: Subtarea): Promise<void> {
   await tienda.alternarSubtarea(props.tarea.id, subtarea.id)
+}
+
+// --- Comentarios de cada subtarea -----------------------------------------
+// Se despliegan bajo la subtarea (una fila a todo lo ancho en la tabla, una
+// sección dentro de la tarjeta), de una en una. El histórico se carga y guarda
+// en su propio componente; cuando cambia el número de comentarios, el almacén
+// ajusta el de la subtarea para que el botón lo refleje sin pedir la tarea.
+const idComentariosAbiertos = ref<number | null>(null)
+
+function idPanelComentarios(subtarea: Subtarea): string {
+  return `${idBase.value}-comentarios-${subtarea.id}`
+}
+
+function alternarComentarios(subtarea: Subtarea): void {
+  idComentariosAbiertos.value = idComentariosAbiertos.value === subtarea.id ? null : subtarea.id
+}
+
+function alActualizarComentarios(subtarea: Subtarea, total: number): void {
+  tienda.fijarComentariosSubtarea(props.tarea.id, subtarea.id, total)
 }
 
 // --- Eliminar, con confirmación en la propia fila -------------------------
@@ -94,6 +116,7 @@ async function cancelarEliminacion(subtarea: Subtarea): Promise<void> {
 async function confirmarEliminacion(subtarea: Subtarea): Promise<void> {
   const eliminada = await tienda.eliminarSubtarea(props.tarea.id, subtarea.id)
   idConfirmando.value = null
+  if (eliminada && idComentariosAbiertos.value === subtarea.id) idComentariosAbiertos.value = null
   await nextTick()
   // Si se borró, la fila ya no está: el foco pasa al botón de añadir (o al
   // primer campo si la fila de alta está abierta).
@@ -312,6 +335,20 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
       </div>
       <div v-else class="flex items-center justify-end gap-1">
         <Button
+          variant="ghost"
+          size="sm"
+          class="h-8 gap-1 px-2"
+          :aria-label="`Comentarios de la subtarea ${subtarea.nombre}`"
+          :aria-expanded="idComentariosAbiertos === subtarea.id ? 'true' : 'false'"
+          :aria-controls="idPanelComentarios(subtarea)"
+          @click="alternarComentarios(subtarea)"
+        >
+          <MessageSquare aria-hidden="true" />
+          <span v-if="subtarea.comentarios > 0" data-testid="numero-comentarios-subtarea">{{
+            subtarea.comentarios
+          }}</span>
+        </Button>
+        <Button
           :id="idBotonEditar(subtarea.id)"
           variant="ghost"
           size="icon"
@@ -336,6 +373,16 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
 
     <!-- Las columnas dependen del ancho del contenedor (@lg = 32rem), no de la
          ventana: en un hueco estrecho los campos se apilan a todo lo ancho. -->
+    <plantillaComentarios.define v-slot="{ subtarea }">
+      <div :id="idPanelComentarios(subtarea)" data-testid="comentarios-subtarea">
+        <ComentariosTarea
+          :ruta="`/tareas/${props.tarea.id}/subtareas/${subtarea.id}/comentarios`"
+          :contexto="`de la subtarea ${subtarea.nombre}`"
+          @actualizados="(total) => alActualizarComentarios(subtarea, total)"
+        />
+      </div>
+    </plantillaComentarios.define>
+
     <plantillaEdicion.define v-slot="{ subtarea }">
       <form
         class="grid gap-3 @lg:grid-cols-[1fr_12rem_7rem] @lg:items-end"
@@ -473,6 +520,9 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
             <plantillaAcciones.reuse :subtarea="subtarea" />
           </div>
         </template>
+        <div v-if="idComentariosAbiertos === subtarea.id" class="mt-3 border-t pt-3">
+          <plantillaComentarios.reuse :subtarea="subtarea" />
+        </div>
       </li>
     </ul>
     <Table v-else data-testid="tabla-subtareas">
@@ -485,32 +535,39 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow v-for="subtarea in props.tarea.subtareas" :key="subtarea.id">
-          <TableCell v-if="idEditando === subtarea.id" colspan="4" class="whitespace-normal">
-            <plantillaEdicion.reuse :subtarea="subtarea" />
-          </TableCell>
-          <template v-else>
-            <TableCell class="whitespace-normal">
-              <div class="flex items-center gap-2">
-                <plantillaAlternar.reuse :subtarea="subtarea" />
+        <template v-for="subtarea in props.tarea.subtareas" :key="subtarea.id">
+          <TableRow>
+            <TableCell v-if="idEditando === subtarea.id" colspan="4" class="whitespace-normal">
+              <plantillaEdicion.reuse :subtarea="subtarea" />
+            </TableCell>
+            <template v-else>
+              <TableCell class="whitespace-normal">
+                <div class="flex items-center gap-2">
+                  <plantillaAlternar.reuse :subtarea="subtarea" />
+                  <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
+                    subtarea.nombre
+                  }}</span>
+                </div>
+              </TableCell>
+              <TableCell class="whitespace-normal">
                 <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
-                  subtarea.nombre
+                  textoOVacio(subtarea.asignado)
                 }}</span>
-              </div>
+              </TableCell>
+              <TableCell>
+                <span :class="claseResuelta(subtarea)">{{ textoOVacio(subtarea.prioridad) }}</span>
+              </TableCell>
+              <TableCell class="text-right">
+                <plantillaAcciones.reuse :subtarea="subtarea" />
+              </TableCell>
+            </template>
+          </TableRow>
+          <TableRow v-if="idComentariosAbiertos === subtarea.id">
+            <TableCell colspan="4" class="bg-muted/30 whitespace-normal">
+              <plantillaComentarios.reuse :subtarea="subtarea" />
             </TableCell>
-            <TableCell class="whitespace-normal">
-              <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
-                textoOVacio(subtarea.asignado)
-              }}</span>
-            </TableCell>
-            <TableCell>
-              <span :class="claseResuelta(subtarea)">{{ textoOVacio(subtarea.prioridad) }}</span>
-            </TableCell>
-            <TableCell class="text-right">
-              <plantillaAcciones.reuse :subtarea="subtarea" />
-            </TableCell>
-          </template>
-        </TableRow>
+          </TableRow>
+        </template>
       </TableBody>
     </Table>
 

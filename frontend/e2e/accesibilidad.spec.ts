@@ -47,7 +47,7 @@ async function auditarPanelCrearTarea(page: Page) {
   return auditarPagina(page)
 }
 
-test('el panel "Crear tarea" no tiene violaciones de accesibilidad en modo claro (WCAG 2.1 AA)', async ({
+test('la ventana "Crear tarea" no tiene violaciones de accesibilidad en modo claro (WCAG 2.1 AA)', async ({
   page,
 }) => {
   await page.goto('/tareas')
@@ -55,7 +55,7 @@ test('el panel "Crear tarea" no tiene violaciones de accesibilidad en modo claro
   expect(resultado.violations).toEqual([])
 })
 
-test('el panel "Crear tarea" no tiene violaciones de accesibilidad en modo oscuro (WCAG 2.1 AA)', async ({
+test('la ventana "Crear tarea" no tiene violaciones de accesibilidad en modo oscuro (WCAG 2.1 AA)', async ({
   page,
 }) => {
   await page.goto('/tareas')

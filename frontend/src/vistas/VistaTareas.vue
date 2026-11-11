@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ChevronRight, Circle, CircleCheck, Eye, Pencil, Search } from '@lucide/vue'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { ChevronRight, Circle, CircleCheck, Eye, Pencil, Search, Trash } from '@lucide/vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
 import {
   TIPOS_TAREA,
@@ -11,6 +11,7 @@ import {
   type TipoTarea,
 } from '@/api/tipos'
 import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
+import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
 import { useTiendaTareas } from '@/stores/tareas'
 import { useBusquedaTabla } from '@/composables/useBusquedaTabla'
 import {
@@ -24,12 +25,19 @@ import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import DetalleTarea from '@/componentes/compartido/DetalleTarea.vue'
+import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vue'
 import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
-import SelectorEtiquetas from '@/componentes/compartido/SelectorEtiquetas.vue'
-import SelectorFechaHora from '@/componentes/compartido/SelectorFechaHora.vue'
+import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
 import type { CeldaExportada } from '@/lib/exportarTabla'
 import { Button } from '@/componentes/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/componentes/ui/collapsible'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/componentes/ui/dialog'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/componentes/ui/sheet'
@@ -41,32 +49,100 @@ import {
   TableHeader,
   TableRow,
 } from '@/componentes/ui/table'
-import { Textarea } from '@/componentes/ui/textarea'
 
 const tienda = useTiendaTareas()
-const panelAbierto = ref(false)
+// El alta se hace en una ventana modal y la edición en el panel lateral; las
+// dos comparten el formulario y su estado.
+const modalAltaAbierta = ref(false)
+const panelEdicionAbierto = ref(false)
 const errorFormulario = ref<string | null>(null)
 // `null` en modo crear; el id de la tarea en modo editar.
 const idEnEdicion = ref<number | null>(null)
 // Id de la tarea abierta en la modal de detalle, o `null` si está cerrada. Se
-// lee de la tienda para que la modal refleje los cambios (p. ej. un paso marcado).
+// lee de la tienda para que la modal refleje los cambios (p. ej. una subtarea resuelta).
 const idEnDetalle = ref<number | null>(null)
 const tareaEnDetalle = computed<Tarea | null>(
   () => tienda.tareas.find((tarea) => tarea.id === idEnDetalle.value) ?? null,
 )
 
-function alternarPasoEnDetalle(idPaso: number): void {
-  if (idEnDetalle.value !== null) void tienda.alternarPasoTarea(idEnDetalle.value, idPaso)
-}
-
-// Texto del tipo en la tabla; en una oportunidad con pasos, con su avance
+// Texto del tipo en la tabla; en una oportunidad con subtareas (sus pasos del
+// workflow se crean como subtareas), con su avance: resueltas / total
 // ("Oportunidad · 3/7"). Ordenar, filtrar y exportar usan solo el tipo.
 function textoTipoEnTabla(tarea: Tarea): string {
   const etiqueta = etiquetaTipoTarea(tarea.tipo)
   if (etiqueta === null) return '—'
-  if (tarea.tipo !== 'oportunidad' || tarea.pasos_oportunidad.length === 0) return etiqueta
-  const hechos = tarea.pasos_oportunidad.filter((paso) => paso.hecho).length
-  return `${etiqueta} · ${hechos}/${tarea.pasos_oportunidad.length}`
+  if (tarea.tipo !== 'oportunidad' || tarea.subtareas.length === 0) return etiqueta
+  const resueltas = tarea.subtareas.filter((subtarea) => subtarea.resuelta).length
+  return `${etiqueta} · ${resueltas}/${tarea.subtareas.length}`
+}
+
+// --- Eliminar tarea, con confirmación --------------------------------------
+// Se pide desde la papelera de la fila o desde el detalle. Al confirmar se
+// borra (con sus subtareas y comentarios) y se cierra el detalle si estaba
+// abierto. Como el botón que abrió la confirmación desaparece, el foco pasa a
+// la papelera de la fila siguiente (o la anterior) o, si no quedan filas, al
+// título de la lista; nunca al <body>.
+const ID_TITULO_LISTA = 'titulo-lista-tareas'
+const tareaAEliminar = ref<Tarea | null>(null)
+const eliminando = ref(false)
+const errorEliminar = ref<string | null>(null)
+let destinoFocoTrasEliminar: string | null = null
+
+function idBotonEliminar(id: number): string {
+  return `eliminar-tarea-${id}`
+}
+
+function pedirEliminar(tarea: Tarea): void {
+  errorEliminar.value = null
+  tareaAEliminar.value = tarea
+}
+
+function alCambiarConfirmacion(abierta: boolean): void {
+  if (!abierta && !eliminando.value) tareaAEliminar.value = null
+}
+
+function destinoFocoTras(id: number): string {
+  const filas = filasOrdenadas.value
+  const indice = filas.findIndex((tarea) => tarea.id === id)
+  const vecina = filas[indice + 1] ?? filas[indice - 1]
+  return vecina && indice !== -1 ? idBotonEliminar(vecina.id) : ID_TITULO_LISTA
+}
+
+async function confirmarEliminar(): Promise<void> {
+  const tarea = tareaAEliminar.value
+  if (tarea === null || eliminando.value) return
+  // Se calcula antes de borrar, con la fila aún en la lista.
+  const destino = destinoFocoTras(tarea.id)
+  eliminando.value = true
+  errorEliminar.value = null
+  try {
+    if (!(await tienda.eliminarTarea(tarea.id))) {
+      errorEliminar.value = tienda.error
+      return
+    }
+  } finally {
+    eliminando.value = false
+  }
+  destinoFocoTrasEliminar = destino
+  if (idEnDetalle.value === tarea.id) idEnDetalle.value = null
+  tareaAEliminar.value = null
+  // Por si la confirmación ya no devuelve el foco (p. ej. sin animación).
+  await nextTick()
+  enfocarTrasEliminar()
+}
+
+function enfocarTrasEliminar(): void {
+  if (destinoFocoTrasEliminar === null) return
+  document.getElementById(destinoFocoTrasEliminar)?.focus()
+}
+
+// Al cerrar la confirmación tras borrar, el foco no vuelve al botón que la
+// abrió (ya no existe) sino al destino calculado.
+function alDevolverFocoConfirmacion(evento: Event): void {
+  if (destinoFocoTrasEliminar === null) return
+  evento.preventDefault()
+  enfocarTrasEliminar()
+  destinoFocoTrasEliminar = null
 }
 
 const ERROR_FECHA_HORA = 'La fecha y hora debe tener el formato dd/mm/aaaa hh:mm:ss y ser válida.'
@@ -78,17 +154,7 @@ const ERROR_VENCIMIENTO_ANTERIOR =
 // La prioridad llega como número desde un `<input type="number">`, o como
 // cadena vacía cuando el campo se deja en blanco. El tipo vacío es "Sin tipo";
 // los campos de la oportunidad solo se envían si el tipo es "Oportunidad".
-const formulario = reactive<{
-  nombre: string
-  prioridad: string | number | null
-  descripcion: string
-  fechaCreacion: string
-  fechaVencimiento: string
-  etiquetas: string[]
-  asignados: string[]
-  tipo: TipoTarea | ''
-  oportunidad: { codigo: string; descripcion: string; observaciones: string }
-}>({
+const formulario = reactive<ValoresFormularioTarea>({
   nombre: '',
   prioridad: '',
   descripcion: '',
@@ -320,7 +386,12 @@ function limpiarFormulario(): void {
 function abrirParaCrear(): void {
   limpiarFormulario()
   formulario.fechaCreacion = formatearFechaHora(new Date())
-  panelAbierto.value = true
+  modalAltaAbierta.value = true
+}
+
+function cerrarFormulario(): void {
+  modalAltaAbierta.value = false
+  panelEdicionAbierto.value = false
 }
 
 function abrirParaEditar(tarea: Tarea): void {
@@ -344,7 +415,7 @@ function abrirParaEditar(tarea: Tarea): void {
       observaciones: tarea.oportunidad.observaciones ?? '',
     }
   }
-  panelAbierto.value = true
+  panelEdicionAbierto.value = true
 }
 
 function aPrioridad(valor: string | number | null): number | null {
@@ -406,7 +477,7 @@ async function guardar(): Promise<void> {
     } else {
       await tienda.actualizar(idEnEdicion.value, datos)
     }
-    panelAbierto.value = false
+    cerrarFormulario()
     limpiarFormulario()
   } catch (motivo) {
     errorFormulario.value = (motivo as Error).message
@@ -417,7 +488,7 @@ async function guardar(): Promise<void> {
 <template>
   <section>
     <div class="flex items-center justify-between">
-      <h2 class="text-xl font-semibold">Tareas</h2>
+      <h2 :id="ID_TITULO_LISTA" class="text-xl font-semibold" tabindex="-1">Tareas</h2>
       <Button variant="success" @click="abrirParaCrear">Crear tarea</Button>
     </div>
 
@@ -525,143 +596,37 @@ async function guardar(): Promise<void> {
       </Collapsible>
     </div>
 
-    <Sheet v-model:open="panelAbierto">
-      <!-- El panel no scrollea entero: la cabecera y el pie con los botones quedan
-           fijos y solo el cuerpo del formulario tiene scroll vertical (visible
-           siempre), para que en pantallas bajas se vea que hay más campos. -->
+    <!-- Alta en una ventana modal centrada, como el detalle; la edición sigue
+         en el panel lateral. Ambas usan el mismo formulario. -->
+    <Dialog v-model:open="modalAltaAbierta">
+      <DialogContent
+        sin-aspa
+        class="flex max-h-[90vh] w-[90vw] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+      >
+        <DialogHeader class="p-4">
+          <DialogTitle>Crear tarea</DialogTitle>
+          <DialogDescription class="sr-only">Datos de la nueva tarea.</DialogDescription>
+        </DialogHeader>
+        <FormularioTarea
+          v-model:valores="formulario"
+          :error="errorFormulario"
+          @guardar="guardar"
+          @cancelar="cerrarFormulario"
+        />
+      </DialogContent>
+    </Dialog>
+
+    <Sheet v-model:open="panelEdicionAbierto">
       <SheetContent class="gap-0 overflow-hidden">
         <SheetHeader>
-          <SheetTitle>{{ idEnEdicion === null ? 'Crear tarea' : 'Editar tarea' }}</SheetTitle>
+          <SheetTitle>Editar tarea</SheetTitle>
         </SheetHeader>
-
-        <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="guardar">
-          <div
-            data-testid="cuerpo-formulario-tarea"
-            class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-scroll px-4 pb-4"
-          >
-            <div class="flex flex-col gap-1.5">
-              <Label for="tarea-nombre">Nombre</Label>
-              <Input
-                id="tarea-nombre"
-                v-model="formulario.nombre"
-                placeholder="Nombre"
-                required
-                maxlength="200"
-              />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <Label for="tarea-prioridad">Prioridad</Label>
-              <Input
-                id="tarea-prioridad"
-                v-model="formulario.prioridad"
-                type="number"
-                min="1"
-                max="5"
-                placeholder="Prioridad"
-              />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <Label for="tarea-descripcion">Descripción</Label>
-              <Textarea
-                id="tarea-descripcion"
-                v-model="formulario.descripcion"
-                placeholder="Descripción"
-                required
-                maxlength="500"
-              />
-            </div>
-            <SelectorEtiquetas
-              id="etiquetas"
-              v-model="formulario.etiquetas"
-              etiqueta="Etiquetas"
-              :longitud-maxima="50"
-              texto-nuevo='Crear etiqueta "{valor}"'
-              :sugerencias="tienda.etiquetas"
-            />
-            <SelectorEtiquetas
-              id="asignados"
-              v-model="formulario.asignados"
-              etiqueta="Asignado a"
-              :longitud-maxima="100"
-              texto-nuevo='Añadir persona "{valor}"'
-              :sugerencias="tienda.personas"
-            />
-            <div class="flex flex-col gap-1.5">
-              <Label for="fecha-creacion">Fecha de creación</Label>
-              <SelectorFechaHora
-                id="fecha-creacion"
-                v-model="formulario.fechaCreacion"
-                etiqueta="Fecha de creación"
-                required
-              />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <Label for="fecha-vencimiento">Fecha de vencimiento</Label>
-              <SelectorFechaHora
-                id="fecha-vencimiento"
-                v-model="formulario.fechaVencimiento"
-                etiqueta="Fecha de vencimiento"
-                anulable
-              />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <Label for="tarea-tipo">Tipo de tarea</Label>
-              <select
-                id="tarea-tipo"
-                v-model="formulario.tipo"
-                class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
-              >
-                <option value="">Sin tipo</option>
-                <option v-for="tipo in TIPOS_TAREA" :key="tipo.valor" :value="tipo.valor">
-                  {{ tipo.etiqueta }}
-                </option>
-              </select>
-            </div>
-            <fieldset
-              v-if="formulario.tipo === 'oportunidad'"
-              class="flex flex-col gap-3 rounded-md border p-3"
-            >
-              <legend class="px-1 text-sm font-medium">Oportunidad</legend>
-              <div class="flex flex-col gap-1.5">
-                <Label for="oportunidad-codigo">Código de la oportunidad</Label>
-                <Input
-                  id="oportunidad-codigo"
-                  v-model="formulario.oportunidad.codigo"
-                  required
-                  maxlength="10"
-                />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <Label for="oportunidad-descripcion">Descripción de la oportunidad</Label>
-                <Input
-                  id="oportunidad-descripcion"
-                  v-model="formulario.oportunidad.descripcion"
-                  maxlength="200"
-                />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <Label for="oportunidad-observaciones">Observaciones</Label>
-                <Textarea
-                  id="oportunidad-observaciones"
-                  v-model="formulario.oportunidad.observaciones"
-                  maxlength="5000"
-                />
-              </div>
-            </fieldset>
-          </div>
-
-          <div class="bg-background flex flex-col gap-2 border-t px-4 py-3">
-            <p v-if="errorFormulario" class="text-sm text-destructive" role="alert">
-              {{ errorFormulario }}
-            </p>
-            <div class="flex gap-2">
-              <Button type="submit" variant="success">Guardar</Button>
-              <Button type="button" variant="destructive" @click="panelAbierto = false"
-                >Cancelar</Button
-              >
-            </div>
-          </div>
-        </form>
+        <FormularioTarea
+          v-model:valores="formulario"
+          :error="errorFormulario"
+          @guardar="guardar"
+          @cancelar="cerrarFormulario"
+        />
       </SheetContent>
     </Sheet>
 
@@ -772,6 +737,17 @@ async function guardar(): Promise<void> {
                 <CircleCheck v-if="tarea.completada" />
                 <Circle v-else />
               </Button>
+              <Button
+                :id="idBotonEliminar(tarea.id)"
+                variant="outline"
+                size="icon"
+                class="text-destructive"
+                :aria-label="`Eliminar la tarea ${tarea.nombre}`"
+                title="Eliminar"
+                @click="pedirEliminar(tarea)"
+              >
+                <Trash />
+              </Button>
             </div>
           </TableCell>
         </TableRow>
@@ -782,7 +758,19 @@ async function guardar(): Promise<void> {
       :tarea="tareaEnDetalle"
       :error="tienda.error"
       @cerrar="idEnDetalle = null"
-      @alternar-paso="alternarPasoEnDetalle"
+      @eliminar="tareaEnDetalle && pedirEliminar(tareaEnDetalle)"
+    />
+
+    <DialogoConfirmacion
+      :abierto="tareaAEliminar !== null"
+      :titulo="`¿Eliminar la tarea ${tareaAEliminar?.nombre ?? ''}?`"
+      descripcion="También se eliminarán sus subtareas y comentarios. No se puede deshacer."
+      texto-confirmar="Eliminar"
+      :procesando="eliminando"
+      :error="errorEliminar"
+      @update:abierto="alCambiarConfirmacion"
+      @confirmar="confirmarEliminar"
+      @cierre-foco="alDevolverFocoConfirmacion"
     />
   </section>
 </template>
