@@ -8,6 +8,7 @@ from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.dominio.excepciones import ConflictoDeConcurrenciaError
 from tests.unitarios.aplicacion.dobles import (
     RepositorioEtiquetasFalso,
+    RepositorioGruposEstadosFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
     RepositorioWorkflowOportunidadesFalso,
@@ -91,6 +92,7 @@ def test_crear_tarea_repite_el_alta_completa_si_choca_con_otra_peticion() -> Non
         RepositorioEtiquetasFalso(),
         RepositorioPersonasFalso(),
         RepositorioWorkflowOportunidadesFalso(),
+        RepositorioGruposEstadosFalso(),
     ).ejecutar(
         nombre="Uno",
         descripcion="d",

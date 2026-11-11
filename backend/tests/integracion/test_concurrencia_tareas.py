@@ -18,6 +18,9 @@ from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.dominio.excepciones import ConflictoDeConcurrenciaError
 from gestor_tareas.dominio.tarea.entidades import Tarea
 from gestor_tareas.infraestructura.persistencia.modelos import EtiquetaModelo, PersonaModelo
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
+    RepositorioGruposEstadosSqlAlchemy,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
 )
@@ -43,6 +46,7 @@ def _crear(etiquetas: list[str], asignados: list[str]) -> Tarea:
             RepositorioEtiquetasSqlAlchemy(sesion),
             RepositorioPersonasSqlAlchemy(sesion),
             RepositorioWorkflowOportunidadesSqlAlchemy(sesion),
+            RepositorioGruposEstadosSqlAlchemy(sesion),
         ).ejecutar(
             nombre="C",
             descripcion="d",
@@ -61,6 +65,7 @@ def _actualizar(id_tarea: int, etiquetas: list[str], asignados: list[str]) -> Ta
             RepositorioTareasSqlAlchemy(sesion),
             RepositorioEtiquetasSqlAlchemy(sesion),
             RepositorioPersonasSqlAlchemy(sesion),
+            RepositorioGruposEstadosSqlAlchemy(sesion),
         ).ejecutar(
             id_tarea,
             nombre="C",

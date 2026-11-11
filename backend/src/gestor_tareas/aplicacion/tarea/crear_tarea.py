@@ -1,8 +1,10 @@
 from datetime import datetime
 
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
+from gestor_tareas.aplicacion.tarea.asignar_grupo_estados import GrupoPedido
 from gestor_tareas.aplicacion.tarea.resolver_catalogos import resolver_nombres
 from gestor_tareas.dominio.etiqueta.repositorio import RepositorioEtiquetas
+from gestor_tareas.dominio.grupo_estados.repositorio import RepositorioGruposEstados
 from gestor_tareas.dominio.persona.repositorio import RepositorioPersonas
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Subtarea, Tarea, TipoTarea
 from gestor_tareas.dominio.tarea.repositorio import RepositorioTareas
@@ -25,11 +27,13 @@ class CrearTarea:
         repositorio_etiquetas: RepositorioEtiquetas,
         repositorio_personas: RepositorioPersonas,
         repositorio_workflow: RepositorioWorkflowOportunidades,
+        repositorio_grupos: RepositorioGruposEstados,
     ) -> None:
         self._repositorio = repositorio
         self._repositorio_etiquetas = repositorio_etiquetas
         self._repositorio_personas = repositorio_personas
         self._repositorio_workflow = repositorio_workflow
+        self._repositorio_grupos = repositorio_grupos
 
     def _subtareas_del_workflow(self, tipo: TipoTarea | None) -> list[Subtarea]:
         """Una subtarea por cada paso vigente del workflow si la tarea es una
@@ -56,8 +60,11 @@ class CrearTarea:
         asignados: list[str] | None = None,
         tipo: TipoTarea | None = None,
         oportunidad: Oportunidad | None = None,
+        grupo_estados_id: int | None = None,
     ) -> Tarea:
         def guardar() -> Tarea:
+            # Lo primero, para bloquear el grupo antes que nada (ver GrupoPedido).
+            grupo = GrupoPedido(self._repositorio_grupos, grupo_estados_id)
             tarea = Tarea(
                 nombre=nombre,
                 prioridad=prioridad,
@@ -70,8 +77,10 @@ class CrearTarea:
                 oportunidad=oportunidad,
                 subtareas=self._subtareas_del_workflow(tipo),
             )
+            grupo.asignar(tarea)
             return self._repositorio.crear(tarea)
 
-        # Dar de alta en los catálogos, copiar el workflow y guardar la tarea es una
-        # sola transacción: si choca con otra petición simultánea, se repite entera.
+        # Leer el grupo de estados, dar de alta en los catálogos, copiar el workflow y
+        # guardar la tarea es una sola transacción: si choca con otra petición
+        # simultánea, se repite entera.
         return reintentar_si_hay_conflicto(guardar)

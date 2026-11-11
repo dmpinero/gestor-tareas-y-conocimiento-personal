@@ -14,6 +14,7 @@ from gestor_tareas.dominio.tarea.entidades import Oportunidad, Subtarea, Tarea, 
 from tests.unitarios.aplicacion.dobles import (
     RepositorioComentariosFalso,
     RepositorioEtiquetasFalso,
+    RepositorioGruposEstadosFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
 )
@@ -114,7 +115,9 @@ def test_editar_la_tarea_conserva_sus_subtareas() -> None:
     AnadirSubtarea(tareas, personas).ejecutar(id_tarea, "Embalar")
     MarcarSubtareaResuelta(tareas).ejecutar(id_tarea, 1, True)
 
-    tarea = ActualizarTarea(tareas, RepositorioEtiquetasFalso(), personas).ejecutar(
+    tarea = ActualizarTarea(
+        tareas, RepositorioEtiquetasFalso(), personas, RepositorioGruposEstadosFalso()
+    ).ejecutar(
         id_tarea,
         nombre="Mudanza",
         descripcion="d",

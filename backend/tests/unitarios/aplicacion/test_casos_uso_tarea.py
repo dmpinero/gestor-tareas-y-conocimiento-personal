@@ -12,6 +12,7 @@ from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Subtarea, Tarea, TipoTarea
 from tests.unitarios.aplicacion.dobles import (
     RepositorioEtiquetasFalso,
+    RepositorioGruposEstadosFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
     RepositorioWorkflowOportunidadesFalso,
@@ -27,17 +28,19 @@ class _Repositorios:
         etiquetas: tuple[str, ...] = (),
         personas: tuple[str, ...] = (),
         workflow: tuple[str, ...] = (),
+        grupos: dict[str, list[str]] | None = None,
     ) -> None:
         self.tareas = RepositorioTareasFalso()
         self.etiquetas = RepositorioEtiquetasFalso(*etiquetas)
         self.personas = RepositorioPersonasFalso(*personas)
         self.workflow = RepositorioWorkflowOportunidadesFalso(*workflow)
+        self.grupos = RepositorioGruposEstadosFalso(**(grupos or {}))
 
     def crear(self) -> CrearTarea:
-        return CrearTarea(self.tareas, self.etiquetas, self.personas, self.workflow)
+        return CrearTarea(self.tareas, self.etiquetas, self.personas, self.workflow, self.grupos)
 
     def actualizar(self) -> ActualizarTarea:
-        return ActualizarTarea(self.tareas, self.etiquetas, self.personas)
+        return ActualizarTarea(self.tareas, self.etiquetas, self.personas, self.grupos)
 
     def marcar_completada(self) -> MarcarCompletada:
         return MarcarCompletada(self.tareas)

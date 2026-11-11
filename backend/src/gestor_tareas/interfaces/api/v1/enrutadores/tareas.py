@@ -1,10 +1,13 @@
+from collections.abc import Callable
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, Response, status
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
 
 from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
 from gestor_tareas.aplicacion.tarea.anadir_subtarea import AnadirSubtarea
+from gestor_tareas.aplicacion.tarea.cambiar_estado import CambiarEstadoTarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.editar_subtarea import EditarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_subtarea import EliminarSubtarea
@@ -12,7 +15,11 @@ from gestor_tareas.aplicacion.tarea.eliminar_tarea import EliminarTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
 from gestor_tareas.aplicacion.tarea.marcar_subtarea_resuelta import MarcarSubtareaResuelta
+from gestor_tareas.dominio.excepciones import AsignacionDeEstadoInvalidaError
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
+    RepositorioGruposEstadosSqlAlchemy,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
 )
@@ -28,6 +35,7 @@ from gestor_tareas.interfaces.api.respuestas_error import (
     RESPUESTA_CUERPO_MALFORMADO,
     RESPUESTA_NO_ENCONTRADO,
 )
+from gestor_tareas.interfaces.api.v1.esquemas.grupo_estados import TareaEstadoEsquema
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     SubtareaCrearEsquema,
     SubtareaEditarEsquema,
@@ -51,6 +59,18 @@ def _argumentos(datos: TareaCrearEsquema) -> dict:
     if datos.oportunidad is not None:
         argumentos["oportunidad"] = Oportunidad(**datos.oportunidad.model_dump())
     return argumentos
+
+
+def _validando_estado(campo: str, valor: object, operacion: Callable[[], Tarea]) -> Tarea:
+    """Ejecuta la operación y publica un grupo o un estado que la tarea no admite como
+    un error de validación del campo del cuerpo (422), con el mismo formato que el
+    resto, que es el que publica el contrato."""
+    try:
+        return operacion()
+    except AsignacionDeEstadoInvalidaError as error:
+        raise RequestValidationError(
+            [{"type": "value_error", "loc": ("body", campo), "msg": str(error), "input": valor}]
+        ) from error
 
 
 @enrutador.get("", response_model=list[TareaSalidaEsquema])
@@ -81,13 +101,22 @@ def crear(
     workflow de las oportunidades, en su orden, pendiente y sin persona ni
     prioridad; son subtareas como cualquier otra, y cambiar el workflow después no
     las altera.
+
+    Con `grupo_estados_id`, la tarea queda en el primer estado del grupo; 422 si el
+    grupo no existe o no tiene estados. Sin él, no tiene grupo ni estado.
     """
-    tarea = CrearTarea(
+    caso_de_uso = CrearTarea(
         RepositorioTareasSqlAlchemy(sesion),
         RepositorioEtiquetasSqlAlchemy(sesion),
         RepositorioPersonasSqlAlchemy(sesion),
         RepositorioWorkflowOportunidadesSqlAlchemy(sesion),
-    ).ejecutar(**_argumentos(datos))
+        RepositorioGruposEstadosSqlAlchemy(sesion),
+    )
+    tarea = _validando_estado(
+        "grupo_estados_id",
+        datos.grupo_estados_id,
+        lambda: caso_de_uso.ejecutar(**_argumentos(datos)),
+    )
     return _a_esquema(tarea)
 
 
@@ -105,12 +134,22 @@ def actualizar(
     vencimiento es anterior a la de creación o el tipo no casa con sus datos.
     El estado completada no cambia (solo lo cambia `PATCH .../completada`), ni las
     subtareas, tampoco al cambiar el tipo: una tarea que pasa a ser oportunidad no
-    recibe las del workflow (solo se crean al dar de alta la oportunidad)."""
-    tarea = ActualizarTarea(
+    recibe las del workflow (solo se crean al dar de alta la oportunidad).
+
+    `grupo_estados_id` también se sustituye: con el mismo grupo que ya tenía, la tarea
+    conserva su estado; con otro, queda en su primer estado, y si falta o es null,
+    queda sin grupo ni estado. 422 si el grupo no existe o no tiene estados."""
+    caso_de_uso = ActualizarTarea(
         RepositorioTareasSqlAlchemy(sesion),
         RepositorioEtiquetasSqlAlchemy(sesion),
         RepositorioPersonasSqlAlchemy(sesion),
-    ).ejecutar(id_tarea, **_argumentos(datos))
+        RepositorioGruposEstadosSqlAlchemy(sesion),
+    )
+    tarea = _validando_estado(
+        "grupo_estados_id",
+        datos.grupo_estados_id,
+        lambda: caso_de_uso.ejecutar(id_tarea, **_argumentos(datos)),
+    )
     return _a_esquema(tarea)
 
 
@@ -127,6 +166,27 @@ def marcar_completada(
     si `completada` no es un booleano de JSON."""
     tarea = MarcarCompletada(RepositorioTareasSqlAlchemy(sesion)).ejecutar(
         id_tarea, datos.completada
+    )
+    return _a_esquema(tarea)
+
+
+@enrutador.patch(
+    "/{id_tarea:int}/estado",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def cambiar_estado(
+    id_tarea: int, datos: TareaEstadoEsquema, sesion: Session = Depends(obtener_sesion)
+) -> TareaSalidaEsquema:
+    """Mueve la tarea al estado `estado_id` de su grupo de estados (cualquiera, sin
+    seguir un orden) y la devuelve con el resto de sus datos sin cambios. 404 si la
+    tarea no existe; 422 si no tiene grupo, si el estado no es de su grupo o si
+    `estado_id` no es un entero."""
+    caso_de_uso = CambiarEstadoTarea(
+        RepositorioTareasSqlAlchemy(sesion), RepositorioGruposEstadosSqlAlchemy(sesion)
+    )
+    tarea = _validando_estado(
+        "estado_id", datos.estado_id, lambda: caso_de_uso.ejecutar(id_tarea, datos.estado_id)
     )
     return _a_esquema(tarea)
 

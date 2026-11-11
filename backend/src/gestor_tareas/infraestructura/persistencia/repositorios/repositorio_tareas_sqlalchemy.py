@@ -5,6 +5,8 @@ from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.nombres_catalogo import ordenar_nombres
 from gestor_tareas.dominio.tarea.entidades import (
     Oportunidad,
+    ReferenciaEstado,
+    ReferenciaGrupoEstados,
     Subtarea,
     Tarea,
     TipoTarea,
@@ -44,6 +46,16 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         oportunidad=_a_oportunidad(modelo.oportunidad),
         completada=modelo.completada,
         subtareas=[_a_subtarea(s) for s in sorted(modelo.subtareas, key=lambda s: s.id)],
+        grupo_estados=(
+            ReferenciaGrupoEstados(id=modelo.grupo_estados.id, nombre=modelo.grupo_estados.nombre)
+            if modelo.grupo_estados is not None
+            else None
+        ),
+        estado=(
+            ReferenciaEstado(id=modelo.estado.id, nombre=modelo.estado.nombre)
+            if modelo.estado is not None
+            else None
+        ),
     )
 
 
@@ -92,6 +104,8 @@ class RepositorioTareasSqlAlchemy:
         modelo.asignados = self._filas_catalogo(PersonaModelo, tarea.asignados)
         modelo.tipo = tarea.tipo.value if tarea.tipo is not None else None
         self._asignar_oportunidad(modelo, tarea.oportunidad)
+        modelo.grupo_estados_id = tarea.grupo_estados.id if tarea.grupo_estados else None
+        modelo.estado_id = tarea.estado.id if tarea.estado else None
 
     @staticmethod
     def _asignar_oportunidad(modelo: TareaModelo, oportunidad: Oportunidad | None) -> None:
@@ -156,6 +170,12 @@ class RepositorioTareasSqlAlchemy:
         )
         return self._sesion.scalars(consulta).one_or_none()
 
+    def obtener_para_modificar(self, id_tarea: int) -> Tarea | None:
+        # Sin confirmar: el bloqueo dura hasta que se guarden los cambios.
+        with traducir_conflictos(self._sesion):
+            modelo = self._tarea_bloqueada(id_tarea)
+            return _a_entidad(modelo) if modelo is not None else None
+
     def actualizar(self, tarea: Tarea) -> Tarea:
         with traducir_conflictos(self._sesion):
             modelo = self._tarea_bloqueada(tarea.id)
@@ -175,6 +195,21 @@ class RepositorioTareasSqlAlchemy:
             modelo.completada = completada
             self._sesion.commit()
         return _a_entidad(modelo)
+
+    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado) -> Tarea:
+        with traducir_conflictos(self._sesion):
+            modelo = self._tarea_bloqueada(id_tarea)
+            if modelo is None:
+                self._sesion.rollback()
+                raise EntidadNoEncontradaError(f"No existe la tarea con id {id_tarea}")
+            modelo.estado_id = estado.id
+            self._sesion.flush()
+            # Antes de confirmar: después, otra petición podría haberla borrado. La
+            # relación con el estado aún no se ha recargado: se usa el nuevo.
+            tarea = _a_entidad(modelo)
+            tarea.estado = ReferenciaEstado(id=estado.id, nombre=estado.nombre)
+            self._sesion.commit()
+        return tarea
 
     def eliminar(self, id_tarea: int) -> bool:
         with traducir_conflictos(self._sesion):

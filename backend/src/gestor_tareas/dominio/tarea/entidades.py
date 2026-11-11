@@ -29,6 +29,22 @@ class Oportunidad:
 
 
 @dataclass
+class ReferenciaGrupoEstados:
+    """Grupo de estados asignado a una tarea: la tarea apunta al grupo."""
+
+    id: int
+    nombre: str
+
+
+@dataclass
+class ReferenciaEstado:
+    """Estado de su grupo en el que está una tarea."""
+
+    id: int
+    nombre: str
+
+
+@dataclass
 class Subtarea:
     """Parte de una tarea, que solo existe dentro de ella.
 
@@ -67,6 +83,10 @@ class Tarea:
     como oportunidad recibe al darla de alta una subtarea por cada paso del workflow
     de las oportunidades, en su orden. Después solo cambian con sus propias
     operaciones: editar la tarea o cambiar su tipo no las altera.
+
+    ``grupo_estados`` es el grupo de estados de la tarea (opcional) y ``estado`` el
+    estado del grupo en el que está: los dos son ``None`` o el estado es de ese
+    grupo.
     """
 
     nombre: str
@@ -80,4 +100,6 @@ class Tarea:
     oportunidad: Oportunidad | None = None
     completada: bool = False
     subtareas: list[Subtarea] = field(default_factory=list)
+    grupo_estados: ReferenciaGrupoEstados | None = None
+    estado: ReferenciaEstado | None = None
     id: int | None = None
