@@ -29,22 +29,6 @@ class Oportunidad:
 
 
 @dataclass
-class PasoOportunidad:
-    """Paso de una tarea de tipo ``TipoTarea.OPORTUNIDAD``, con su avance.
-
-    Es una copia del paso del workflow de las oportunidades vigente al crear la
-    tarea (mismo ``numero`` y ``nombre``), sin relación con él: cambiar el workflow
-    después no altera las tareas ya creadas. ``hecho`` indica si el paso está
-    hecho; al copiarlo está pendiente.
-    """
-
-    numero: int
-    nombre: str
-    hecho: bool = False
-    id: int | None = None
-
-
-@dataclass
 class Subtarea:
     """Parte de una tarea, que solo existe dentro de ella.
 
@@ -52,12 +36,16 @@ class Subtarea:
     una persona del catálogo (como mucho una) y ``prioridad`` va de 1 a 5; ambos
     son opcionales. ``resuelta`` indica si está hecha; una subtarea nueva está
     pendiente.
+
+    ``comentarios`` es el número de comentarios de la subtarea; solo se lee (lo
+    calcula el repositorio y se ignora al guardarla).
     """
 
     nombre: str
     asignado: str | None = None
     prioridad: int | None = None
     resuelta: bool = False
+    comentarios: int = 0
     id: int | None = None
 
 
@@ -75,12 +63,10 @@ class Tarea:
 
     ``completada`` indica si la tarea está hecha; una tarea nueva está pendiente.
 
-    ``pasos_oportunidad`` son los pasos de una oportunidad, ordenados por número.
-    Solo los tiene una tarea creada como oportunidad (se copian del workflow al
-    darla de alta), y los pierde si deja de serlo.
-
-    ``subtareas`` son las subtareas de la tarea por orden de alta. Solo cambian con
-    sus propias operaciones: editar la tarea o cambiar su tipo no las altera.
+    ``subtareas`` son las subtareas de la tarea por orden de alta. Una tarea creada
+    como oportunidad recibe al darla de alta una subtarea por cada paso del workflow
+    de las oportunidades, en su orden. Después solo cambian con sus propias
+    operaciones: editar la tarea o cambiar su tipo no las altera.
     """
 
     nombre: str
@@ -93,6 +79,5 @@ class Tarea:
     tipo: TipoTarea | None = None
     oportunidad: Oportunidad | None = None
     completada: bool = False
-    pasos_oportunidad: list[PasoOportunidad] = field(default_factory=list)
     subtareas: list[Subtarea] = field(default_factory=list)
     id: int | None = None

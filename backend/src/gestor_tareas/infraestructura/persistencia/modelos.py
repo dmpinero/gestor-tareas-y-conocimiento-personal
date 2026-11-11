@@ -17,10 +17,11 @@ from sqlalchemy import (
     String,
     Table,
     Text,
-    UniqueConstraint,
     false,
+    func,
+    select,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
 from gestor_tareas.dominio.tarea.entidades import TipoTarea
 from gestor_tareas.infraestructura.persistencia.sesion import Base
@@ -87,25 +88,23 @@ class OportunidadModelo(Base):
     observaciones: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class PasoOportunidadModelo(Base):
-    """Paso de una tarea de tipo oportunidad, copiado del workflow al crearla.
+class ComentarioSubtareaModelo(Base):
+    """Comentario del histórico de una subtarea; borrar la subtarea (o su tarea)
+    borra sus comentarios.
 
-    Es una copia: no tiene clave ajena a ``pasos_workflow_oportunidades``, así que
-    cambiar o borrar los pasos del workflow no altera los de las tareas.
+    ``editado`` es el instante de su última edición, o NULL si nunca se editó.
     """
 
-    __tablename__ = "pasos_tarea"
-    __table_args__ = (UniqueConstraint("tarea_id", "numero", name="uq_pasos_tarea_numero"),)
+    __tablename__ = "comentarios_subtarea"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    tarea_id: Mapped[int] = mapped_column(
-        ForeignKey("tareas.id", ondelete="CASCADE"), nullable=False
+    subtarea_id: Mapped[int] = mapped_column(
+        ForeignKey("subtareas.id", ondelete="CASCADE"), nullable=False
     )
-    numero: Mapped[int] = mapped_column(Integer, nullable=False)
-    nombre: Mapped[str] = mapped_column(String(50), nullable=False)
-    hecho: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=false()
-    )
+    texto: Mapped[str] = mapped_column(String(500), nullable=False)
+    # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
+    creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
 
 class SubtareaModelo(Base):
@@ -130,6 +129,15 @@ class SubtareaModelo(Base):
         Boolean, nullable=False, default=False, server_default=false()
     )
     asignado: Mapped[PersonaModelo | None] = relationship(lazy="selectin")
+    # Número de comentarios, calculado en la misma consulta que carga la subtarea
+    # (subconsulta correlacionada): no es una columna de la tabla. Los comentarios
+    # no se cargan con la subtarea.
+    numero_comentarios: Mapped[int] = column_property(
+        select(func.count(ComentarioSubtareaModelo.id))
+        .where(ComentarioSubtareaModelo.subtarea_id == id)
+        .correlate_except(ComentarioSubtareaModelo)
+        .scalar_subquery()
+    )
 
 
 class ComentarioModelo(Base):
@@ -188,15 +196,8 @@ class TareaModelo(Base):
     completada: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
-    # Pasos de la oportunidad, por número. Vaciar la lista borra sus filas
-    # ("delete-orphan"); al borrar la tarea las borra el ON DELETE CASCADE.
-    pasos_oportunidad: Mapped[list[PasoOportunidadModelo]] = relationship(
-        lazy="selectin",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-        order_by=PasoOportunidadModelo.numero,
-    )
-    # Subtareas por orden de alta. Al borrar la tarea las borra el ON DELETE CASCADE.
+    # Subtareas por orden de alta. Al borrar la tarea las borra el ON DELETE CASCADE,
+    # y con ellas sus comentarios.
     subtareas: Mapped[list[SubtareaModelo]] = relationship(
         lazy="selectin",
         cascade="all, delete-orphan",
@@ -220,9 +221,9 @@ class PasoWorkflowOportunidadModelo(Base):
 __all__ = [
     "Base",
     "ComentarioModelo",
+    "ComentarioSubtareaModelo",
     "EtiquetaModelo",
     "OportunidadModelo",
-    "PasoOportunidadModelo",
     "PasoWorkflowOportunidadModelo",
     "PersonaModelo",
     "SubtareaModelo",

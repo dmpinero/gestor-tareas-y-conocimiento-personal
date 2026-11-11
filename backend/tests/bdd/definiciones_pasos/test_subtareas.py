@@ -48,7 +48,9 @@ def _esperadas(texto: str) -> list[tuple[str, str | None, int | None, bool]]:
 
 def _subtareas(tarea: dict) -> list[tuple[str, str | None, int | None, bool]]:
     subtareas = tarea["subtareas"]
-    assert all(set(s) == {"id", "nombre", "asignado", "prioridad", "resuelta"} for s in subtareas)
+    claves = {"id", "nombre", "asignado", "prioridad", "resuelta", "comentarios"}
+    assert all(set(s) == claves for s in subtareas)
+    assert all(s["comentarios"] == 0 for s in subtareas)
     ids = [s["id"] for s in subtareas]
     assert ids == sorted(set(ids))  # Ids únicos y por orden de alta.
     return [(s["nombre"], s["asignado"], s["prioridad"], s["resuelta"]) for s in subtareas]

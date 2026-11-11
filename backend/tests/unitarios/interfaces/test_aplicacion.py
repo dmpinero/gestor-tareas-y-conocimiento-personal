@@ -17,10 +17,11 @@ def test_la_api_expone_salud_tareas_subtareas_comentarios_catalogos_y_workflow_b
         "/api/v1/tareas",
         "/api/v1/tareas/{id_tarea}",
         "/api/v1/tareas/{id_tarea}/completada",
-        "/api/v1/tareas/{id_tarea}/pasos/{id_paso}",
         "/api/v1/tareas/{id_tarea}/subtareas",
         "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}",
         "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}/resuelta",
+        "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}/comentarios",
+        "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}/comentarios/{id_comentario}",
         "/api/v1/tareas/{id_tarea}/comentarios",
         "/api/v1/tareas/{id_tarea}/comentarios/{id_comentario}",
         "/api/v1/etiquetas",
@@ -29,6 +30,39 @@ def test_la_api_expone_salud_tareas_subtareas_comentarios_catalogos_y_workflow_b
         "/api/v1/workflow-oportunidades/pasos/{id_paso}",
         "/api/v1/workflow-oportunidades/pasos/orden",
     }
+
+
+def test_la_api_publica_los_metodos_de_cada_ruta_nueva_o_cambiada() -> None:
+    rutas = cliente.get("/openapi.json").json()["paths"]
+    subtarea = "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}"
+
+    assert set(rutas["/api/v1/tareas/{id_tarea}"]) == {"put", "delete"}
+    assert set(rutas[f"{subtarea}/comentarios"]) == {"get", "post"}
+    assert set(rutas[f"{subtarea}/comentarios/{{id_comentario}}"]) == {"put", "delete"}
+
+
+def test_los_comentarios_de_las_subtareas_reutilizan_los_esquemas_de_los_de_la_tarea() -> None:
+    esquema = cliente.get("/openapi.json").json()
+    rutas = esquema["paths"]
+    de_tarea = rutas["/api/v1/tareas/{id_tarea}/comentarios"]
+    de_subtarea = rutas["/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}/comentarios"]
+
+    def esquema_de_exito(operacion: dict, codigo: str) -> dict:
+        esquema = operacion["responses"][codigo]["content"]["application/json"]["schema"]
+        return esquema.get("items", esquema)
+
+    for metodo, exito in (("get", "200"), ("post", "201")):
+        assert de_subtarea[metodo]["responses"].keys() == de_tarea[metodo]["responses"].keys()
+        assert esquema_de_exito(de_subtarea[metodo], exito) == {
+            "$ref": "#/components/schemas/ComentarioSalidaEsquema"
+        }
+        assert esquema_de_exito(de_tarea[metodo], exito) == esquema_de_exito(
+            de_subtarea[metodo], exito
+        )
+    assert de_subtarea["post"]["requestBody"] == de_tarea["post"]["requestBody"]
+    componentes = esquema["components"]["schemas"]
+    assert "PasoOportunidadSalidaEsquema" not in componentes
+    assert "PasoHechoEsquema" not in componentes
 
 
 def test_ninguna_ruta_exige_autenticacion() -> None:

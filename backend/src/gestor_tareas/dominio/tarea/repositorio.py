@@ -12,8 +12,8 @@ class RepositorioTareas(Protocol):
 
     def crear(self, tarea: Tarea) -> Tarea:
         """Guarda una tarea nueva, con el estado ``tarea.completada`` y sus
-        ``tarea.pasos_oportunidad`` (a los que asigna id). Una tarea nueva no
-        tiene subtareas: se ignora ``tarea.subtareas``."""
+        ``tarea.subtareas`` en ese orden (a las que asigna id; su ``asignado`` debe
+        existir ya en el catálogo de personas, y se ignora ``comentarios``)."""
         ...
 
     def listar(self) -> list[Tarea]:
@@ -22,6 +22,13 @@ class RepositorioTareas(Protocol):
 
     def obtener_por_id(self, id_tarea: int) -> Tarea | None:
         """Devuelve la tarea con ese id, o ``None`` si no existe."""
+        ...
+
+    def eliminar(self, id_tarea: int) -> bool:
+        """Borra la tarea con sus datos de tipo, sus enlaces con los catálogos, sus
+        subtareas, sus comentarios y los de sus subtareas, todo en una transacción.
+        Las etiquetas y personas del catálogo se conservan. Devuelve ``False`` si la
+        tarea no existe."""
         ...
 
     def actualizar(self, tarea: Tarea) -> Tarea:
@@ -34,11 +41,8 @@ class RepositorioTareas(Protocol):
         El estado completada no cambia (se ignora ``tarea.completada``): solo lo
         cambia ``cambiar_completada``.
 
-        Los pasos de la oportunidad tampoco cambian (se ignora
-        ``tarea.pasos_oportunidad``), salvo que la tarea deje de ser oportunidad
-        (``tarea.tipo`` distinto de ``TipoTarea.OPORTUNIDAD``): entonces se borran.
-
-        Las subtareas no cambian nunca (se ignora ``tarea.subtareas``).
+        Las subtareas no cambian nunca (se ignora ``tarea.subtareas``), tampoco al
+        cambiar el tipo de la tarea.
         """
         ...
 
@@ -46,15 +50,6 @@ class RepositorioTareas(Protocol):
         """Guarda el estado completada de la tarea y la devuelve, o ``None`` si no existe.
 
         El resto de datos de la tarea no cambia.
-        """
-        ...
-
-    def cambiar_hecho_paso(self, id_tarea: int, id_paso: int, hecho: bool) -> Tarea | None:
-        """Marca el paso de la oportunidad como hecho o pendiente y devuelve la tarea.
-
-        Devuelve ``None`` si la tarea no tiene un paso con ese id (porque la tarea
-        no existe, el paso no existe o es de otra tarea). El resto de datos de la
-        tarea no cambia.
         """
         ...
 

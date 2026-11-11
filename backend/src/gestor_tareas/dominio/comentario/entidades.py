@@ -19,3 +19,16 @@ class Comentario:
     creado: datetime
     editado: datetime | None = None
     id: int | None = None
+
+
+@dataclass
+class ComentarioSubtarea:
+    """Comentario del histórico de una subtarea, con las mismas reglas que
+    ``Comentario``. Se borra con la subtarea (y con la tarea de la subtarea)."""
+
+    id_tarea: int
+    id_subtarea: int
+    texto: str
+    creado: datetime
+    editado: datetime | None = None
+    id: int | None = None

@@ -71,7 +71,15 @@ def test_la_salida_de_la_tarea_incluye_las_subtareas() -> None:
     contrato = TareaSalidaEsquema.model_json_schema()
     assert "subtareas" in contrato["required"]
     subtarea = contrato["$defs"]["SubtareaSalidaEsquema"]
-    assert set(subtarea["required"]) == {"id", "nombre", "asignado", "prioridad", "resuelta"}
+    assert set(subtarea["required"]) == {
+        "id",
+        "nombre",
+        "asignado",
+        "prioridad",
+        "resuelta",
+        "comentarios",
+    }
+    assert subtarea["properties"]["comentarios"]["type"] == "integer"
 
 
 def test_el_comentario_recorta_los_extremos_y_conserva_los_saltos_de_linea() -> None:

@@ -4,7 +4,7 @@ from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.resolver_catalogos import resolver_nombres
 from gestor_tareas.dominio.etiqueta.repositorio import RepositorioEtiquetas
 from gestor_tareas.dominio.persona.repositorio import RepositorioPersonas
-from gestor_tareas.dominio.tarea.entidades import Oportunidad, PasoOportunidad, Tarea, TipoTarea
+from gestor_tareas.dominio.tarea.entidades import Oportunidad, Subtarea, Tarea, TipoTarea
 from gestor_tareas.dominio.tarea.repositorio import RepositorioTareas
 from gestor_tareas.dominio.workflow_oportunidades.repositorio import (
     RepositorioWorkflowOportunidades,
@@ -14,8 +14,9 @@ from gestor_tareas.dominio.workflow_oportunidades.repositorio import (
 class CrearTarea:
     """Da de alta una tarea pendiente.
 
-    Una tarea creada como oportunidad recibe una copia de los pasos vigentes del
-    workflow de las oportunidades, en su orden y pendientes.
+    Una tarea creada como oportunidad recibe una subtarea por cada paso vigente del
+    workflow de las oportunidades, en su orden, pendiente y sin persona ni
+    prioridad.
     """
 
     def __init__(
@@ -30,15 +31,17 @@ class CrearTarea:
         self._repositorio_personas = repositorio_personas
         self._repositorio_workflow = repositorio_workflow
 
-    def _copiar_workflow(self, tipo: TipoTarea | None) -> list[PasoOportunidad]:
-        """Copia los pasos vigentes del workflow si la tarea es una oportunidad.
+    def _subtareas_del_workflow(self, tipo: TipoTarea | None) -> list[Subtarea]:
+        """Una subtarea por cada paso vigente del workflow si la tarea es una
+        oportunidad.
 
-        La copia es fija: no guarda ninguna relación con los pasos del workflow.
+        Es una copia fija: las subtareas no guardan ninguna relación con los pasos
+        del workflow, así que cambiarlo después no las altera.
         """
         if tipo is not TipoTarea.OPORTUNIDAD:
             return []
         return [
-            PasoOportunidad(numero=paso.numero, nombre=paso.nombre)
+            Subtarea(nombre=paso.nombre)
             for paso in self._repositorio_workflow.leer_pasos_para_copiar()
         ]
 
@@ -65,7 +68,7 @@ class CrearTarea:
                 asignados=resolver_nombres(self._repositorio_personas, asignados or []),
                 tipo=tipo,
                 oportunidad=oportunidad,
-                pasos_oportunidad=self._copiar_workflow(tipo),
+                subtareas=self._subtareas_del_workflow(tipo),
             )
             return self._repositorio.crear(tarea)
 
