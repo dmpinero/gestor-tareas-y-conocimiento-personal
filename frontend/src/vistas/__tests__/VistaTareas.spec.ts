@@ -1709,8 +1709,44 @@ describe('VistaTareas', () => {
       await flushPromises()
 
       expect(disparador(envoltorio, 'Expandir filtros').exists()).toBe(true)
-      expect(envoltorio.find('#filtro-buscar').exists()).toBe(false)
+      // El buscador y "Limpiar filtros" quedan en la barra, visibles aunque se pliegue.
+      expect(envoltorio.find('#filtro-buscar').exists()).toBe(true)
+      expect(envoltorio.findAll('button').some((b) => b.text() === 'Limpiar filtros')).toBe(true)
+      expect(envoltorio.find('#filtro-creacion-desde').exists()).toBe(false)
       expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+    })
+
+    it('el botón "Filtros" indica cuántos filtros hay activos', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+      const contador = () => envoltorio.find('[data-testid="filtros-activos"]')
+
+      expect(contador().exists()).toBe(false)
+      await escribir(entrada(envoltorio, 'filtro-buscar'), 'café')
+      expect(contador().text()).toBe('1 activo')
+      await escribir(entrada(envoltorio, 'filtro-creacion-desde'), '2026-03-11')
+      await alternar(envoltorio, 'Filtrar por prioridad', 'Sin prioridad')
+      expect(contador().text()).toBe('3 activos')
+
+      const boton = envoltorio.findAll('button').find((b) => b.text() === 'Limpiar filtros')!
+      await boton.trigger('click')
+      await flushPromises()
+      expect(contador().exists()).toBe(false)
+    })
+
+    it('agrupa las fechas por tipo con "Desde" y "Hasta" visibles', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      const grupos = envoltorio.findAll('fieldset').map((f) => f.get('legend').text())
+      expect(grupos).toEqual(expect.arrayContaining(['Fecha de creación', 'Fecha de vencimiento']))
+      const creacion = envoltorio
+        .findAll('fieldset')
+        .find((f) => f.get('legend').text() === 'Fecha de creación')!
+      expect(creacion.find('#filtro-creacion-desde').exists()).toBe(true)
+      expect(creacion.find('#filtro-creacion-hasta').exists()).toBe(true)
+      // Texto visible corto; el nombre accesible completo lleva el grupo.
+      expect(creacion.get('label[for="filtro-creacion-desde"] .sr-only').text().trim()).toBe(
+        'Fecha de creación',
+      )
     })
 
     it('todos los controles del panel tienen nombre accesible', async () => {
