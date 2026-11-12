@@ -166,3 +166,16 @@ for (const { modo, preparar } of MODOS) {
     expect(resultado.violations).toEqual([])
   })
 }
+
+// Regresión: el contador de filtros activos estaba dentro del botón "Contraer
+// filtros" y su texto no formaba parte del nombre (WCAG 2.5.3).
+test('el panel de filtros con filtros activos no tiene violaciones de accesibilidad (WCAG 2.1 AA)', async ({
+  page,
+}) => {
+  await page.goto('/tareas')
+  await page.getByLabel('Buscar').fill('zzz')
+  await page.getByRole('radio', { name: 'Completadas', exact: true }).check()
+  await expect(page.getByTestId('filtros-activos')).toHaveText('2 activos')
+  const resultado = await auditarPagina(page)
+  expect(resultado.violations).toEqual([])
+})

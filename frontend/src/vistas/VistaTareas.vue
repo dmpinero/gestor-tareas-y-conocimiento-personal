@@ -343,10 +343,17 @@ const OPCIONES_ESTADO: { valor: EstadoFiltro; etiqueta: string }[] = [
 ]
 const estadoFiltro = ref<EstadoFiltro>('todas')
 // Fechas de los `<input type="date">` (`YYYY-MM-DD`), o '' sin límite.
-const creacionDesde = ref('')
-const creacionHasta = ref('')
-const vencimientoDesde = ref('')
-const vencimientoHasta = ref('')
+// Rangos de fechas del panel, agrupados por campo: cada grupo muestra "Desde" y
+// "Hasta" bajo su título (el nombre accesible completo lleva el título).
+const RANGOS_FECHA = [
+  { id: 'creacion', titulo: 'Fecha de creación' },
+  { id: 'vencimiento', titulo: 'Fecha de vencimiento' },
+] as const
+const EXTREMOS_RANGO = ['desde', 'hasta'] as const
+const fechasFiltro = reactive({
+  creacion: { desde: '', hasta: '' },
+  vencimiento: { desde: '', hasta: '' },
+})
 
 // Un nombre que aparece en el catálogo (p. ej. creado al guardar una tarea)
 // queda marcado; los que ya existían conservan lo que el usuario marcó.
@@ -382,13 +389,14 @@ const tareasConFiltros = computed(() =>
     if (!tiposFiltro.value.includes(tarea.tipo ?? SIN_TIPO)) return false
     if (estadoFiltro.value === 'completadas' && !tarea.completada) return false
     if (estadoFiltro.value === 'pendientes' && tarea.completada) return false
-    if (!dentroDeRango(tarea.fecha_creacion, creacionDesde.value, creacionHasta.value)) {
+    const { creacion, vencimiento } = fechasFiltro
+    if (!dentroDeRango(tarea.fecha_creacion, creacion.desde, creacion.hasta)) {
       return false
     }
     // Con un rango de vencimiento activo, las tareas sin vencimiento no pasan.
-    if (vencimientoDesde.value || vencimientoHasta.value) {
+    if (vencimiento.desde || vencimiento.hasta) {
       if (tarea.fecha_vencimiento === null) return false
-      if (!dentroDeRango(tarea.fecha_vencimiento, vencimientoDesde.value, vencimientoHasta.value)) {
+      if (!dentroDeRango(tarea.fecha_vencimiento, vencimiento.desde, vencimiento.hasta)) {
         return false
       }
     }
@@ -408,11 +416,26 @@ function limpiarFiltros(): void {
   asignadosFiltro.value = itemsAsignadosFiltro.value.map((item) => item.id)
   tiposFiltro.value = ITEMS_TIPO.map((item) => item.id)
   estadoFiltro.value = 'todas'
-  creacionDesde.value = ''
-  creacionHasta.value = ''
-  vencimientoDesde.value = ''
-  vencimientoHasta.value = ''
+  fechasFiltro.creacion = { desde: '', hasta: '' }
+  fechasFiltro.vencimiento = { desde: '', hasta: '' }
 }
+
+// Filtros que restringen algo: el buscador, cada lista sin todas sus opciones
+// marcadas, el estado distinto de "Todas" y cada rango de fechas con algún extremo.
+const numeroFiltrosActivos = computed(
+  () =>
+    [
+      busqueda.value.trim() !== '',
+      prioridadesFiltro.value.length !== ITEMS_PRIORIDAD.length,
+      etiquetasFiltro.value.length !== itemsEtiquetasFiltro.value.length,
+      asignadosFiltro.value.length !== itemsAsignadosFiltro.value.length,
+      tiposFiltro.value.length !== ITEMS_TIPO.length,
+      estadoFiltro.value !== 'todas',
+      ...RANGOS_FECHA.map(
+        ({ id }) => fechasFiltro[id].desde !== '' || fechasFiltro[id].hasta !== '',
+      ),
+    ].filter(Boolean).length,
+)
 
 const filtrosAbiertos = ref(true)
 
@@ -674,20 +697,29 @@ async function guardar(): Promise<void> {
       </div>
     </div>
 
-    <div class="bg-muted/40 mt-4 flex flex-col gap-4 rounded-lg border p-4">
+    <div class="bg-muted/40 mt-4 rounded-lg border p-4">
       <Collapsible v-model:open="filtrosAbiertos">
-        <CollapsibleTrigger
-          class="text-muted-foreground flex items-center gap-1 text-sm font-medium"
-          :aria-label="filtrosAbiertos ? 'Contraer filtros' : 'Expandir filtros'"
-        >
-          <ChevronRight
-            class="size-4 transition-transform"
-            :class="filtrosAbiertos ? 'rotate-90' : ''"
-          />
-          Filtros
-        </CollapsibleTrigger>
-        <CollapsibleContent class="mt-4 flex flex-wrap items-end gap-4">
-          <div class="flex max-w-xs flex-col gap-1.5">
+        <!-- Barra siempre visible: plegar, buscar y limpiar. -->
+        <div class="flex flex-wrap items-end gap-3">
+          <CollapsibleTrigger
+            class="text-muted-foreground hover:text-foreground flex h-9 items-center gap-1 text-sm font-medium"
+            :aria-label="filtrosAbiertos ? 'Contraer filtros' : 'Expandir filtros'"
+          >
+            <ChevronRight
+              class="size-4 transition-transform"
+              :class="filtrosAbiertos ? 'rotate-90' : ''"
+            />
+            Filtros
+          </CollapsibleTrigger>
+          <!-- Fuera del botón: dentro, su texto no formaría parte del nombre
+               "Contraer filtros" (WCAG 2.5.3). -->
+          <span
+            v-if="numeroFiltrosActivos > 0"
+            data-testid="filtros-activos"
+            class="bg-primary text-primary-foreground mb-2 rounded-full px-2 py-0.5 text-xs"
+            >{{ numeroFiltrosActivos === 1 ? '1 activo' : `${numeroFiltrosActivos} activos` }}</span
+          >
+          <div class="flex min-w-48 flex-1 flex-col gap-1.5 sm:max-w-md">
             <Label for="filtro-buscar">Buscar</Label>
             <div class="relative">
               <Search
@@ -701,108 +733,119 @@ async function guardar(): Promise<void> {
               />
             </div>
           </div>
+          <Button type="button" variant="secondary" class="ml-auto" @click="limpiarFiltros"
+            >Limpiar filtros</Button
+          >
+        </div>
 
-          <div class="flex flex-col gap-1.5">
-            <Label>Prioridad</Label>
-            <FiltroMultiple
-              v-model="prioridadesFiltro"
-              :items="ITEMS_PRIORIDAD"
-              id-base="filtro-prioridad"
-              etiqueta-boton="Filtrar por prioridad"
-              nombre-singular="prioridad"
-              nombre-plural="prioridades"
-            />
+        <CollapsibleContent class="mt-4 flex flex-col gap-4">
+          <!-- Listas desplegables, todas del mismo ancho. -->
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="flex min-w-0 flex-col gap-1.5">
+              <Label>Prioridad</Label>
+              <FiltroMultiple
+                v-model="prioridadesFiltro"
+                :items="ITEMS_PRIORIDAD"
+                id-base="filtro-prioridad"
+                etiqueta-boton="Filtrar por prioridad"
+                nombre-singular="prioridad"
+                nombre-plural="prioridades"
+              />
+            </div>
+            <div class="flex min-w-0 flex-col gap-1.5">
+              <Label>Etiquetas</Label>
+              <FiltroMultiple
+                v-model="etiquetasFiltro"
+                :items="itemsEtiquetasFiltro"
+                id-base="filtro-etiquetas"
+                etiqueta-boton="Filtrar por etiquetas"
+                nombre-singular="etiqueta"
+                nombre-plural="etiquetas"
+              />
+            </div>
+            <div class="flex min-w-0 flex-col gap-1.5">
+              <Label>Asignado a</Label>
+              <FiltroMultiple
+                v-model="asignadosFiltro"
+                :items="itemsAsignadosFiltro"
+                id-base="filtro-asignados"
+                etiqueta-boton="Filtrar por asignado a"
+                nombre-singular="persona"
+                nombre-plural="personas"
+              />
+            </div>
+            <div class="flex min-w-0 flex-col gap-1.5">
+              <Label>Tipo</Label>
+              <FiltroMultiple
+                v-model="tiposFiltro"
+                :items="ITEMS_TIPO"
+                id-base="filtro-tipo"
+                etiqueta-boton="Filtrar por tipo"
+                nombre-singular="tipo"
+                nombre-plural="tipos"
+                genero="masculino"
+              />
+            </div>
           </div>
 
-          <div class="flex flex-col gap-1.5">
-            <Label>Etiquetas</Label>
-            <FiltroMultiple
-              v-model="etiquetasFiltro"
-              :items="itemsEtiquetasFiltro"
-              id-base="filtro-etiquetas"
-              etiqueta-boton="Filtrar por etiquetas"
-              nombre-singular="etiqueta"
-              nombre-plural="etiquetas"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <Label>Asignado a</Label>
-            <FiltroMultiple
-              v-model="asignadosFiltro"
-              :items="itemsAsignadosFiltro"
-              id-base="filtro-asignados"
-              etiqueta-boton="Filtrar por asignado a"
-              nombre-singular="persona"
-              nombre-plural="personas"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <Label>Tipo</Label>
-            <FiltroMultiple
-              v-model="tiposFiltro"
-              :items="ITEMS_TIPO"
-              id-base="filtro-tipo"
-              etiqueta-boton="Filtrar por tipo"
-              nombre-singular="tipo"
-              nombre-plural="tipos"
-              genero="masculino"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <span id="filtro-estado-titulo" class="text-sm leading-none font-medium select-none"
-              >Estado</span
-            >
-            <div
-              role="radiogroup"
-              aria-labelledby="filtro-estado-titulo"
-              class="flex flex-wrap items-center gap-4"
-            >
-              <div
-                v-for="opcion in OPCIONES_ESTADO"
-                :key="opcion.valor"
-                class="flex items-center gap-2"
+          <!-- Estado y rangos de fechas. -->
+          <div class="grid gap-4 lg:grid-cols-3">
+            <div class="flex min-w-0 flex-col gap-1.5">
+              <span id="filtro-estado-titulo" class="text-sm leading-none font-medium select-none"
+                >Estado</span
               >
-                <input
-                  :id="`filtro-estado-${opcion.valor}`"
-                  v-model="estadoFiltro"
-                  type="radio"
-                  name="filtro-estado"
-                  :value="opcion.valor"
-                  class="accent-primary size-4"
-                />
-                <Label :for="`filtro-estado-${opcion.valor}`" class="font-normal">{{
-                  opcion.etiqueta
-                }}</Label>
+              <!-- Control segmentado con radios nativos: el radio, transparente, cubre
+                   cada opción para que el clic y el teclado sigan siendo los del radio. -->
+              <div
+                role="radiogroup"
+                aria-labelledby="filtro-estado-titulo"
+                class="bg-muted inline-flex w-full rounded-md border p-0.5"
+              >
+                <div v-for="opcion in OPCIONES_ESTADO" :key="opcion.valor" class="relative flex-1">
+                  <input
+                    :id="`filtro-estado-${opcion.valor}`"
+                    v-model="estadoFiltro"
+                    type="radio"
+                    name="filtro-estado"
+                    :value="opcion.valor"
+                    class="peer absolute inset-0 z-10 cursor-pointer opacity-0"
+                  />
+                  <Label
+                    :for="`filtro-estado-${opcion.valor}`"
+                    class="text-muted-foreground peer-checked:bg-background peer-checked:text-foreground peer-focus-visible:ring-ring/50 flex h-8 items-center justify-center rounded-sm px-2 text-center font-normal whitespace-nowrap peer-checked:shadow-sm peer-focus-visible:ring-[3px]"
+                    >{{ opcion.etiqueta }}</Label
+                  >
+                </div>
               </div>
             </div>
+            <fieldset
+              v-for="rango in RANGOS_FECHA"
+              :key="rango.id"
+              class="flex min-w-0 flex-col gap-1.5"
+            >
+              <legend class="mb-1.5 text-sm leading-none font-medium">{{ rango.titulo }}</legend>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <div
+                  v-for="extremo in EXTREMOS_RANGO"
+                  :key="extremo"
+                  class="flex min-w-0 flex-col gap-1"
+                >
+                  <Label
+                    :for="`filtro-${rango.id}-${extremo}`"
+                    class="text-muted-foreground text-xs font-normal"
+                    ><span class="sr-only">{{ `${rango.titulo} ` }}</span
+                    ><span class="capitalize">{{ extremo }}</span></Label
+                  >
+                  <Input
+                    :id="`filtro-${rango.id}-${extremo}`"
+                    v-model="fechasFiltro[rango.id][extremo]"
+                    type="date"
+                    class="min-w-0"
+                  />
+                </div>
+              </div>
+            </fieldset>
           </div>
-
-          <div class="flex flex-wrap items-end gap-4">
-            <div class="flex flex-col gap-1.5">
-              <Label for="filtro-creacion-desde">Fecha de creación desde</Label>
-              <Input id="filtro-creacion-desde" v-model="creacionDesde" type="date" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <Label for="filtro-creacion-hasta">Fecha de creación hasta</Label>
-              <Input id="filtro-creacion-hasta" v-model="creacionHasta" type="date" />
-            </div>
-          </div>
-
-          <div class="flex flex-wrap items-end gap-4">
-            <div class="flex flex-col gap-1.5">
-              <Label for="filtro-vencimiento-desde">Fecha de vencimiento desde</Label>
-              <Input id="filtro-vencimiento-desde" v-model="vencimientoDesde" type="date" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <Label for="filtro-vencimiento-hasta">Fecha de vencimiento hasta</Label>
-              <Input id="filtro-vencimiento-hasta" v-model="vencimientoHasta" type="date" />
-            </div>
-          </div>
-
-          <Button type="button" variant="secondary" @click="limpiarFiltros">Limpiar filtros</Button>
         </CollapsibleContent>
       </Collapsible>
     </div>

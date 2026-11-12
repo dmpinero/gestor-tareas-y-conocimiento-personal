@@ -63,7 +63,7 @@ function alternarTodos(marcado: boolean): void {
       <Button
         variant="outline"
         type="button"
-        class="justify-between font-normal"
+        class="w-full justify-between font-normal"
         :aria-label="`${etiquetaBoton}: ${textoDisparador}`"
       >
         {{ textoDisparador }}
