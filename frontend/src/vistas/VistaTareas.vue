@@ -710,15 +710,15 @@ async function guardar(): Promise<void> {
               :class="filtrosAbiertos ? 'rotate-90' : ''"
             />
             Filtros
-            <span
-              v-if="numeroFiltrosActivos > 0"
-              data-testid="filtros-activos"
-              class="bg-primary text-primary-foreground ml-1 rounded-full px-2 py-0.5 text-xs"
-              >{{
-                numeroFiltrosActivos === 1 ? '1 activo' : `${numeroFiltrosActivos} activos`
-              }}</span
-            >
           </CollapsibleTrigger>
+          <!-- Fuera del botón: dentro, su texto no formaría parte del nombre
+               "Contraer filtros" (WCAG 2.5.3). -->
+          <span
+            v-if="numeroFiltrosActivos > 0"
+            data-testid="filtros-activos"
+            class="bg-primary text-primary-foreground mb-2 rounded-full px-2 py-0.5 text-xs"
+            >{{ numeroFiltrosActivos === 1 ? '1 activo' : `${numeroFiltrosActivos} activos` }}</span
+          >
           <div class="flex min-w-48 flex-1 flex-col gap-1.5 sm:max-w-md">
             <Label for="filtro-buscar">Buscar</Label>
             <div class="relative">
