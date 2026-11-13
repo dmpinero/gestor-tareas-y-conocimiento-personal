@@ -3155,7 +3155,7 @@ describe('VistaTareas', () => {
         }
 
         async function desplegarSubtareas(): Promise<HTMLButtonElement> {
-          const boton = botonEn(columna('Pendiente'), 'Subtareas de Escribir informe')
+          const boton = botonEn(columna('Pendiente'), '3 subtareas de Escribir informe')
           boton.click()
           await flushPromises()
           return boton
@@ -3213,11 +3213,12 @@ describe('VistaTareas', () => {
         it('el botón de subtareas muestra cuántas tiene la tarea', async () => {
           await montarTablero([CON_SUBTAREAS, ARTICULO])
 
-          const boton = botonEn(tarjeta('Pendiente'), 'Subtareas de Escribir informe')
+          // El número visible forma parte del nombre accesible (WCAG 2.5.3).
+          const boton = botonEn(tarjeta('Pendiente'), '3 subtareas de Escribir informe')
           expect(boton.textContent?.trim()).toBe('3')
           expect(boton.getAttribute('aria-expanded')).toBe('false')
           expect(
-            botonEn(tarjeta('En curso'), 'Subtareas de Leer artículo').textContent?.trim(),
+            botonEn(tarjeta('En curso'), '0 subtareas de Leer artículo').textContent?.trim(),
           ).toBe('0')
         })
 

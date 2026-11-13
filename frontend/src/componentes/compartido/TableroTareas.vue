@@ -387,8 +387,8 @@ function terminarArrastre(): void {
                         variant="ghost"
                         size="sm"
                         class="text-muted-foreground gap-1 px-2"
-                        :aria-label="`Subtareas de ${tarea.nombre}`"
-                        :title="`Subtareas de ${tarea.nombre}`"
+                        :aria-label="`${tarea.subtareas.length} subtareas de ${tarea.nombre}`"
+                        :title="`${tarea.subtareas.length} subtareas de ${tarea.nombre}`"
                         :aria-expanded="idsDesplegadas.has(tarea.id)"
                         :aria-controls="
                           idsDesplegadas.has(tarea.id) ? idPanelSubtareas(tarea) : undefined
