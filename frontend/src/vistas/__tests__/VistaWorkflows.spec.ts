@@ -26,9 +26,9 @@ const OPORTUNIDADES: Workflow = {
   id: 1,
   nombre: 'Workflow Oportunidades',
   pasos: [
-    { id: 10, numero: 1, nombre: 'Contacto inicial' },
-    { id: 11, numero: 2, nombre: 'Propuesta' },
-    { id: 12, numero: 3, nombre: 'Cierre' },
+    { id: 10, numero: 1, nombre: 'Contacto inicial', comentarios: 0 },
+    { id: 11, numero: 2, nombre: 'Propuesta', comentarios: 0 },
+    { id: 12, numero: 3, nombre: 'Cierre', comentarios: 0 },
   ],
 }
 const ALTAS: Workflow = { id: 2, nombre: 'Altas', pasos: [] }
@@ -280,7 +280,10 @@ describe('VistaWorkflows', () => {
   describe('pasos', () => {
     it('añade un paso al workflow con POST y vacía el campo', async () => {
       const vista = await montar()
-      const conPaso: Workflow = { ...ALTAS, pasos: [{ id: 20, numero: 1, nombre: 'Alta' }] }
+      const conPaso: Workflow = {
+        ...ALTAS,
+        pasos: [{ id: 20, numero: 1, nombre: 'Alta', comentarios: 0 }],
+      }
       vi.mocked(clienteApi.crear).mockResolvedValue(conPaso)
 
       const campo = vista.get('input[aria-label="Nuevo paso de Altas"]')
@@ -370,8 +373,8 @@ describe('VistaWorkflows', () => {
       vi.mocked(clienteApi.eliminar).mockResolvedValue({
         ...OPORTUNIDADES,
         pasos: [
-          { id: 10, numero: 1, nombre: 'Contacto inicial' },
-          { id: 12, numero: 2, nombre: 'Cierre' },
+          { id: 10, numero: 1, nombre: 'Contacto inicial', comentarios: 0 },
+          { id: 12, numero: 2, nombre: 'Cierre', comentarios: 0 },
         ],
       })
 
@@ -507,6 +510,190 @@ describe('VistaWorkflows', () => {
       ])
       expect(vista.get('[role="alert"]').text()).toBe('Orden inválido')
       expect(vista.get('[aria-live="polite"]').text()).toBe('')
+    })
+  })
+
+  describe('comentarios de los pasos', () => {
+    const RUTA_COMENTARIOS = `${RUTA}/1/pasos/11/comentarios`
+    const COMENTARIO = {
+      id: 5,
+      texto: 'Enviar la propuesta en PDF',
+      creado: '2026-04-01T09:05:05Z',
+      editado: null,
+    }
+    const CON_COMENTARIOS: Workflow = {
+      ...OPORTUNIDADES,
+      pasos: OPORTUNIDADES.pasos.map((paso) =>
+        paso.id === 11 ? { ...paso, comentarios: 1 } : paso,
+      ),
+    }
+
+    // Botón de comentarios del paso, por el principio de su nombre accesible
+    // (el número visible forma parte de él).
+    function botonComentarios(vista: VueWrapper, paso: string) {
+      const nombre = `Comentarios del paso ${paso} de Workflow Oportunidades`
+      const encontrado = vista
+        .findAll('button[aria-controls]')
+        .find((b) => b.text().startsWith(nombre))
+      if (!encontrado) throw new Error(`No se encontró el botón "${nombre}"`)
+      return encontrado
+    }
+
+    async function abrirComentarios(paso = 'Propuesta'): Promise<VueWrapper> {
+      const vista = await montar([CON_COMENTARIOS, ALTAS])
+      vi.mocked(clienteApi.obtener).mockResolvedValue([structuredClone(COMENTARIO)])
+      await botonComentarios(vista, paso).trigger('click')
+      await flushPromises()
+      return vista
+    }
+
+    function campoComentario(vista: VueWrapper) {
+      return vista.get(
+        'textarea[aria-label="Escribe un comentario del paso Propuesta de Workflow Oportunidades"]',
+      )
+    }
+
+    it('cada paso muestra su número de comentarios en el botón que los despliega', async () => {
+      const vista = await montar([CON_COMENTARIOS, ALTAS])
+
+      const conComentarios = botonComentarios(vista, 'Propuesta')
+      expect(conComentarios.text()).toBe(
+        'Comentarios del paso Propuesta de Workflow Oportunidades: 1',
+      )
+      expect(conComentarios.get('[data-testid="numero-comentarios-paso"]').text()).toBe('1')
+      expect(conComentarios.attributes('aria-expanded')).toBe('false')
+      const sinComentarios = botonComentarios(vista, 'Cierre')
+      expect(sinComentarios.text()).toBe('Comentarios del paso Cierre de Workflow Oportunidades')
+      expect(sinComentarios.find('[data-testid="numero-comentarios-paso"]').exists()).toBe(false)
+    })
+
+    it('al desplegarlos carga el historial del paso con GET .../pasos/{id}/comentarios', async () => {
+      const vista = await abrirComentarios()
+
+      expect(clienteApi.obtener).toHaveBeenLastCalledWith(RUTA_COMENTARIOS)
+      const botonAbierto = botonComentarios(vista, 'Propuesta')
+      expect(botonAbierto.attributes('aria-expanded')).toBe('true')
+      const panel = vista.get(`#${botonAbierto.attributes('aria-controls')}`)
+      expect(panel.text()).toContain('Enviar la propuesta en PDF')
+      expect(vista.findAll('textarea')).toHaveLength(1)
+
+      await botonAbierto.trigger('click')
+      expect(vista.find(`#${botonAbierto.attributes('aria-controls')}`).exists()).toBe(false)
+    })
+
+    it('añade un comentario con POST y actualiza el número del paso', async () => {
+      const vista = await abrirComentarios()
+      vi.mocked(clienteApi.crear).mockResolvedValue({
+        id: 6,
+        texto: 'Línea 1\nLínea 2',
+        creado: '2026-04-01T10:00:05Z',
+        editado: null,
+      })
+
+      await campoComentario(vista).setValue('Línea 1\nLínea 2')
+      await boton(vista, 'Enviar comentario del paso Propuesta de Workflow Oportunidades').trigger(
+        'submit',
+      )
+      await flushPromises()
+
+      expect(clienteApi.crear).toHaveBeenCalledWith(RUTA_COMENTARIOS, {
+        texto: 'Línea 1\nLínea 2',
+      })
+      expect(vista.text()).toContain('Línea 1')
+      expect(
+        botonComentarios(vista, 'Propuesta').get('[data-testid="numero-comentarios-paso"]').text(),
+      ).toBe('2')
+    })
+
+    it('el texto es obligatorio y admite como mucho 500 caracteres', async () => {
+      const vista = await abrirComentarios()
+
+      const enviar = boton(vista, 'Enviar comentario del paso Propuesta de Workflow Oportunidades')
+      expect(campoComentario(vista).attributes('maxlength')).toBe('500')
+      await campoComentario(vista).setValue('   ')
+      expect(enviar.attributes('disabled')).toBeDefined()
+      await vista
+        .get(`#${botonComentarios(vista, 'Propuesta').attributes('aria-controls')} form`)
+        .trigger('submit')
+      await flushPromises()
+      expect(clienteApi.crear).not.toHaveBeenCalled()
+    })
+
+    it('muestra el error de la API si no se puede añadir el comentario', async () => {
+      const vista = await abrirComentarios()
+      vi.mocked(clienteApi.crear).mockRejectedValue(new ErrorApi(422, 'Texto inválido'))
+
+      await campoComentario(vista).setValue('Hola')
+      await boton(vista, 'Enviar comentario del paso Propuesta de Workflow Oportunidades').trigger(
+        'submit',
+      )
+      await flushPromises()
+
+      expect(vista.get('[role="alert"]').text()).toBe(
+        'No se pudo enviar el comentario: Texto inválido',
+      )
+      expect(
+        botonComentarios(vista, 'Propuesta').get('[data-testid="numero-comentarios-paso"]').text(),
+      ).toBe('1')
+    })
+
+    it('edita un comentario con PUT .../comentarios/{id}', async () => {
+      const vista = await abrirComentarios()
+      const editado = { ...COMENTARIO, texto: 'Propuesta en PDF', editado: '2026-04-01T11:00:05Z' }
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(editado)
+
+      await vista.findAll('button[aria-label^="Editar comentario de las"]')[0]!.trigger('click')
+      await vista
+        .get(
+          'textarea[aria-label="Nuevo texto del comentario del paso Propuesta de Workflow Oportunidades"]',
+        )
+        .setValue('Propuesta en PDF')
+      await vista
+        .get('form[aria-label="Editar comentario del paso Propuesta de Workflow Oportunidades"]')
+        .trigger('submit')
+      await flushPromises()
+      const confirmar = vista
+        .get(
+          '[role="group"][aria-label="¿Guardar los cambios del comentario del paso Propuesta de Workflow Oportunidades?"]',
+        )
+        .findAll('button')
+        .find((b) => b.text() === 'Guardar')!
+      await confirmar.trigger('click')
+      await flushPromises()
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith(`${RUTA_COMENTARIOS}/5`, {
+        texto: 'Propuesta en PDF',
+      })
+      expect(vista.text()).toContain('Propuesta en PDF')
+      expect(vista.find('[data-testid="marca-editado"]').exists()).toBe(true)
+    })
+
+    it('elimina un comentario con DELETE y actualiza el número del paso', async () => {
+      const vista = await abrirComentarios()
+      vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
+
+      await vista.findAll('button[aria-label^="Eliminar comentario de las"]')[0]!.trigger('click')
+      const confirmar = vista
+        .get(
+          '[role="group"][aria-label="¿Eliminar el comentario del paso Propuesta de Workflow Oportunidades?"]',
+        )
+        .findAll('button')
+        .find((b) => b.text() === 'Eliminar')!
+      await confirmar.trigger('click')
+      await flushPromises()
+
+      expect(clienteApi.eliminar).toHaveBeenCalledWith(`${RUTA_COMENTARIOS}/5`)
+      expect(vista.text()).toContain('Todavía no hay comentarios.')
+      const botonPaso = botonComentarios(vista, 'Propuesta')
+      expect(botonPaso.find('[data-testid="numero-comentarios-paso"]').exists()).toBe(false)
+      expect(botonPaso.text()).toBe('Comentarios del paso Propuesta de Workflow Oportunidades')
+    })
+
+    it('mientras los comentarios están desplegados el paso no se puede arrastrar', async () => {
+      const vista = await abrirComentarios()
+
+      const filas = vista.findAll('[data-paso]')
+      expect(filas.map((fila) => fila.attributes('draggable'))).toEqual(['true', 'false', 'true'])
     })
   })
 })

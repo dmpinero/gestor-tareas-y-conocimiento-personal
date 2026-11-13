@@ -104,6 +104,16 @@ export const useTiendaWorkflows = defineStore('workflows', () => {
     })
   }
 
+  // Los comentarios de un paso se cargan y guardan en su propio componente;
+  // este ajusta el número que muestra la lista de pasos sin volver a pedir el
+  // workflow.
+  function fijarComentariosPaso(idWorkflow: number, idPaso: number, total: number): void {
+    const paso = workflows.value
+      .find((workflow) => workflow.id === idWorkflow)
+      ?.pasos.find((p) => p.id === idPaso)
+    if (paso) paso.comentarios = total
+  }
+
   return {
     workflows,
     cargando,
@@ -116,5 +126,6 @@ export const useTiendaWorkflows = defineStore('workflows', () => {
     renombrarPaso,
     eliminarPaso,
     reordenarPasos,
+    fijarComentariosPaso,
   }
 })
