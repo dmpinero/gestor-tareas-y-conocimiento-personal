@@ -31,8 +31,8 @@ export interface Oportunidad {
  * `PUT /tareas/{id}/subtareas/{id_subtarea}`, cambia de estado con
  * `PATCH /tareas/{id}/subtareas/{id_subtarea}/resuelta` y se borra con
  * `DELETE /tareas/{id}/subtareas/{id_subtarea}`; todas devuelven la tarea
- * completa. Al crear una oportunidad, cada paso del workflow de Ajustes se
- * copia como una subtarea. Sus comentarios se gestionan en
+ * completa. Al asignar un workflow a la tarea (en el alta, o en la edición si
+ * cambia), cada uno de sus pasos se copia como una subtarea. Sus comentarios se gestionan en
  * `/tareas/{id}/subtareas/{id_subtarea}/comentarios`, igual que los de la tarea.
  */
 export interface Subtarea {
@@ -98,6 +98,8 @@ export interface Tarea {
   /** Estado actual dentro de su grupo; `null` si no tiene grupo. Solo cambia
    * con `PATCH /tareas/{id}/estado` o al cambiar de grupo (va al primero). */
   estado: ReferenciaNombre | null
+  /** Workflow de la tarea; `null` si no tiene. */
+  workflow: ReferenciaNombre | null
 }
 
 /**
@@ -119,6 +121,9 @@ export interface DatosTarea {
   /** Grupo de estados de la tarea, o `null` sin grupo. Al asignarlo o
    * cambiarlo, la tarea pasa al primer estado del grupo. */
   grupo_estados_id: number | null
+  /** Workflow de la tarea, o `null` sin workflow. Al asignarlo en el alta, o
+   * al cambiarlo en la edición, sus pasos se añaden como subtareas nuevas. */
+  workflow_id: number | null
 }
 
 /** Elemento de un catálogo compartido (`GET /etiquetas`, `GET /personas`). */
@@ -128,15 +133,29 @@ export interface ElementoCatalogo {
 }
 
 /**
- * Paso del workflow estándar de las oportunidades
- * (`/workflow-oportunidades/pasos`). `numero` es la posición 1..n que asigna
- * el sistema; un paso nuevo va al final y al reordenar se recalcula.
+ * Paso de un workflow. `numero` es la posición 1..n que asigna el sistema; un
+ * paso nuevo va al final y al reordenar se recalcula.
  */
 export interface PasoWorkflow {
   id: number
   numero: number
   /** Entre 1 y 50 caracteres, sin espacios al principio ni al final. */
   nombre: string
+}
+
+/**
+ * Workflow de Ajustes (`/workflows`): pasos que se realizan en orden y que se
+ * copian como subtareas en las tareas que lo usan. Las acciones sobre sus pasos
+ * (`/workflows/{id}/pasos`, `/workflows/{id}/orden`) devuelven el workflow
+ * completo.
+ */
+export interface Workflow {
+  id: number
+  /** Entre 1 y 50 caracteres, único entre los workflows sin distinguir
+   * mayúsculas. */
+  nombre: string
+  /** Por número. */
+  pasos: PasoWorkflow[]
 }
 
 /** Referencia a otro recurso por su id y su nombre. */
