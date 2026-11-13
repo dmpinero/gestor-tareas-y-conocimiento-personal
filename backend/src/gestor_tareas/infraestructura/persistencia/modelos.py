@@ -109,7 +109,9 @@ class ComentarioSubtareaModelo(Base):
     subtarea_id: Mapped[int] = mapped_column(
         ForeignKey("subtareas.id", ondelete="CASCADE"), nullable=False
     )
-    texto: Mapped[str] = mapped_column(String(500), nullable=False)
+    # HTML saneado: TEXT admite 65 535 bytes y la API limita el HTML a 10000
+    # caracteres (de hasta 4 bytes), así que cabe de sobra.
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
     # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
     creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
@@ -166,7 +168,9 @@ class ComentarioModelo(Base):
     tarea_id: Mapped[int] = mapped_column(
         ForeignKey("tareas.id", ondelete="CASCADE"), nullable=False
     )
-    texto: Mapped[str] = mapped_column(String(500), nullable=False)
+    # HTML saneado: TEXT admite 65 535 bytes y la API limita el HTML a 10000
+    # caracteres (de hasta 4 bytes), así que cabe de sobra.
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
     # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
     creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
@@ -239,7 +243,9 @@ class ComentarioPasoModelo(Base):
         ),
         nullable=False,
     )
-    texto: Mapped[str] = mapped_column(String(500), nullable=False)
+    # HTML saneado: TEXT admite 65 535 bytes y la API limita el HTML a 10000
+    # caracteres (de hasta 4 bytes), así que cabe de sobra.
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
     # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
     creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)

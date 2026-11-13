@@ -83,8 +83,10 @@ def anadir(
     id_tarea: int, datos: ComentarioCrearEsquema, sesion: Session = Depends(obtener_sesion)
 ) -> ComentarioSalidaEsquema:
     """Añade un comentario al histórico de la tarea y lo devuelve. El texto es
-    obligatorio (1–500 caracteres tras recortar los extremos; conserva los saltos de
-    línea de su interior). El servidor pone `creado`, en UTC; `editado` es `null`.
+    HTML que se guarda saneado (lo no permitido se elimina; un texto sin etiquetas
+    se convierte en un párrafo por línea), con 1–500 caracteres visibles tras
+    recortar los extremos y como mucho 10000 caracteres de HTML saneado. El
+    servidor pone `creado`, en UTC; `editado` es `null`.
     Los comentarios no se incluyen en la respuesta de la tarea. 404 si la tarea no
     existe."""
     comentario = AnadirComentario(RepositorioComentariosSqlAlchemy(sesion)).ejecutar(
@@ -105,7 +107,7 @@ def editar(
     sesion: Session = Depends(obtener_sesion),
 ) -> ComentarioSalidaEsquema:
     """Sustituye el texto del comentario y lo devuelve. El texto sigue las reglas del
-    alta (1–500 caracteres tras recortar los extremos, con sus saltos de línea).
+    alta (HTML saneado, 1–500 caracteres visibles y como mucho 10000 de HTML).
     `creado` no cambia; el servidor pone `editado`, en UTC. 404 si la tarea no
     existe o no tiene un comentario con ese id (también si es de otra tarea)."""
     comentario = EditarComentario(RepositorioComentariosSqlAlchemy(sesion)).ejecutar(
@@ -166,8 +168,8 @@ def anadir_a_subtarea(
     sesion: Session = Depends(obtener_sesion),
 ) -> ComentarioSalidaEsquema:
     """Añade un comentario al histórico de la subtarea y lo devuelve, con las reglas
-    de los comentarios de la tarea (1–500 caracteres tras recortar los extremos,
-    con sus saltos de línea; el servidor pone `creado`, en UTC, y `editado` es
+    de los comentarios de la tarea (HTML saneado, 1–500 caracteres visibles y como
+    mucho 10000 de HTML; el servidor pone `creado`, en UTC, y `editado` es
     `null`). La respuesta de la tarea solo incluye el número de comentarios de cada
     subtarea. 404 si la tarea no existe o no tiene una subtarea con ese id."""
     comentario = AnadirComentarioSubtarea(
@@ -258,8 +260,8 @@ def anadir_a_paso(
     sesion: Session = Depends(obtener_sesion),
 ) -> ComentarioSalidaEsquema:
     """Añade un comentario al histórico del paso y lo devuelve, con las reglas de los
-    comentarios de las tareas (1–500 caracteres tras recortar los extremos, con sus
-    saltos de línea; el servidor pone `creado`, en UTC, y `editado` es `null`). El
+    comentarios de las tareas (HTML saneado, 1–500 caracteres visibles y como mucho
+    10000 de HTML; el servidor pone `creado`, en UTC, y `editado` es `null`). El
     workflow solo incluye el número de comentarios de cada paso. Al asignar el
     workflow a una tarea, cada subtarea que nace de un paso recibe una copia de sus
     comentarios. 404 si el workflow no existe o no tiene un paso con ese id."""

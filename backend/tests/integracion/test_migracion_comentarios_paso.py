@@ -16,8 +16,9 @@ from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
 from tests.integracion.tablas import vaciar_tablas
 
 _RAIZ = Path(__file__).resolve().parents[2]
-_REVISION = "d2a8e5c3f7b1"
 _ANTERIOR = "f3b9d7a2c6e4"
+# Revisión más reciente: la de los comentarios con formato, posterior a esta.
+_ULTIMA = "a9c4e1f7b3d2"
 _TABLA = "comentarios_paso_workflow"
 
 
@@ -63,16 +64,16 @@ def test_la_migracion_crea_la_tabla_y_se_deshace_sin_tocar_los_datos_existentes(
     finally:
         sesion.close()
     pasos = [("Ventas", 1, "Contacto")]
-    assert _estado() == (True, pasos, _REVISION)
+    assert _estado() == (True, pasos, _ULTIMA)
 
     try:
-        command.downgrade(_alembic(), "-1")
+        command.downgrade(_alembic(), _ANTERIOR)
         assert _estado() == (False, pasos, _ANTERIOR)
     finally:
         command.upgrade(_alembic(), "head")
 
     # Vuelve a crearla, vacía, con los mismos datos de antes en el resto de tablas.
-    assert _estado() == (True, pasos, _REVISION)
+    assert _estado() == (True, pasos, _ULTIMA)
     sesion = FabricaSesiones()
     try:
         assert sesion.scalar(text(f"SELECT COUNT(*) FROM {_TABLA}")) == 0

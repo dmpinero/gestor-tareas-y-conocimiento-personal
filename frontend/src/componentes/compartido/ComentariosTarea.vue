@@ -2,9 +2,10 @@
 /**
  * Histórico de comentarios de una tarea, de una subtarea o de un paso de un
  * workflow: lista cronológica
- * agrupada por día y un campo para añadir comentarios nuevos (también con
- * Ctrl/Cmd+Enter). Cada comentario se puede editar o eliminar en línea, con
- * confirmación.
+ * agrupada por día y un editor con formato para añadir comentarios nuevos
+ * (también con Ctrl/Cmd+Enter). Cada comentario se puede editar o eliminar en
+ * línea, con confirmación. Los comentarios son HTML: se sanean antes de
+ * pintarlos y el límite de caracteres cuenta solo el texto visible.
  *
  * `ruta` es el recurso de la colección (`/tareas/5/comentarios`,
  * `/tareas/5/subtareas/9/comentarios` o `/workflows/2/pasos/7/comentarios`); carga sus datos al montarse y cada vez
@@ -18,13 +19,19 @@ import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 
 import { clienteApi, ErrorApi } from '@/api/cliente'
 import { Button } from '@/componentes/ui/button'
-import { Textarea } from '@/componentes/ui/textarea'
+import EditorComentario from '@/componentes/compartido/EditorComentario.vue'
 import {
   agruparComentariosPorDia,
   formatearEdicionComentario,
   type Comentario,
   type ComentarioMostrado,
 } from '@/lib/comentarios'
+import {
+  CLASES_CONTENIDO_COMENTARIO,
+  htmlComentarioEditable,
+  htmlComentarioMostrado,
+  textoVisible,
+} from '@/lib/htmlComentario'
 
 const LONGITUD_MAXIMA = 500
 const ERROR_TEXTO_VACIO = 'El comentario no puede estar vacío.'
@@ -54,7 +61,9 @@ const anuncio = ref('')
 const contenedorHistorial = useTemplateRef<HTMLElement>('contenedorHistorial')
 
 const grupos = computed(() => agruparComentariosPorDia(comentarios.value))
-const puedeEnviar = computed(() => texto.value.trim() !== '' && !enviando.value)
+// En puntos de código, como cuenta la API (un emoji es un carácter).
+const longitudTexto = computed(() => [...textoVisible(texto.value)].length)
+const puedeEnviar = computed(() => longitudTexto.value > 0 && !enviando.value)
 
 function mensajeDe(error: unknown): string {
   if (error instanceof ErrorApi || error instanceof Error) return error.message
@@ -122,18 +131,13 @@ async function enviar(): Promise<void> {
   }
 }
 
-function alPulsarTecla(evento: KeyboardEvent): void {
-  if (evento.key !== 'Enter' || !(evento.ctrlKey || evento.metaKey)) return
-  evento.preventDefault()
-  void enviar()
-}
-
 // --- Editar y eliminar, con confirmación en línea -------------------------
 // Se confirma dentro del propio comentario y no con otra modal: el detalle ya
 // es una modal y anidar otra complica el foco y el Escape. Solo hay una acción
 // abierta a la vez; abrir otra descarta la anterior.
 const idEditando = ref<number | null>(null)
 const textoEdicion = ref('')
+const longitudEdicion = computed(() => [...textoVisible(textoEdicion.value)].length)
 const confirmandoEdicion = ref(false)
 const idConfirmandoEliminar = ref<number | null>(null)
 const procesando = ref(false)
@@ -169,11 +173,11 @@ async function enfocar(id: string): Promise<void> {
   document.getElementById(id)?.focus()
 }
 
-async function abrirEdicion(comentario: ComentarioMostrado): Promise<void> {
+function abrirEdicion(comentario: ComentarioMostrado): void {
   cerrarAcciones()
   idEditando.value = comentario.id
-  textoEdicion.value = comentario.texto
-  await enfocar(idCampoEdicion)
+  // El editor se enfoca solo al crearse (`autoenfoque`).
+  textoEdicion.value = htmlComentarioEditable(comentario.texto)
 }
 
 async function cancelarEdicion(id: number): Promise<void> {
@@ -183,7 +187,7 @@ async function cancelarEdicion(id: number): Promise<void> {
 
 async function pedirConfirmacionEdicion(id: number): Promise<void> {
   if (procesando.value) return
-  if (textoEdicion.value.trim() === '') {
+  if (longitudEdicion.value === 0) {
     errorAccion.value = { id, mensaje: ERROR_TEXTO_VACIO }
     return
   }
@@ -344,18 +348,18 @@ watch(() => props.ruta, cargar, { immediate: true })
                 @submit.prevent="pedirConfirmacionEdicion(comentario.id)"
                 @keydown.esc.stop.prevent="cancelarEdicion(comentario.id)"
               >
-                <Textarea
+                <EditorComentario
                   :id="idCampoEdicion"
                   v-model="textoEdicion"
-                  :aria-label="`Nuevo texto del comentario${sufijo}`"
-                  :maxlength="LONGITUD_MAXIMA"
-                  :aria-describedby="idContadorEdicion"
-                  :aria-invalid="errorAccion?.mensaje === ERROR_TEXTO_VACIO ? 'true' : undefined"
-                  :readonly="confirmandoEdicion"
-                  rows="3"
+                  :etiqueta="`Nuevo texto del comentario${sufijo}`"
+                  :limite="LONGITUD_MAXIMA"
+                  :described-by="idContadorEdicion"
+                  :invalido="errorAccion?.mensaje === ERROR_TEXTO_VACIO"
+                  :solo-lectura="confirmandoEdicion"
+                  autoenfoque
                 />
                 <span :id="idContadorEdicion" class="text-muted-foreground self-end text-xs">
-                  {{ textoEdicion.length }}/{{ LONGITUD_MAXIMA }}
+                  {{ longitudEdicion }}/{{ LONGITUD_MAXIMA }}
                 </span>
                 <div
                   v-if="confirmandoEdicion"
@@ -394,7 +398,13 @@ watch(() => props.ruta, cargar, { immediate: true })
                   >
                 </div>
               </form>
-              <p v-else class="text-sm break-words whitespace-pre-wrap">{{ comentario.texto }}</p>
+              <!-- HTML saneado (DOMPurify, misma lista que el backend). -->
+              <div
+                v-else
+                data-testid="texto-comentario"
+                :class="['text-sm', CLASES_CONTENIDO_COMENTARIO]"
+                v-html="htmlComentarioMostrado(comentario.texto)"
+              />
 
               <div
                 v-if="idConfirmandoEliminar === comentario.id"
@@ -435,15 +445,14 @@ watch(() => props.ruta, cargar, { immediate: true })
 
     <form class="flex flex-col gap-1" @submit.prevent="enviar">
       <div class="flex items-end gap-2">
-        <Textarea
+        <EditorComentario
           :id="idCampo"
           v-model="texto"
-          :aria-label="`Escribe un comentario${sufijo}`"
+          :etiqueta="`Escribe un comentario${sufijo}`"
           placeholder="Escribe un comentario"
-          :maxlength="LONGITUD_MAXIMA"
-          :aria-describedby="idContador"
-          rows="2"
-          @keydown="alPulsarTecla"
+          :limite="LONGITUD_MAXIMA"
+          :described-by="idContador"
+          @enviar="enviar"
         />
         <Button
           type="submit"
@@ -455,7 +464,7 @@ watch(() => props.ruta, cargar, { immediate: true })
         </Button>
       </div>
       <p :id="idContador" class="text-muted-foreground self-end text-xs">
-        {{ texto.length }}/{{ LONGITUD_MAXIMA }}
+        {{ longitudTexto }}/{{ LONGITUD_MAXIMA }}
       </p>
       <p v-if="errorEnvio" class="text-destructive text-sm" role="alert">
         No se pudo enviar el comentario: {{ errorEnvio }}

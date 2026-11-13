@@ -3,8 +3,11 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
+import type { Editor } from '@tiptap/vue-3'
+
 import { clienteApi, ErrorApi } from '@/api/cliente'
 import type { Workflow } from '@/api/tipos'
+import EditorComentario from '@/componentes/compartido/EditorComentario.vue'
 import VistaWorkflows from '../VistaWorkflows.vue'
 
 vi.mock('@/api/cliente', async (importarOriginal) => {
@@ -19,6 +22,19 @@ vi.mock('@/api/cliente', async (importarOriginal) => {
     },
   }
 })
+
+// ProseMirror no admite escribir en jsdom: se fija el contenido con el editor
+// que expone EditorComentario, lo que dispara su v-model como al escribir.
+async function escribirEnEditor(envoltorio: VueWrapper, etiqueta: string, html: string) {
+  const editor = envoltorio
+    .findAllComponents(EditorComentario)
+    .find((componente) => componente.props('etiqueta') === etiqueta)
+  if (!editor) throw new Error(`No hay editor «${etiqueta}»`)
+  ;(editor.vm as unknown as { editor: Editor }).editor.commands.setContent(html, {
+    emitUpdate: true,
+  })
+  await flushPromises()
+}
 
 const RUTA = '/workflows'
 
@@ -547,10 +563,10 @@ describe('VistaWorkflows', () => {
       return vista
     }
 
+    const ETIQUETA_CAMPO = 'Escribe un comentario del paso Propuesta de Workflow Oportunidades'
+
     function campoComentario(vista: VueWrapper) {
-      return vista.get(
-        'textarea[aria-label="Escribe un comentario del paso Propuesta de Workflow Oportunidades"]',
-      )
+      return vista.get(`[role="textbox"][aria-label="${ETIQUETA_CAMPO}"]`)
     }
 
     it('cada paso muestra su número de comentarios en el botón que los despliega', async () => {
@@ -575,7 +591,7 @@ describe('VistaWorkflows', () => {
       expect(botonAbierto.attributes('aria-expanded')).toBe('true')
       const panel = vista.get(`#${botonAbierto.attributes('aria-controls')}`)
       expect(panel.text()).toContain('Enviar la propuesta en PDF')
-      expect(vista.findAll('textarea')).toHaveLength(1)
+      expect(vista.findAll('[role="textbox"]')).toHaveLength(1)
 
       await botonAbierto.trigger('click')
       expect(vista.find(`#${botonAbierto.attributes('aria-controls')}`).exists()).toBe(false)
@@ -590,14 +606,14 @@ describe('VistaWorkflows', () => {
         editado: null,
       })
 
-      await campoComentario(vista).setValue('Línea 1\nLínea 2')
+      await escribirEnEditor(vista, ETIQUETA_CAMPO, '<p>Línea 1</p><p>Línea 2</p>')
       await boton(vista, 'Enviar comentario del paso Propuesta de Workflow Oportunidades').trigger(
         'submit',
       )
       await flushPromises()
 
       expect(clienteApi.crear).toHaveBeenCalledWith(RUTA_COMENTARIOS, {
-        texto: 'Línea 1\nLínea 2',
+        texto: '<p>Línea 1</p><p>Línea 2</p>',
       })
       expect(vista.text()).toContain('Línea 1')
       expect(
@@ -609,8 +625,9 @@ describe('VistaWorkflows', () => {
       const vista = await abrirComentarios()
 
       const enviar = boton(vista, 'Enviar comentario del paso Propuesta de Workflow Oportunidades')
-      expect(campoComentario(vista).attributes('maxlength')).toBe('500')
-      await campoComentario(vista).setValue('   ')
+      const contador = vista.get(`#${campoComentario(vista).attributes('aria-describedby')}`)
+      expect(contador.text()).toBe('0/500')
+      await escribirEnEditor(vista, ETIQUETA_CAMPO, '<p>   </p>')
       expect(enviar.attributes('disabled')).toBeDefined()
       await vista
         .get(`#${botonComentarios(vista, 'Propuesta').attributes('aria-controls')} form`)
@@ -623,7 +640,7 @@ describe('VistaWorkflows', () => {
       const vista = await abrirComentarios()
       vi.mocked(clienteApi.crear).mockRejectedValue(new ErrorApi(422, 'Texto inválido'))
 
-      await campoComentario(vista).setValue('Hola')
+      await escribirEnEditor(vista, ETIQUETA_CAMPO, '<p>Hola</p>')
       await boton(vista, 'Enviar comentario del paso Propuesta de Workflow Oportunidades').trigger(
         'submit',
       )
@@ -643,11 +660,12 @@ describe('VistaWorkflows', () => {
       vi.mocked(clienteApi.actualizar).mockResolvedValue(editado)
 
       await vista.findAll('button[aria-label^="Editar comentario de las"]')[0]!.trigger('click')
-      await vista
-        .get(
-          'textarea[aria-label="Nuevo texto del comentario del paso Propuesta de Workflow Oportunidades"]',
-        )
-        .setValue('Propuesta en PDF')
+      await flushPromises()
+      await escribirEnEditor(
+        vista,
+        'Nuevo texto del comentario del paso Propuesta de Workflow Oportunidades',
+        '<p>Propuesta en PDF</p>',
+      )
       await vista
         .get('form[aria-label="Editar comentario del paso Propuesta de Workflow Oportunidades"]')
         .trigger('submit')
@@ -662,7 +680,7 @@ describe('VistaWorkflows', () => {
       await flushPromises()
 
       expect(clienteApi.actualizar).toHaveBeenCalledWith(`${RUTA_COMENTARIOS}/5`, {
-        texto: 'Propuesta en PDF',
+        texto: '<p>Propuesta en PDF</p>',
       })
       expect(vista.text()).toContain('Propuesta en PDF')
       expect(vista.find('[data-testid="marca-editado"]').exists()).toBe(true)

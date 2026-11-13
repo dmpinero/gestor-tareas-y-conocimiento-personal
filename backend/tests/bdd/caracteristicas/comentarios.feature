@@ -1,8 +1,12 @@
 # language: es
 Característica: Histórico de comentarios de una tarea
   Como persona usuaria de la aplicación
-  Quiero añadir comentarios de texto a una tarea
+  Quiero añadir comentarios con formato a una tarea
   Para llevar un histórico cronológico de lo que va ocurriendo
+
+  Los comentarios se guardan como HTML saneado. En los pasos, un comentario escrito
+  como texto plano entre comillas se compara con el HTML que guarda la API para él:
+  un párrafo por línea, con los caracteres especiales escapados.
 
   Antecedentes:
     Dado que existe la tarea "Mudanza"
@@ -16,10 +20,20 @@ Característica: Histórico de comentarios de una tarea
     Y los comentarios de "Mudanza" son "Llamar al casero"
     Y ningún comentario de "Mudanza" está editado
 
-  Escenario: Los saltos de línea del interior del texto se conservan
-    Cuando comento "\nPrimera línea\nSegunda línea\n" en "Mudanza"
-    Entonces la API responde 201 con el comentario "Primera línea\nSegunda línea" fechado ahora en UTC
-    Y los comentarios de "Mudanza" son "Primera línea\nSegunda línea"
+  Escenario: Un texto sin etiquetas se guarda como un párrafo escapado por línea
+    Cuando comento "\nPrimera línea\n\na < b & c\n" en "Mudanza"
+    Entonces la API responde 201 con el HTML <p>Primera línea</p><p></p><p>a &lt; b &amp; c</p>
+    Y "Mudanza" solo tiene ese comentario
+
+  Escenario: El formato permitido se guarda tal cual
+    Cuando comento en "Mudanza" el HTML <p><strong>N</strong> <em>C</em> <u>S</u> <s>T</s><br><span style="color:#e03131">rojo</span> <mark data-color="#ffec99" style="background-color:#ffec99">resaltado</mark></p><ul><li>uno</li></ul><ol><li>dos</li></ol><p><a href="https://ejemplo.com" target="_blank" rel="noopener noreferrer nofollow">enlace</a> <a href="mailto:ana@ejemplo.com" rel="noopener noreferrer nofollow">correo</a></p>
+    Entonces la API responde 201 con el HTML <p><strong>N</strong> <em>C</em> <u>S</u> <s>T</s><br><span style="color:#e03131">rojo</span> <mark data-color="#ffec99" style="background-color:#ffec99">resaltado</mark></p><ul><li>uno</li></ul><ol><li>dos</li></ol><p><a href="https://ejemplo.com" target="_blank" rel="noopener noreferrer nofollow">enlace</a> <a href="mailto:ana@ejemplo.com" rel="noopener noreferrer nofollow">correo</a></p>
+    Y "Mudanza" solo tiene ese comentario
+
+  Escenario: Se elimina lo que no está permitido, sin rechazar el comentario
+    Cuando comento en "Mudanza" el HTML <p onclick="alert(1)">Hola<script>alert(1)</script><img src="x" onerror="alert(1)"> <a href="javascript:alert(1)" rel="opener">enlace</a> <span style="color:red;position:fixed" class="x">rojo</span> <mark style="background-color:yellow;color:red">resaltado</mark></p><div><h1>Título</h1></div>
+    Entonces la API responde 201 con el HTML <p>Hola <a rel="noopener noreferrer nofollow">enlace</a> <span style="color:red">rojo</span> <mark style="background-color:yellow">resaltado</mark></p>Título
+    Y "Mudanza" solo tiene ese comentario
 
   Escenario: Los comentarios se devuelven en orden cronológico y no aparecen en la tarea
     Cuando comento "Uno" en "Mudanza"
@@ -39,21 +53,39 @@ Característica: Histórico de comentarios de una tarea
     Cuando comento un texto de 500 caracteres en "Mudanza"
     Entonces la API responde 201 con un comentario de 500 caracteres
 
+  Escenario: Se admite un comentario con 500 caracteres visibles
+    Cuando comento en "Mudanza" un HTML con 500 caracteres visibles
+    Entonces la API responde 201 con el HTML de 500 caracteres visibles
+    Y "Mudanza" solo tiene ese comentario
+
   Esquema del escenario: Se rechaza un comentario con datos inválidos
     Cuando intento comentar en "Mudanza" con el cuerpo <cuerpo>
     Entonces la API rechaza la petición por datos inválidos
     Y los comentarios de "Mudanza" son ""
 
     Ejemplos:
-      | cuerpo               |
-      | {}                   |
-      | {"texto": ""}        |
-      | {"texto": " \\n\\t "} |
-      | {"texto": null}      |
-      | {"texto": 5}         |
+      | cuerpo                                         |
+      | {}                                             |
+      | {"texto": ""}                                  |
+      | {"texto": " \\n\\t "}                           |
+      | {"texto": "<p> </p>"}                          |
+      | {"texto": "<p>&nbsp;</p><p><br></p>"}          |
+      | {"texto": "<p><script>alert(1)</script></p>"}  |
+      | {"texto": null}                                |
+      | {"texto": 5}                                   |
 
   Escenario: Se rechaza un comentario de más de 500 caracteres
     Cuando intento comentar en "Mudanza" un texto de 501 caracteres
+    Entonces la API rechaza la petición por datos inválidos
+    Y los comentarios de "Mudanza" son ""
+
+  Escenario: Se rechaza un comentario con más de 500 caracteres visibles
+    Cuando intento comentar en "Mudanza" un HTML con 501 caracteres visibles
+    Entonces la API rechaza la petición por datos inválidos
+    Y los comentarios de "Mudanza" son ""
+
+  Escenario: Se rechaza un comentario cuyo HTML saneado pasa de 10000 caracteres
+    Cuando intento comentar en "Mudanza" un HTML que saneado pasa de 10000 caracteres
     Entonces la API rechaza la petición por datos inválidos
     Y los comentarios de "Mudanza" son ""
 
@@ -69,6 +101,11 @@ Característica: Histórico de comentarios de una tarea
     Entonces la API responde 200 con el comentario editado "Llamar al casero\nmañana" con su fecha de alta
     Y los comentarios de "Mudanza" son "Llamar al casero\nmañana; Pedir cajas"
     Y en "Mudanza" solo está editado "Llamar al casero\nmañana", con su fecha de alta
+
+  Escenario: Editar un comentario sanea el HTML como el alta
+    Dado que "Mudanza" tiene los comentarios "Uno"
+    Cuando edito el comentario "Uno" de "Mudanza" con el texto "<p><em>Uno</em><script>alert(1)</script></p>"
+    Entonces la API responde 200 con el comentario editado "<p><em>Uno</em></p>" con su fecha de alta
 
   Escenario: Se admite editar un comentario con un texto de 500 caracteres
     Dado que "Mudanza" tiene los comentarios "Uno"

@@ -532,7 +532,8 @@ test('crea subtareas y comentarios desde el detalle de la tarea', async ({ page 
   const campo = detalle.getByRole('textbox', { name: 'Escribe un comentario' })
   await campo.fill('Primer comentario\ncon dos líneas')
   await detalle.getByRole('button', { name: 'Enviar comentario' }).click()
-  await expect(campo).toHaveValue('')
+  // El campo es un editor con formato (contenteditable): se vacía su texto.
+  await expect(campo).toHaveText('')
   await campo.fill('Segundo comentario')
   await campo.press('Control+Enter')
   const historial = detalle.getByRole('list', { name: 'Historial de comentarios' })
@@ -593,6 +594,40 @@ test('el historial de comentarios largo es accesible y enviar con el botón mant
   await page.keyboard.press('Enter')
   await expect(detalle.getByText('Enviado con el botón')).toBeVisible()
   await expect(campo).toBeFocused()
+})
+
+test('aplica negrita con la barra del editor y el comentario se muestra con formato', async ({
+  page,
+  request,
+}) => {
+  const nombre = `Con formato ${Date.now()}`
+  const creada = await request.post('/api/v1/tareas', {
+    data: { nombre, descripcion: 'Comentario en negrita', fecha_creacion: '2026-01-01T09:00:00' },
+  })
+  expect(creada.status()).toBe(201)
+  const { id } = (await creada.json()) as { id: number }
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  const detalle = page.getByRole('dialog', { name: nombre })
+  const campo = detalle.getByRole('textbox', { name: 'Escribe un comentario' })
+  await campo.fill('Importante')
+  await campo.press('ControlOrMeta+a')
+  const negrita = detalle
+    .getByRole('toolbar', { name: 'Formato: Escribe un comentario' })
+    .getByRole('button', { name: 'Negrita' })
+  await negrita.click()
+  await expect(negrita).toHaveAttribute('aria-pressed', 'true')
+  await detalle.getByRole('button', { name: 'Enviar comentario' }).click()
+
+  const historial = detalle.getByRole('list', { name: 'Historial de comentarios' })
+  await expect(historial.locator('strong')).toHaveText('Importante')
+  const guardados = (await (await request.get(`/api/v1/tareas/${id}/comentarios`)).json()) as {
+    texto: string
+  }[]
+  expect(guardados.map((comentario) => comentario.texto)).toEqual([
+    '<p><strong>Importante</strong></p>',
+  ])
 })
 
 test('edita y borra subtareas y comentarios pidiendo confirmación', async ({ page, request }) => {

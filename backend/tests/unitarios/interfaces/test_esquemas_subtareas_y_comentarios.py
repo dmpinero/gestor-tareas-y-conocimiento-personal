@@ -8,6 +8,7 @@ from gestor_tareas.interfaces.api.v1.esquemas.comentario import (
     ComentarioEditarEsquema,
     ComentarioSalidaEsquema,
 )
+from gestor_tareas.interfaces.api.v1.esquemas.html_comentario import sanear_html
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     SubtareaCrearEsquema,
     SubtareaEditarEsquema,
@@ -82,18 +83,115 @@ def test_la_salida_de_la_tarea_incluye_las_subtareas() -> None:
     assert subtarea["properties"]["comentarios"]["type"] == "integer"
 
 
-def test_el_comentario_recorta_los_extremos_y_conserva_los_saltos_de_linea() -> None:
-    assert ComentarioCrearEsquema(texto="\n Uno\r\n\nDos \t").texto == "Uno\r\n\nDos"
+def test_el_comentario_en_texto_plano_se_guarda_como_un_parrafo_por_linea() -> None:
+    assert ComentarioCrearEsquema(texto="\n Uno\r\n\nDos \t").texto == "<p>Uno</p><p></p><p>Dos</p>"
 
 
-@pytest.mark.parametrize("texto", ["", " \n\t ", " ", "a" * 501, None, 5])
+def test_el_comentario_en_texto_plano_escapa_los_caracteres_especiales() -> None:
+    assert ComentarioCrearEsquema(texto='a < b & "c"').texto == '<p>a &lt; b &amp; "c"</p>'
+
+
+def test_el_comentario_conserva_el_formato_permitido() -> None:
+    html = (
+        "<p><strong>N</strong><em>C</em><u>S</u><s>T</s><br>"
+        '<span style="color:#e03131">R</span>'
+        '<mark data-color="#ffec99" style="background-color:#ffec99">M</mark></p>'
+        "<ul><li>V</li></ul><ol><li>1</li></ol>"
+        '<p><a href="https://ejemplo.com" target="_blank" '
+        'rel="noopener noreferrer nofollow">E</a></p>'
+    )
+    assert ComentarioCrearEsquema(texto=html).texto == html
+
+
+@pytest.mark.parametrize(
+    ("texto", "saneado"),
+    [
+        ("<p>a<script>alert(1)</script>b</p>", "<p>ab</p>"),
+        ('<p><img src="x" onerror="alert(1)">a</p>', "<p>a</p>"),
+        ('<p onclick="alert(1)">a</p>', "<p>a</p>"),
+        (
+            '<a href="javascript:alert(1)">a</a>',
+            '<a rel="noopener noreferrer nofollow">a</a>',
+        ),
+        (
+            '<a href="mailto:a@b.es" rel="opener" target="_top">a</a>',
+            '<a href="mailto:a@b.es" rel="noopener noreferrer nofollow">a</a>',
+        ),
+        ("<div><h1>a</h1></div><table><tr><td>b</td></tr></table>", "<p>ab</p>"),
+        (
+            '<span style="color:red;position:fixed;background-color:blue">a</span>',
+            '<span style="color:red">a</span>',
+        ),
+        (
+            '<mark style="background-color:#ff0;color:red">a</mark>',
+            '<mark style="background-color:#ff0">a</mark>',
+        ),
+        ('<span style="color:url(javascript:alert(1))" class="x">a</span>', "<span>a</span>"),
+        # Ningún atributo genérico (nh3 deja lang y title si no se le dice).
+        ('<p lang="en" title="t" class="c">a</p>', "<p>a</p>"),
+        ('<p><strong title="x">a</strong></p>', "<p><strong>a</strong></p>"),
+    ],
+)
+def test_el_comentario_elimina_lo_que_no_esta_permitido(texto: str, saneado: str) -> None:
+    assert ComentarioCrearEsquema(texto=texto).texto == saneado
+
+
+def test_sanear_de_nuevo_un_comentario_guardado_no_lo_cambia() -> None:
+    for texto in ["Uno\nDos & <3", "<div>a &lt; b</div>", "<p><strong>a</strong></p>"]:
+        guardado = ComentarioCrearEsquema(texto=texto).texto
+        assert ComentarioCrearEsquema(texto=guardado).texto == guardado
+
+
+def test_el_comentario_admite_500_caracteres_visibles() -> None:
+    assert ComentarioCrearEsquema(texto="á" * 500).texto == f"<p>{'á' * 500}</p>"
+    # Las etiquetas no cuentan; las entidades cuentan como un carácter.
+    html = f"<p><strong>{'a' * 498}</strong>&amp;&lt;</p>"
+    assert ComentarioCrearEsquema(texto=html).texto == html
+    # Los espacios de los extremos del texto visible no cuentan.
+    assert ComentarioCrearEsquema(texto=f"<p> {'a' * 500} </p>").texto == f"<p> {'a' * 500} </p>"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "",
+        " \n\t ",
+        " ",
+        "<p> </p>",
+        "<p>&nbsp;</p><p></p>",
+        "<script>alert(1)</script>",
+        "a" * 501,
+        f"<p><em>{'a' * 501}</em></p>",
+        f"<p>{'&amp;' * 501}</p>",
+        None,
+        5,
+    ],
+)
 def test_el_comentario_rechaza_textos_invalidos(texto: object) -> None:
     with pytest.raises(ValidationError):
         ComentarioCrearEsquema(texto=texto)
 
 
-def test_el_comentario_admite_500_caracteres() -> None:
-    assert ComentarioCrearEsquema(texto="á" * 500).texto == "á" * 500
+def test_el_comentario_rechaza_un_html_saneado_de_mas_de_10000_caracteres() -> None:
+    # 400 caracteres visibles y 3207 de entrada, pero al sanear cada enlace recibe
+    # su `rel` y el HTML guardado pasaría de 10000.
+    enlaces = f"<p>{'<a>a</a>' * 400}</p>"
+    assert len(enlaces) <= 10000 < len(sanear_html(enlaces))
+    with pytest.raises(ValidationError):
+        ComentarioCrearEsquema(texto=enlaces)
+    color = '<span style="color:#e03131">a</span>'
+    assert len(ComentarioCrearEsquema(texto=f"<p>{color * 250}</p>").texto) == 9007
+
+
+def test_el_contrato_del_comentario_publica_sus_limites() -> None:
+    texto = ComentarioCrearEsquema.model_json_schema()["properties"]["texto"]
+    assert (texto["type"], texto["minLength"], texto["maxLength"], texto["pattern"]) == (
+        "string",
+        1,
+        10000,
+        r"\S",
+    )
+    assert "500 caracteres visibles" in texto["description"]
 
 
 def test_la_salida_del_comentario_serializa_el_instante_en_utc_con_z() -> None:
@@ -133,9 +231,10 @@ def test_la_salida_del_comentario_serializa_editado_en_utc_con_z() -> None:
 
 
 def test_la_edicion_de_un_comentario_valida_como_el_alta() -> None:
-    assert ComentarioEditarEsquema(texto="\n Uno\nDos ").texto == "Uno\nDos"
-    assert ComentarioEditarEsquema(texto="á" * 500).texto == "á" * 500
-    for texto in ["", " \n\t ", "a" * 501, None, 5]:
+    assert ComentarioEditarEsquema(texto="\n Uno\nDos ").texto == "<p>Uno</p><p>Dos</p>"
+    assert ComentarioEditarEsquema(texto="á" * 500).texto == f"<p>{'á' * 500}</p>"
+    assert ComentarioEditarEsquema(texto="<p>a<script>x</script></p>").texto == "<p>a</p>"
+    for texto in ["", " \n\t ", "<p> </p>", "a" * 501, None, 5]:
         with pytest.raises(ValidationError):
             ComentarioEditarEsquema(texto=texto)
     assert (

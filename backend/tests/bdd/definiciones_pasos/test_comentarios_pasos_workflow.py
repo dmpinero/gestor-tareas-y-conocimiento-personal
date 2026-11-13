@@ -13,6 +13,7 @@ from gestor_tareas.infraestructura.persistencia.modelos import (
     ComentarioSubtareaModelo,
 )
 from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
+from tests.bdd.comentarios_html import html_guardado
 
 scenarios("comentarios_pasos_workflow.feature")
 
@@ -51,6 +52,15 @@ def _lista(texto: str) -> list[str]:
     return [_texto(t) for t in texto.split("; ")] if texto else []
 
 
+def _guardado(texto: str) -> str:
+    """El HTML guardado para un comentario escrito en el escenario."""
+    return html_guardado(_texto(texto))
+
+
+def _guardados(textos: str) -> list[str]:
+    return [html_guardado(t) for t in _lista(textos)]
+
+
 def _workflow(cliente: TestClient, nombre: str) -> dict:
     respuesta = cliente.get(_WORKFLOWS)
     assert respuesta.status_code == 200
@@ -78,7 +88,7 @@ def _listar(cliente: TestClient, ruta: str) -> list[dict]:
 
 
 def _id_en(cliente: TestClient, ruta: str, texto: str) -> int:
-    return next(c["id"] for c in _listar(cliente, ruta) if c["texto"] == texto)
+    return next(c["id"] for c in _listar(cliente, ruta) if c["texto"] == _guardado(texto))
 
 
 def _tarea(cliente: TestClient, nombre: str) -> dict:
@@ -348,14 +358,14 @@ def eliminar_comentario_copiado(
 def responde_con_el_comentario(respuesta: Response, texto: str) -> None:
     assert respuesta.status_code == 201
     assert set(respuesta.json()) == _CLAVES
-    assert respuesta.json()["texto"] == _texto(texto)
+    assert respuesta.json()["texto"] == _guardado(texto)
     assert respuesta.json()["editado"] is None
 
 
 @then("la API responde 201 con un comentario de 500 caracteres")
 def responde_en_el_limite(respuesta: Response) -> None:
     assert respuesta.status_code == 201
-    assert respuesta.json()["texto"] == "á" * 500
+    assert respuesta.json()["texto"] == f"<p>{'á' * 500}</p>"
 
 
 @then(_patron("la API responde 200 con el comentario editado {texto} con su fecha de alta"))
@@ -365,7 +375,7 @@ def responde_con_el_comentario_editado(
     assert respuesta.status_code == 200
     comentario = respuesta.json()
     assert set(comentario) == _CLAVES
-    assert comentario["texto"] == _texto(texto)
+    assert comentario["texto"] == _guardado(texto)
     original = originales[comentario["id"]]
     assert comentario["creado"] == original["creado"]
     assert _instante(comentario["editado"]) >= _instante(original["creado"])
@@ -387,7 +397,7 @@ def los_comentarios_del_paso_son(
     cliente: TestClient, paso: str, workflow: str, textos: str
 ) -> None:
     comentarios = _listar(cliente, _ruta_de(cliente, workflow, paso))
-    assert [c["texto"] for c in comentarios] == _lista(textos)
+    assert [c["texto"] for c in comentarios] == _guardados(textos)
 
 
 @then(_patron("al consultar los workflows el paso {paso} de {workflow} tiene {n} comentarios"))
@@ -397,12 +407,12 @@ def el_paso_tiene_n_comentarios(cliente: TestClient, paso: str, workflow: str, n
 
 @then(_patron("en la base de datos solo quedan los comentarios de paso {textos}"))
 def solo_quedan_los_de_paso(textos: str) -> None:
-    assert _textos_en_bd(ComentarioPasoModelo) == sorted(_lista(textos))
+    assert _textos_en_bd(ComentarioPasoModelo) == sorted(_guardados(textos))
 
 
 @then(_patron("en la base de datos solo quedan los comentarios de subtarea {textos}"))
 def solo_quedan_los_de_subtarea(textos: str) -> None:
-    assert _textos_en_bd(ComentarioSubtareaModelo) == sorted(_lista(textos))
+    assert _textos_en_bd(ComentarioSubtareaModelo) == sorted(_guardados(textos))
 
 
 @then(_patron("la API responde 404 con {detalle}"))
@@ -449,7 +459,7 @@ def tiene_los_comentarios_copiados(
     textos: str,
 ) -> None:
     copiados = _listar(cliente, _ruta_subtarea(cliente, tarea, subtarea))
-    assert [c["texto"] for c in copiados] == _lista(textos)
+    assert [c["texto"] for c in copiados] == _guardados(textos)
     assert all(c["editado"] is None for c in copiados)
     assert all(copia["antes"] <= _instante(c["creado"]) <= copia["despues"] for c in copiados)
 
@@ -459,7 +469,7 @@ def los_comentarios_de_la_subtarea_son(
     cliente: TestClient, subtarea: str, tarea: str, textos: str
 ) -> None:
     comentarios = _listar(cliente, _ruta_subtarea(cliente, tarea, subtarea))
-    assert [c["texto"] for c in comentarios] == _lista(textos)
+    assert [c["texto"] for c in comentarios] == _guardados(textos)
 
 
 @then(_patron("al consultar las tareas las subtareas de {tarea} tienen {numeros} comentarios"))

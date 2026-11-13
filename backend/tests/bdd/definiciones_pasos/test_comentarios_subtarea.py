@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from gestor_tareas.infraestructura.persistencia.modelos import ComentarioSubtareaModelo
 from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
+from tests.bdd.comentarios_html import html_guardado
 
 scenarios("comentarios_subtarea.feature")
 
@@ -50,6 +51,15 @@ def _lista(texto: str) -> list[str]:
     return [_texto(t) for t in texto.split("; ")] if texto else []
 
 
+def _guardado(texto: str) -> str:
+    """El HTML guardado para un comentario escrito en el escenario."""
+    return html_guardado(_texto(texto))
+
+
+def _guardados(textos: str) -> list[str]:
+    return [html_guardado(t) for t in _lista(textos)]
+
+
 def _tarea(cliente: TestClient, nombre: str) -> dict:
     respuesta = cliente.get(_TAREAS)
     assert respuesta.status_code == 200
@@ -77,7 +87,8 @@ def _listar(cliente: TestClient, tarea: str, subtarea: str) -> list[dict]:
 
 
 def _id_comentario(cliente: TestClient, tarea: str, subtarea: str, texto: str) -> int:
-    return next(c["id"] for c in _listar(cliente, tarea, subtarea) if c["texto"] == texto)
+    comentarios = _listar(cliente, tarea, subtarea)
+    return next(c["id"] for c in comentarios if c["texto"] == _guardado(texto))
 
 
 def _cuerpo(cuerpo: str) -> dict:
@@ -303,7 +314,7 @@ def operar_comentario_de_tarea(
 ) -> Response:
     id_tarea = _tarea(cliente, tarea)["id"]
     comentarios = cliente.get(f"{_TAREAS}/{id_tarea}/comentarios").json()
-    id_c = next(c["id"] for c in comentarios if c["texto"] == comentario)
+    id_c = next(c["id"] for c in comentarios if c["texto"] == _guardado(comentario))
     return _operar(cliente, accion, id_tarea, _subtarea(cliente, tarea, subtarea)["id"], id_c)
 
 
@@ -312,14 +323,14 @@ def la_api_responde_con_el_comentario(respuesta: Response, texto: str) -> None:
     assert respuesta.status_code == 201
     comentario = respuesta.json()
     assert set(comentario) == _CLAVES
-    assert comentario["texto"] == _texto(texto)
+    assert comentario["texto"] == _guardado(texto)
     assert comentario["editado"] is None
 
 
 @then("la API responde 201 con un comentario de 500 caracteres")
 def la_api_responde_en_el_limite(respuesta: Response) -> None:
     assert respuesta.status_code == 201
-    assert respuesta.json()["texto"] == "á" * 500
+    assert respuesta.json()["texto"] == f"<p>{'á' * 500}</p>"
 
 
 @then(_patron("la API responde 200 con el comentario editado {texto} con su fecha de alta"))
@@ -329,7 +340,7 @@ def la_api_responde_con_el_comentario_editado(
     assert respuesta.status_code == 200
     comentario = respuesta.json()
     assert set(comentario) == _CLAVES
-    assert comentario["texto"] == _texto(texto)
+    assert comentario["texto"] == _guardado(texto)
     original = originales[comentario["id"]]
     assert comentario["creado"] == original["creado"]
     assert _INSTANTE_UTC.fullmatch(comentario["editado"])
@@ -342,7 +353,7 @@ def solo_esta_editado(
 ) -> None:
     for comentario in _listar(cliente, tarea, subtarea):
         assert comentario["creado"] == originales[comentario["id"]]["creado"]
-        assert (comentario["editado"] is not None) == (comentario["texto"] == _texto(texto))
+        assert (comentario["editado"] is not None) == (comentario["texto"] == _guardado(texto))
 
 
 @then(_patron("en la subtarea {subtarea} de {tarea} ningún comentario está editado"))
@@ -361,14 +372,14 @@ def la_api_responde_sin_contenido(respuesta: Response) -> None:
 
 @then(_patron("los comentarios de la subtarea {subtarea} de {tarea} son {textos}"))
 def los_comentarios_son(cliente: TestClient, subtarea: str, tarea: str, textos: str) -> None:
-    assert [c["texto"] for c in _listar(cliente, tarea, subtarea)] == _lista(textos)
+    assert [c["texto"] for c in _listar(cliente, tarea, subtarea)] == _guardados(textos)
 
 
 @then(_patron("los comentarios de {tarea} son {textos}"))
 def los_comentarios_de_la_tarea_son(cliente: TestClient, tarea: str, textos: str) -> None:
     respuesta = cliente.get(f"{_TAREAS}/{_tarea(cliente, tarea)['id']}/comentarios")
     assert respuesta.status_code == 200
-    assert [c["texto"] for c in respuesta.json()] == _lista(textos)
+    assert [c["texto"] for c in respuesta.json()] == _guardados(textos)
 
 
 @then(_patron("al consultar las tareas la subtarea {subtarea} de {tarea} tiene {n} comentarios"))
@@ -383,7 +394,7 @@ def solo_quedan_en_la_base_de_datos(textos: str) -> None:
         filas = sesion.scalars(select(ComentarioSubtareaModelo.texto)).all()
     finally:
         sesion.close()
-    assert sorted(filas) == sorted(_lista(textos))
+    assert sorted(filas) == sorted(_guardados(textos))
 
 
 @then("la API rechaza la petición por datos inválidos")
@@ -456,5 +467,5 @@ def la_api_responde_comentario_de_tarea(
 ) -> None:
     id_tarea = _tarea(cliente, tarea)["id"]
     comentarios = cliente.get(f"{_TAREAS}/{id_tarea}/comentarios").json()
-    id_c = next(c["id"] for c in comentarios if c["texto"] == comentario)
+    id_c = next(c["id"] for c in comentarios if c["texto"] == _guardado(comentario))
     _comentario_inexistente(respuesta, _subtarea(cliente, tarea, subtarea)["id"], id_c)
