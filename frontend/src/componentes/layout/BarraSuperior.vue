@@ -4,7 +4,9 @@ import ConmutadorTema from './ConmutadorTema.vue'
 </script>
 
 <template>
-  <header class="border-border flex h-12 items-center justify-between border-b px-4">
+  <header
+    class="bg-card text-card-foreground border-border flex h-12 items-center justify-between border-b px-4 shadow-xs"
+  >
     <h1 class="text-sm font-semibold">Gestor de Tareas y Conocimiento Personal</h1>
     <div class="flex items-center gap-1">
       <BotonAyuda />

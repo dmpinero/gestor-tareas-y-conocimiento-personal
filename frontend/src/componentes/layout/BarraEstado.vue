@@ -17,7 +17,7 @@ onMounted(async () => {
 
 <template>
   <footer
-    class="bg-background border-border fixed inset-x-0 bottom-0 z-40 flex h-9 items-center justify-end gap-1 border-t px-3 text-xs"
+    class="bg-card border-border fixed inset-x-0 bottom-0 z-40 flex h-9 items-center justify-end gap-1 border-t px-3 text-xs"
   >
     <span v-if="version" class="text-muted-foreground">v{{ version }}</span>
   </footer>

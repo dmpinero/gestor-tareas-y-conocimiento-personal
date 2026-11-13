@@ -67,6 +67,16 @@ const sinResolver = computed(
   () => props.tarea.subtareas.filter((subtarea) => !subtarea.resuelta).length,
 )
 
+// Avance: subtareas resueltas sobre el total, como texto ("1/3 resueltas") y
+// como barra de progreso.
+const resueltas = computed(() => props.tarea.subtareas.length - sinResolver.value)
+const textoProgreso = computed(() => `${resueltas.value}/${props.tarea.subtareas.length} resueltas`)
+const porcentajeResueltas = computed(() =>
+  props.tarea.subtareas.length === 0
+    ? 0
+    : Math.round((resueltas.value / props.tarea.subtareas.length) * 100),
+)
+
 function textoOVacio(valor: string | number | null): string {
   return valor === null || valor === '' ? VACIO : String(valor)
 }
@@ -490,6 +500,30 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
       >
     </div>
 
+    <div
+      v-if="props.tarea.subtareas.length > 0"
+      data-testid="progreso-subtareas"
+      class="mb-3 flex items-center gap-3"
+    >
+      <div
+        role="progressbar"
+        aria-label="Subtareas resueltas"
+        aria-valuemin="0"
+        :aria-valuemax="props.tarea.subtareas.length"
+        :aria-valuenow="resueltas"
+        :aria-valuetext="textoProgreso"
+        class="bg-muted h-2 flex-1 overflow-hidden rounded-full"
+      >
+        <div
+          class="bg-success h-full rounded-full transition-[width]"
+          :style="{ width: `${porcentajeResueltas}%` }"
+        />
+      </div>
+      <span class="text-muted-foreground text-sm whitespace-nowrap tabular-nums">{{
+        textoProgreso
+      }}</span>
+    </div>
+
     <p v-if="props.tarea.subtareas.length === 0" class="text-muted-foreground text-sm">
       Esta tarea no tiene subtareas.
     </p>
@@ -545,7 +579,7 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
           <TableHead><span class="sr-only">Acciones</span></TableHead>
         </TableRow>
       </TableHeader>
-      <TableBody>
+      <TableBody class="[&_tr:nth-child(even)]:bg-muted/30">
         <template v-for="subtarea in props.tarea.subtareas" :key="subtarea.id">
           <TableRow>
             <TableCell v-if="idEditando === subtarea.id" colspan="4" class="whitespace-normal">

@@ -35,6 +35,12 @@ export const PILDORA_PRIORIDAD: Record<Exclude<ClavePrioridad, 'sin'>, string> =
 
 export const PILDORA_TIPO = 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200'
 
+// Píldoras de "Pendiente" y "Completada" en la cabecera del detalle: los mismos
+// colores que los grupos de la tabla (azul y verde).
+export const PILDORA_PENDIENTE = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'
+export const PILDORA_COMPLETADA =
+  'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+
 const PILDORA_ESTADO_INICIAL = 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
 const PILDORA_ESTADO_INTERMEDIO = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'
 const PILDORA_ESTADO_FINAL =

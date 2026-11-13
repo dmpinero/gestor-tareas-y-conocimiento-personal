@@ -10,7 +10,7 @@ import { RouterLink } from 'vue-router'
       <li>
         <RouterLink
           to="/ajustes/workflows"
-          class="hover:bg-accent focus-visible:ring-ring/50 flex items-center gap-3 rounded-lg border p-4 outline-none focus-visible:ring-[3px]"
+          class="bg-card hover:bg-accent focus-visible:ring-ring/50 flex items-center gap-3 rounded-lg border p-4 shadow-xs outline-none focus-visible:ring-[3px]"
         >
           <ListOrdered class="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
           <span class="flex-1">
@@ -25,7 +25,7 @@ import { RouterLink } from 'vue-router'
       <li>
         <RouterLink
           to="/ajustes/grupos-estados"
-          class="hover:bg-accent focus-visible:ring-ring/50 flex items-center gap-3 rounded-lg border p-4 outline-none focus-visible:ring-[3px]"
+          class="bg-card hover:bg-accent focus-visible:ring-ring/50 flex items-center gap-3 rounded-lg border p-4 shadow-xs outline-none focus-visible:ring-[3px]"
         >
           <Kanban class="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
           <span class="flex-1">
