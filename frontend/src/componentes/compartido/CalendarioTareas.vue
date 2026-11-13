@@ -185,7 +185,11 @@ const plantillaTareasDia = createReusableTemplate<{ dia: Dia }>()
     >
   </plantillaTareasDia.define>
 
-  <div ref="raiz" data-testid="calendario-tareas" class="mt-4 flex min-w-0 flex-col gap-3">
+  <div
+    ref="raiz"
+    data-testid="calendario-tareas"
+    class="bg-card text-card-foreground mt-4 flex min-w-0 flex-col gap-3 rounded-xl border p-4 shadow-xs"
+  >
     <div class="flex flex-wrap items-center gap-2">
       <h3
         id="titulo-calendario"

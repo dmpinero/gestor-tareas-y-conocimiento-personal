@@ -83,11 +83,22 @@ function modal(): HTMLElement {
   return elemento
 }
 
+// Texto que leen los lectores de pantalla: sin lo marcado como `aria-hidden`
+// (p. ej. las iniciales de los avatares). Los elementos de una lista se unen
+// con ", ".
+function textoAccesible(elemento: Element): string {
+  const copia = elemento.cloneNode(true) as Element
+  copia.querySelectorAll('[aria-hidden="true"]').forEach((oculto) => oculto.remove())
+  const elementos = [...copia.querySelectorAll('li')]
+  if (elementos.length > 0) return elementos.map((li) => li.textContent!.trim()).join(', ')
+  return copia.textContent!.trim()
+}
+
 // Pares término → valor de una lista de descripción.
 function paresDe(lista: Element): [string, string][] {
   return [...lista.querySelectorAll(':scope > div')].map((fila) => [
     fila.querySelector('dt')!.textContent!.trim(),
-    fila.querySelector('dd')!.textContent!.trim(),
+    textoAccesible(fila.querySelector('dd')!),
   ])
 }
 
@@ -95,6 +106,33 @@ function listaDe(id: string): Element {
   const lista = modal().querySelector(`dl[data-testid="${id}"]`)
   if (!lista) throw new Error(`No se encontró la lista "${id}"`)
   return lista
+}
+
+// Tarjetas con título de los campos de la tarea: título → pares de su lista.
+function tarjetasCampos(): [string, [string, string][]][] {
+  const campos = modal().querySelector('[data-testid="campos-tarea"]')
+  if (!campos) throw new Error('No se encontraron los campos de la tarea')
+  return [...campos.querySelectorAll(':scope > section')]
+    .filter((tarjeta) => tarjeta.querySelector('dl'))
+    .map((tarjeta) => [
+      tarjeta.querySelector('h3')!.textContent!.trim(),
+      paresDe(tarjeta.querySelector('dl')!),
+    ])
+}
+
+function titulosTarjetas(): string[] {
+  const campos = modal().querySelector('[data-testid="campos-tarea"]')!
+  return [...campos.querySelectorAll(':scope > section > h3')].map((h) => h.textContent!.trim())
+}
+
+function cabecera(): HTMLElement {
+  const elemento = modal().querySelector<HTMLElement>('[data-testid="cabecera-detalle"]')
+  if (!elemento) throw new Error('No se encontró la cabecera del detalle')
+  return elemento
+}
+
+function pildora(id: string): HTMLElement | null {
+  return cabecera().querySelector<HTMLElement>(`[data-testid="${id}"]`)
 }
 
 function botonCerrar(): HTMLButtonElement {
@@ -126,39 +164,121 @@ describe('DetalleTarea', () => {
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
   })
 
-  it('muestra todos los campos de la tarea con "—" en los vacíos y sin bloque de oportunidad', async () => {
+  it('muestra todos los campos de la tarea agrupados en tarjetas, con "—" en los vacíos y sin bloque de oportunidad', async () => {
     await montar(TAREA_SIN_TIPO)
 
     expect(modal().querySelector('h2')?.textContent?.trim()).toBe('Leer artículo')
-    expect(paresDe(listaDe('campos-tarea'))).toEqual([
-      ['Nombre', 'Leer artículo'],
-      ['Prioridad', '—'],
-      ['Descripción', 'Artículo\nsobre Vue'],
-      ['Etiquetas', '—'],
-      ['Asignado a', '—'],
-      ['Fecha de creación', '01/12/2026 17:05:09'],
-      ['Fecha de vencimiento', '—'],
-      ['Tipo', '—'],
-      ['Workflow', '—'],
-      ['Estado', 'Pendiente'],
-      ['Grupo de estados', '—'],
-      ['Estado del grupo', '—'],
+    expect(titulosTarjetas()).toEqual([
+      'Descripción',
+      'Planificación',
+      'Personas y etiquetas',
+      'Datos generales',
     ])
+    expect(tarjetasCampos()).toEqual([
+      [
+        'Planificación',
+        [
+          ['Fecha de creación', '01/12/2026 17:05:09'],
+          ['Fecha de vencimiento', '—'],
+          ['Prioridad', '—'],
+          ['Estado', 'Pendiente'],
+          ['Grupo de estados', '—'],
+          ['Estado del grupo', '—'],
+        ],
+      ],
+      [
+        'Personas y etiquetas',
+        [
+          ['Asignado a', '—'],
+          ['Etiquetas', '—'],
+        ],
+      ],
+      [
+        'Datos generales',
+        [
+          ['Nombre', 'Leer artículo'],
+          ['Tipo', '—'],
+          ['Workflow', '—'],
+        ],
+      ],
+    ])
+    // La descripción conserva sus saltos de línea.
+    const descripcion = modal().querySelector('[data-testid="descripcion-tarea"]')!
+    expect(descripcion.textContent).toBe('Artículo\nsobre Vue')
+    expect(descripcion.className).toContain('whitespace-pre-wrap')
     expect(modal().querySelector('[data-testid="campos-oportunidad"]')).toBeNull()
     expect(modal().textContent).not.toContain('Código')
+  })
+
+  it('sin descripción muestra "—" en su tarjeta', async () => {
+    await montar({ ...TAREA_SIN_TIPO, descripcion: '' })
+
+    expect(modal().querySelector('[data-testid="descripcion-tarea"]')?.textContent).toBe('—')
+  })
+
+  it('muestra las personas asignadas con su avatar y las etiquetas como píldoras', async () => {
+    await montar(TAREA_OPORTUNIDAD)
+
+    const personas = tarjetasCampos().find(([titulo]) => titulo === 'Personas y etiquetas')![1]
+    expect(personas).toEqual([
+      ['Asignado a', 'Ana, Luis'],
+      ['Etiquetas', 'Backend, Urgente'],
+    ])
+    const campos = modal().querySelector('[data-testid="campos-tarea"]')!
+    expect(
+      [...campos.querySelectorAll('[data-testid="avatar-persona"]')].map((a) => a.textContent),
+    ).toEqual(['AAna', 'LLuis'])
+    const etiquetas = [...campos.querySelectorAll('[data-testid="etiqueta-detalle"]')]
+    expect(etiquetas.map((e) => e.textContent?.trim())).toEqual(['Backend', 'Urgente'])
+    for (const etiqueta of etiquetas) expect(etiqueta.className).toContain('rounded-full')
+  })
+
+  describe('cabecera', () => {
+    it('muestra el nombre, las campanas y píldoras de prioridad, estado, tipo y vencimiento', async () => {
+      await montar({
+        ...TAREA_OPORTUNIDAD,
+        // Quedan menos de 48 h: una campana.
+        fecha_vencimiento: '2026-11-19T18:00:00',
+        grupo_estados: { id: 1, nombre: 'Desarrollo' },
+        estado: { id: 11, nombre: 'En curso' },
+      })
+
+      expect(cabecera().querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
+      expect(cabecera().querySelector('[data-aviso-vencimiento]')).not.toBeNull()
+      expect(pildora('pildora-prioridad')?.textContent?.trim()).toBe('Prioridad 2')
+      expect(pildora('pildora-prioridad')?.className).toContain('bg-orange-100')
+      expect(pildora('pildora-completado')?.textContent?.trim()).toBe('Pendiente')
+      expect(pildora('pildora-estado')?.textContent?.trim()).toBe('En curso')
+      expect(pildora('pildora-tipo')?.textContent?.trim()).toBe('Oportunidad')
+      expect(pildora('pildora-tipo')?.className).toContain('bg-violet-100')
+      const vencimiento = pildora('pildora-vencimiento')!
+      expect(vencimiento.querySelector('[data-testid="vencimiento-corto"]')).not.toBeNull()
+      expect(vencimiento.querySelector('[data-testid="contador-vencimiento"]')).not.toBeNull()
+    })
+
+    it('sin prioridad, tipo, estado del grupo ni vencimiento solo muestra si está pendiente o completada', async () => {
+      await montar({ ...TAREA_SIN_TIPO, completada: true })
+
+      expect(pildora('pildora-completado')?.textContent?.trim()).toBe('Completada')
+      expect(pildora('pildora-prioridad')).toBeNull()
+      expect(pildora('pildora-estado')).toBeNull()
+      expect(pildora('pildora-tipo')).toBeNull()
+      expect(pildora('pildora-vencimiento')).toBeNull()
+    })
   })
 
   it('muestra "Estado: Completada" si la tarea está completada', async () => {
     await montar({ ...TAREA_SIN_TIPO, completada: true })
 
-    expect(paresDe(listaDe('campos-tarea'))).toContainEqual(['Estado', 'Completada'])
-    expect(paresDe(listaDe('campos-tarea'))).not.toContainEqual(['Estado', 'Pendiente'])
+    const planificacion = tarjetasCampos().find(([titulo]) => titulo === 'Planificación')![1]
+    expect(planificacion).toContainEqual(['Estado', 'Completada'])
+    expect(planificacion).not.toContainEqual(['Estado', 'Pendiente'])
   })
 
   it('muestra el workflow de la tarea', async () => {
     await montar({ ...TAREA_SIN_TIPO, workflow: { id: 3, nombre: 'Altas' } })
 
-    expect(paresDe(listaDe('campos-tarea'))).toContainEqual(['Workflow', 'Altas'])
+    expect(tarjetasCampos().flatMap(([, pares]) => pares)).toContainEqual(['Workflow', 'Altas'])
   })
 
   it('muestra el grupo de estados de la tarea y su estado en el grupo', async () => {
@@ -168,7 +288,7 @@ describe('DetalleTarea', () => {
       estado: { id: 11, nombre: 'En curso' },
     })
 
-    const pares = paresDe(listaDe('campos-tarea'))
+    const pares = tarjetasCampos().flatMap(([, pares]) => pares)
     expect(pares).toContainEqual(['Grupo de estados', 'Desarrollo'])
     expect(pares).toContainEqual(['Estado del grupo', 'En curso'])
     // El estado de completado sigue aparte.
@@ -178,22 +298,26 @@ describe('DetalleTarea', () => {
   it('con tipo Oportunidad muestra su sección con todos sus campos', async () => {
     await montar(TAREA_OPORTUNIDAD)
 
-    expect(paresDe(listaDe('campos-tarea'))).toEqual([
-      ['Nombre', 'Escribir informe'],
-      ['Prioridad', '2'],
-      ['Descripción', 'Informe trimestral'],
-      ['Etiquetas', 'Backend, Urgente'],
-      ['Asignado a', 'Ana, Luis'],
+    expect(tarjetasCampos().flatMap(([, pares]) => pares)).toEqual([
       ['Fecha de creación', '10/11/2026 09:30:00'],
-      ['Fecha de vencimiento', '20/11/2026 18:00:00 Vence en 2 d 03 h 15 min 20 s'],
-      ['Tipo', 'Oportunidad'],
-      ['Workflow', '—'],
+      ['Fecha de vencimiento', '20/11/2026 18:00:00'],
+      ['Prioridad', '2'],
       ['Estado', 'Pendiente'],
       ['Grupo de estados', '—'],
       ['Estado del grupo', '—'],
+      ['Asignado a', 'Ana, Luis'],
+      ['Etiquetas', 'Backend, Urgente'],
+      ['Nombre', 'Escribir informe'],
+      ['Tipo', 'Oportunidad'],
+      ['Workflow', '—'],
     ])
+    expect(modal().querySelector('[data-testid="descripcion-tarea"]')?.textContent).toBe(
+      'Informe trimestral',
+    )
     const seccion = listaDe('campos-oportunidad')
-    expect(modal().querySelector('h3')?.textContent?.trim()).toBe('Oportunidad')
+    expect([...modal().querySelectorAll('h3')].map((h) => h.textContent?.trim())).toContain(
+      'Oportunidad',
+    )
     expect(paresDe(seccion)).toEqual([
       ['Código', 'OP-2026-01'],
       ['Descripción de la oportunidad', '—'],
@@ -204,10 +328,14 @@ describe('DetalleTarea', () => {
     expect(observaciones.className).toContain('whitespace-pre-wrap')
   })
 
-  it('junto a la fecha de vencimiento muestra la cuenta atrás, que avanza cada segundo', async () => {
+  it('en la cabecera, junto al vencimiento, muestra la cuenta atrás, que avanza cada segundo', async () => {
     await montar(TAREA_OPORTUNIDAD)
 
-    const contador = modal().querySelector('[data-testid="contador-vencimiento"]')
+    // Una sola cuenta atrás: la de la cabecera.
+    expect(modal().querySelectorAll('[data-testid="contador-vencimiento"]')).toHaveLength(1)
+    const contador = pildora('pildora-vencimiento')!.querySelector(
+      '[data-testid="contador-vencimiento"]',
+    )
     expect(contador?.textContent?.trim()).toBe('Vence en 2 d 03 h 15 min 20 s')
     expect(contador?.getAttribute('role')).toBe('timer')
 
@@ -314,7 +442,8 @@ describe('DetalleTarea', () => {
 
       const dialogo = document.body.querySelector('[role="dialog"]')!
       const contenido = dialogo.querySelector('[data-testid="detalle-contenido"]')!
-      expect(contenido.querySelector('h3')?.textContent).toContain('Subtareas')
+      const titulos = [...contenido.querySelectorAll('h3')].map((h) => h.textContent?.trim())
+      expect(titulos).toContain('Subtareas')
       const comentarios = dialogo.querySelector('[data-testid="columna-comentarios"]')!
       expect(comentarios.textContent).toContain('Comentarios')
       expect(comentarios.textContent).toContain('Primer comentario')

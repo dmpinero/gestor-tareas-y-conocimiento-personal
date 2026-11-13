@@ -525,6 +525,19 @@ describe('SubtareasTarea', () => {
       expect(cabeceras.slice(0, 3)).toEqual(['Nombre', 'Persona asignada', 'Prioridad'])
     })
 
+    it('muestra una barra de progreso con las subtareas resueltas ("n/m resueltas")', async () => {
+      const envoltorio = await montar()
+
+      const progreso = envoltorio.get('[data-testid="progreso-subtareas"]')
+      expect(progreso.text()).toBe('1/3 resueltas')
+      const barra = progreso.get('[role="progressbar"]')
+      expect(barra.attributes('aria-label')).toBe('Subtareas resueltas')
+      expect(barra.attributes('aria-valuemin')).toBe('0')
+      expect(barra.attributes('aria-valuemax')).toBe('3')
+      expect(barra.attributes('aria-valuenow')).toBe('1')
+      expect(barra.attributes('aria-valuetext')).toBe('1/3 resueltas')
+    })
+
     it('pinta cada subtarea en orden de alta con su persona y su prioridad, o una raya si no tiene', async () => {
       const envoltorio = await montar()
 
@@ -557,6 +570,7 @@ describe('SubtareasTarea', () => {
       expect(envoltorio.text()).toContain('Esta tarea no tiene subtareas.')
       expect(envoltorio.find('table').exists()).toBe(false)
       expect(envoltorio.find('[data-testid="contador-subtareas"]').text()).toBe('0 sin resolver')
+      expect(envoltorio.find('[data-testid="progreso-subtareas"]').exists()).toBe(false)
     })
   })
 

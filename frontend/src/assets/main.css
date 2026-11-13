@@ -3,7 +3,13 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Jerarquía de zonas: el lienzo (fondo de la aplicación) es el tono más
+   apagado; la barra lateral lleva un tinte propio, y las superficies (cabecera,
+   tarjetas, barra de herramientas, tabla y modales) destacan sobre el lienzo.
+   En modo oscuro se mantiene el orden: el lienzo es más oscuro que las
+   superficies. Todos los textos superan 4,5:1 (WCAG 2.1 AA) sobre cada zona. */
 :root {
+  --lienzo: oklch(0.962 0.004 264);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -14,29 +20,34 @@
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
+  /* Más oscuro que el lienzo para que las columnas del tablero y las cabeceras
+     de la tabla se distingan de él. */
+  --muted: oklch(0.945 0.005 264);
   /* 0.556 daba un contraste de 4.34:1 sobre --muted (insuficiente para WCAG
-     2.1 AA, que exige 4.5:1); axe-core lo detectó en las pestañas de Gestión. */
-  --muted-foreground: oklch(0.5 0 0);
+     2.1 AA, que exige 4.5:1); axe-core lo detectó en las pestañas de Gestión.
+     Con el --muted actual, 0.48 da 5,6:1 sobre él y 5,9:1 sobre el lienzo. */
+  --muted-foreground: oklch(0.48 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  /* 0.577 bajaba de 4,5:1 sobre el lienzo y las filas alternas de la tabla. */
+  --destructive: oklch(0.55 0.23 27.325);
   --success: var(--color-emerald-700);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.885 0.006 264);
+  --input: oklch(0.885 0.006 264);
   --ring: oklch(0.708 0 0);
-  --sidebar: oklch(0.985 0 0);
+  --sidebar: oklch(0.935 0.012 264);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.895 0.018 264);
   --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-border: oklch(0.87 0.01 264);
   --sidebar-ring: oklch(0.708 0 0);
   --radius: 0.625rem;
 }
 
 .dark {
+  --lienzo: oklch(0.12 0.004 264);
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -53,16 +64,16 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --success: var(--color-emerald-700);
-  --border: oklch(1 0 0 / 10%);
+  --border: oklch(1 0 0 / 13%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --sidebar: oklch(0.205 0 0);
+  --sidebar: oklch(0.175 0.008 264);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-border: oklch(1 0 0 / 13%);
   --sidebar-ring: oklch(0.556 0 0);
 }
 
@@ -89,6 +100,7 @@
 
 @theme inline {
   --animate-campana: campana 1.8s ease-in-out infinite;
+  --color-lienzo: var(--lienzo);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

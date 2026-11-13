@@ -1469,6 +1469,33 @@ describe('VistaTareas', () => {
       expect(colorDe('pendientes')).not.toBe(colorDe('completadas'))
     })
 
+    it('las filas de tareas de cada grupo alternan el fondo (cebra) para distinguirlas', async () => {
+      const tercera = { ...TAREAS[1], id: 4, nombre: 'Preparar reunión' }
+      const envoltorio = await montar([COMPLETADA, ...TAREAS, tercera])
+
+      const fondos = grupo(envoltorio, 'pendientes')
+        .findAll('tr[data-fila-tarea]')
+        .map((fila) => fila.classes().includes('bg-muted/40'))
+      expect(fondos).toEqual([false, true, false])
+      // Cada grupo empieza de nuevo por una fila sin fondo.
+      expect(grupo(envoltorio, 'completadas').get('tr[data-fila-tarea]').classes()).not.toContain(
+        'bg-muted/40',
+      )
+    })
+
+    it('la fila de cabecera de la tabla y la de cada grupo llevan fondo, el de cada grupo con su color', async () => {
+      const envoltorio = await montar([COMPLETADA, ...TAREAS])
+
+      expect(envoltorio.get('thead tr').classes()).toContain('bg-muted')
+      const fondoDe = (id: 'pendientes' | 'completadas') =>
+        grupo(envoltorio, id)
+          .findAll('tr')[0]!
+          .classes()
+          .filter((clase) => clase.startsWith('bg-'))
+      expect(fondoDe('pendientes')).toEqual(['bg-blue-50'])
+      expect(fondoDe('completadas')).toEqual(['bg-emerald-50'])
+    })
+
     it('ambos grupos empiezan desplegados; al pulsar la cabecera se pliega y se recuerda al volver', async () => {
       let envoltorio = await montar([COMPLETADA, ...TAREAS])
 

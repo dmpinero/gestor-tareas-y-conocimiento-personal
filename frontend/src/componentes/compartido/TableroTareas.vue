@@ -285,7 +285,7 @@ function terminarArrastre(): void {
             :aria-label="`Estado ${estado.nombre}`"
             :data-destino="idColumnaDestino === estado.id ? 'true' : undefined"
             :class="[
-              'bg-muted/60 relative flex w-72 shrink-0 flex-col rounded-lg',
+              'bg-muted relative flex w-72 shrink-0 flex-col rounded-lg border',
               idColumnaDestino === estado.id && 'ring-primary ring-2',
             ]"
             @dragover="alArrastrarSobre($event, estado)"

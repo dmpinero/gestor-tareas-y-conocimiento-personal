@@ -7,7 +7,7 @@ const props = defineProps<{ class?: string }>()
 <template>
   <main
     data-slot="sidebar-inset"
-    :class="cn('bg-background relative flex w-full min-w-0 flex-1 flex-col', props.class)"
+    :class="cn('bg-lienzo relative flex w-full min-w-0 flex-1 flex-col', props.class)"
   >
     <slot />
   </main>
