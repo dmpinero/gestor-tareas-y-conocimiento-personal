@@ -141,6 +141,10 @@ export interface PasoWorkflow {
   numero: number
   /** Entre 1 y 50 caracteres, sin espacios al principio ni al final. */
   nombre: string
+  /** Número de comentarios del paso. Se gestionan en
+   * `/workflows/{id}/pasos/{id_paso}/comentarios`, igual que los de las
+   * subtareas, y se copian a cada subtarea que nace del paso. */
+  comentarios: number
 }
 
 /**

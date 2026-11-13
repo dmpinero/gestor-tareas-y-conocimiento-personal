@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Pencil, Trash2 } from '@lucide/vue'
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  GripVertical,
+  MessageSquare,
+  Pencil,
+  Trash2,
+} from '@lucide/vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import type { PasoWorkflow, Workflow } from '@/api/tipos'
+import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vue'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
@@ -99,6 +108,30 @@ async function guardarPaso(workflow: Workflow, paso: PasoWorkflow): Promise<void
   errorEdicion.value = validarNombre(nombre, 'paso')
   if (errorEdicion.value) return
   if (await tienda.renombrarPaso(workflow.id, paso.id, nombre)) edicion.value = null
+}
+
+// --- Comentarios de cada paso ----------------------------------------------
+// Como en las subtareas: se despliegan bajo el paso, de uno en uno. El
+// histórico se carga y guarda en su propio componente; cuando cambia el número
+// de comentarios, el almacén ajusta el del paso para que el botón lo refleje.
+const idPasoComentarios = ref<number | null>(null)
+
+function idPanelComentarios(paso: PasoWorkflow): string {
+  return `comentarios-paso-${paso.id}`
+}
+
+function alternarComentarios(paso: PasoWorkflow): void {
+  idPasoComentarios.value = idPasoComentarios.value === paso.id ? null : paso.id
+}
+
+function alActualizarComentarios(workflow: Workflow, paso: PasoWorkflow, total: number): void {
+  tienda.fijarComentariosPaso(workflow.id, paso.id, total)
+}
+
+// Un paso no se arrastra mientras se renombra o tiene los comentarios
+// desplegados, para poder seleccionar el texto de sus campos.
+function arrastrable(paso: PasoWorkflow): boolean {
+  return !editando('paso', paso.id) && idPasoComentarios.value !== paso.id
 }
 
 // --- Eliminar, con confirmación --------------------------------------------
@@ -380,9 +413,9 @@ function esArrastrado(workflow: Workflow, indice: number): boolean {
             :key="paso.id"
             data-paso
             :data-destino="posicionDestino(workflow, indice)"
-            :draggable="editando('paso', paso.id) ? 'false' : 'true'"
+            :draggable="arrastrable(paso) ? 'true' : 'false'"
             :class="[
-              'bg-background flex items-center gap-2 rounded-md border p-2',
+              'bg-background grid gap-2 rounded-md border p-2',
               esArrastrado(workflow, indice) && 'opacity-50',
               posicionDestino(workflow, indice) === 'antes' && 'border-t-primary border-t-4',
               posicionDestino(workflow, indice) === 'despues' && 'border-b-primary border-b-4',
@@ -393,81 +426,116 @@ function esArrastrado(workflow: Workflow, indice: number): boolean {
             @drop="alSoltar($event, workflow, indice)"
             @dragend="terminarArrastre"
           >
-            <span data-asa class="text-muted-foreground cursor-grab px-1" aria-hidden="true">
-              <GripVertical class="size-4" />
-            </span>
-
-            <form
-              v-if="editando('paso', paso.id)"
-              :aria-label="`Renombrar paso ${paso.nombre} de ${workflow.nombre}`"
-              class="flex flex-1 flex-wrap items-center gap-2"
-              novalidate
-              @submit.prevent="guardarPaso(workflow, paso)"
-            >
-              <span class="tabular-nums">{{ paso.numero }}.</span>
-              <Input
-                :id="`nombre-paso-${paso.id}`"
-                v-model="nombreEditando"
-                class="min-w-0 flex-1"
-                required
-                :maxlength="LONGITUD_MAXIMA"
-                autocomplete="off"
-                :aria-label="`Nuevo nombre del paso ${paso.nombre} de ${workflow.nombre}`"
-                :aria-invalid="errorEdicion ? true : undefined"
-                @keydown.esc="cancelarEdicion"
-              />
-              <Button type="submit" size="sm">Guardar</Button>
-              <Button type="button" size="sm" variant="outline" @click="cancelarEdicion">
-                Cancelar
-              </Button>
-              <p v-if="errorEdicion" class="text-destructive w-full text-sm" role="alert">
-                {{ errorEdicion }}
-              </p>
-            </form>
-
-            <template v-else>
-              <span data-texto-paso class="min-w-0 flex-1 break-words">
-                {{ paso.numero }}. {{ paso.nombre }}
+            <div class="flex items-center gap-2">
+              <span data-asa class="text-muted-foreground cursor-grab px-1" aria-hidden="true">
+                <GripVertical class="size-4" />
               </span>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                :aria-label="`Subir paso ${paso.nombre} de ${workflow.nombre}`"
-                :disabled="indice === 0 || reordenando"
-                @click="mover(workflow, indice, indice - 1, 'Subir')"
-              >
-                <ArrowUp aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                :aria-label="`Bajar paso ${paso.nombre} de ${workflow.nombre}`"
-                :disabled="indice === workflow.pasos.length - 1 || reordenando"
-                @click="mover(workflow, indice, indice + 1, 'Bajar')"
-              >
-                <ArrowDown aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
+
+              <form
+                v-if="editando('paso', paso.id)"
                 :aria-label="`Renombrar paso ${paso.nombre} de ${workflow.nombre}`"
-                @click="empezarEdicion('paso', paso.id, paso.nombre)"
+                class="flex flex-1 flex-wrap items-center gap-2"
+                novalidate
+                @submit.prevent="guardarPaso(workflow, paso)"
               >
-                <Pencil aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                :aria-label="`Eliminar paso ${paso.nombre} de ${workflow.nombre}`"
-                @click="pedirEliminarPaso(workflow, paso)"
-              >
-                <Trash2 aria-hidden="true" />
-              </Button>
-            </template>
+                <span class="tabular-nums">{{ paso.numero }}.</span>
+                <Input
+                  :id="`nombre-paso-${paso.id}`"
+                  v-model="nombreEditando"
+                  class="min-w-0 flex-1"
+                  required
+                  :maxlength="LONGITUD_MAXIMA"
+                  autocomplete="off"
+                  :aria-label="`Nuevo nombre del paso ${paso.nombre} de ${workflow.nombre}`"
+                  :aria-invalid="errorEdicion ? true : undefined"
+                  @keydown.esc="cancelarEdicion"
+                />
+                <Button type="submit" size="sm">Guardar</Button>
+                <Button type="button" size="sm" variant="outline" @click="cancelarEdicion">
+                  Cancelar
+                </Button>
+                <p v-if="errorEdicion" class="text-destructive w-full text-sm" role="alert">
+                  {{ errorEdicion }}
+                </p>
+              </form>
+
+              <template v-else>
+                <span data-texto-paso class="min-w-0 flex-1 break-words">
+                  {{ paso.numero }}. {{ paso.nombre }}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="h-9 gap-1 px-2"
+                  :aria-expanded="idPasoComentarios === paso.id ? 'true' : 'false'"
+                  :aria-controls="idPanelComentarios(paso)"
+                  @click="alternarComentarios(paso)"
+                >
+                  <MessageSquare aria-hidden="true" />
+                  <!-- El número visible forma parte del nombre accesible (WCAG 2.5.3). -->
+                  <span class="sr-only">{{
+                    paso.comentarios > 0
+                      ? `Comentarios del paso ${paso.nombre} de ${workflow.nombre}: `
+                      : `Comentarios del paso ${paso.nombre} de ${workflow.nombre}`
+                  }}</span>
+                  <span v-if="paso.comentarios > 0" data-testid="numero-comentarios-paso">{{
+                    paso.comentarios
+                  }}</span>
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  :aria-label="`Subir paso ${paso.nombre} de ${workflow.nombre}`"
+                  :disabled="indice === 0 || reordenando"
+                  @click="mover(workflow, indice, indice - 1, 'Subir')"
+                >
+                  <ArrowUp aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  :aria-label="`Bajar paso ${paso.nombre} de ${workflow.nombre}`"
+                  :disabled="indice === workflow.pasos.length - 1 || reordenando"
+                  @click="mover(workflow, indice, indice + 1, 'Bajar')"
+                >
+                  <ArrowDown aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  :aria-label="`Renombrar paso ${paso.nombre} de ${workflow.nombre}`"
+                  @click="empezarEdicion('paso', paso.id, paso.nombre)"
+                >
+                  <Pencil aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  :aria-label="`Eliminar paso ${paso.nombre} de ${workflow.nombre}`"
+                  @click="pedirEliminarPaso(workflow, paso)"
+                >
+                  <Trash2 aria-hidden="true" />
+                </Button>
+              </template>
+            </div>
+
+            <div
+              v-if="idPasoComentarios === paso.id"
+              :id="idPanelComentarios(paso)"
+              data-testid="comentarios-paso"
+              class="border-t pt-2"
+            >
+              <ComentariosTarea
+                :ruta="`/workflows/${workflow.id}/pasos/${paso.id}/comentarios`"
+                :contexto="`del paso ${paso.nombre} de ${workflow.nombre}`"
+                @actualizados="(total) => alActualizarComentarios(workflow, paso, total)"
+              />
+            </div>
           </li>
         </ol>
 

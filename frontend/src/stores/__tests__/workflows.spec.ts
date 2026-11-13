@@ -24,8 +24,8 @@ const OPORTUNIDADES: Workflow = {
   id: 1,
   nombre: 'Workflow Oportunidades',
   pasos: [
-    { id: 10, numero: 1, nombre: 'Contacto inicial' },
-    { id: 11, numero: 2, nombre: 'Propuesta' },
+    { id: 10, numero: 1, nombre: 'Contacto inicial', comentarios: 0 },
+    { id: 11, numero: 2, nombre: 'Propuesta', comentarios: 0 },
   ],
 }
 const ALTAS: Workflow = { id: 2, nombre: 'Altas', pasos: [] }
@@ -110,7 +110,10 @@ describe('useTiendaWorkflows', () => {
 
   it('añade un paso con POST /workflows/{id}/pasos y reemplaza el workflow', async () => {
     const tienda = await tiendaCargada()
-    const conPaso: Workflow = { ...ALTAS, pasos: [{ id: 20, numero: 1, nombre: 'Alta' }] }
+    const conPaso: Workflow = {
+      ...ALTAS,
+      pasos: [{ id: 20, numero: 1, nombre: 'Alta', comentarios: 0 }],
+    }
     vi.mocked(clienteApi.crear).mockResolvedValue(conPaso)
 
     expect(await tienda.anadirPaso(2, 'Alta')).toBe(true)
@@ -122,7 +125,7 @@ describe('useTiendaWorkflows', () => {
     const tienda = await tiendaCargada()
     const renombrado: Workflow = {
       ...OPORTUNIDADES,
-      pasos: [OPORTUNIDADES.pasos[0]!, { id: 11, numero: 2, nombre: 'Oferta' }],
+      pasos: [OPORTUNIDADES.pasos[0]!, { id: 11, numero: 2, nombre: 'Oferta', comentarios: 0 }],
     }
     vi.mocked(clienteApi.actualizar).mockResolvedValue(renombrado)
 
@@ -135,7 +138,7 @@ describe('useTiendaWorkflows', () => {
     const tienda = await tiendaCargada()
     const sinPaso: Workflow = {
       ...OPORTUNIDADES,
-      pasos: [{ id: 11, numero: 1, nombre: 'Propuesta' }],
+      pasos: [{ id: 11, numero: 1, nombre: 'Propuesta', comentarios: 0 }],
     }
     vi.mocked(clienteApi.eliminar).mockResolvedValue(sinPaso)
 
@@ -148,7 +151,7 @@ describe('useTiendaWorkflows', () => {
     const tienda = await tiendaCargada()
     const sinPaso: Workflow = {
       ...OPORTUNIDADES,
-      pasos: [{ id: 11, numero: 1, nombre: 'Propuesta' }],
+      pasos: [{ id: 11, numero: 1, nombre: 'Propuesta', comentarios: 0 }],
     }
     vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
     vi.mocked(clienteApi.obtener).mockResolvedValue([sinPaso, ALTAS])
@@ -163,8 +166,8 @@ describe('useTiendaWorkflows', () => {
     vi.mocked(clienteApi.actualizar).mockResolvedValue({
       ...OPORTUNIDADES,
       pasos: [
-        { id: 10, numero: 2, nombre: 'Contacto inicial' },
-        { id: 11, numero: 1, nombre: 'Propuesta' },
+        { id: 10, numero: 2, nombre: 'Contacto inicial', comentarios: 0 },
+        { id: 11, numero: 1, nombre: 'Propuesta', comentarios: 0 },
       ],
     })
 
@@ -179,6 +182,26 @@ describe('useTiendaWorkflows', () => {
 
     expect(await tienda.reordenarPasos(1, [11, 10])).toBe(false)
     expect(tienda.error).toBe('Orden inválido')
+    expect(tienda.workflows).toEqual([OPORTUNIDADES, ALTAS])
+  })
+
+  it('fija el número de comentarios de un paso sin llamar a la API', async () => {
+    const tienda = await tiendaCargada()
+    vi.clearAllMocks()
+
+    tienda.fijarComentariosPaso(1, 11, 3)
+
+    expect(tienda.workflows[0]!.pasos.map((paso) => paso.comentarios)).toEqual([0, 3])
+    expect(tienda.workflows[1]).toEqual(ALTAS)
+    expect(clienteApi.obtener).not.toHaveBeenCalled()
+  })
+
+  it('ignora el número de comentarios de un paso que no existe', async () => {
+    const tienda = await tiendaCargada()
+
+    tienda.fijarComentariosPaso(1, 99, 3)
+    tienda.fijarComentariosPaso(99, 10, 3)
+
     expect(tienda.workflows).toEqual([OPORTUNIDADES, ALTAS])
   })
 })

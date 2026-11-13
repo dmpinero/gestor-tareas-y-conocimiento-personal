@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /**
- * Histórico de comentarios de una tarea o de una subtarea: lista cronológica
+ * Histórico de comentarios de una tarea, de una subtarea o de un paso de un
+ * workflow: lista cronológica
  * agrupada por día y un campo para añadir comentarios nuevos (también con
  * Ctrl/Cmd+Enter). Cada comentario se puede editar o eliminar en línea, con
  * confirmación.
  *
- * `ruta` es el recurso de la colección (`/tareas/5/comentarios` o
- * `/tareas/5/subtareas/9/comentarios`); carga sus datos al montarse y cada vez
+ * `ruta` es el recurso de la colección (`/tareas/5/comentarios`,
+ * `/tareas/5/subtareas/9/comentarios` o `/workflows/2/pasos/7/comentarios`); carga sus datos al montarse y cada vez
  * que cambia. `contexto` (p. ej. "de la subtarea Revisar") se añade a los
  * nombres accesibles para que no se repitan si hay varios históricos a la vez.
  * Emite `actualizados` con el número de comentarios tras cargarlos, añadir o
