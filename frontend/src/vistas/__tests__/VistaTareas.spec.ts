@@ -1,4 +1,4 @@
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -171,11 +171,37 @@ async function abrirPanel(envoltorio: VueWrapper): Promise<HTMLElement> {
   return panelActual()
 }
 
-async function abrirPanelEdicion(envoltorio: VueWrapper, nombre: string): Promise<HTMLElement> {
-  const boton = envoltorio.find(`button[aria-label="Editar tarea ${nombre}"]`)
-  if (!boton.exists()) throw new Error(`No se encontró el botón de editar de "${nombre}"`)
-  await boton.trigger('click')
+type AccionFila = 'Editar tarea' | 'Ver detalle de la tarea' | 'Eliminar la tarea'
+
+// Las acciones de cada fila están en su menú "⋯", que se teletransporta al `body`:
+// se abre el menú y se devuelve la opción con el nombre accesible "<acción> <nombre>".
+async function botonAccionFila(
+  envoltorio: VueWrapper,
+  nombre: string,
+  accion: AccionFila,
+): Promise<DOMWrapper<HTMLButtonElement>> {
+  const menu = envoltorio.find(`button[aria-label="Acciones de la tarea ${nombre}"]`)
+  if (!menu.exists()) throw new Error(`No se encontró el menú de acciones de "${nombre}"`)
+  await menu.trigger('click')
   await flushPromises()
+  const boton = document.body.querySelector<HTMLButtonElement>(
+    `[data-slot="popover-content"] button[aria-label="${accion} ${nombre}"]`,
+  )
+  if (!boton) throw new Error(`No se encontró "${accion} ${nombre}" en el menú`)
+  return new DOMWrapper(boton)
+}
+
+async function pulsarAccionFila(
+  envoltorio: VueWrapper,
+  nombre: string,
+  accion: AccionFila,
+): Promise<void> {
+  await (await botonAccionFila(envoltorio, nombre, accion)).trigger('click')
+  await flushPromises()
+}
+
+async function abrirPanelEdicion(envoltorio: VueWrapper, nombre: string): Promise<HTMLElement> {
+  await pulsarAccionFila(envoltorio, nombre, 'Editar tarea')
   return panelActual()
 }
 
@@ -957,30 +983,56 @@ describe('VistaTareas', () => {
   })
 
   describe('acciones de la fila', () => {
-    it('"Editar" y "Detalle" son iconos con nombre accesible y title', async () => {
+    it('cada fila tiene un único menú "⋯" con Editar, Ver detalle y Eliminar, que conservan su nombre accesible', async () => {
       const envoltorio = await montar()
 
-      const editar = envoltorio.find('button[aria-label="Editar tarea Escribir informe"]')
-      expect(editar.attributes('title')).toBe('Editar')
-      expect(editar.text()).toBe('')
-      expect(editar.find('svg').exists()).toBe(true)
-      const detalle = envoltorio.find(
-        'button[aria-label="Ver detalle de la tarea Escribir informe"]',
-      )
-      expect(detalle.attributes('title')).toBe('Detalle')
-      expect(detalle.text()).toBe('')
-      expect(detalle.find('svg').exists()).toBe(true)
+      const menu = envoltorio.get('button[aria-label="Acciones de la tarea Escribir informe"]')
+      expect(menu.attributes('title')).toBe('Acciones')
+      expect(menu.attributes('aria-haspopup')).toBe('dialog')
+      expect(menu.text()).toBe('')
+      expect(menu.find('svg').exists()).toBe(true)
       expect(
-        envoltorio.find('button[aria-label="Ver detalle de la tarea Leer artículo"]').exists(),
+        envoltorio.find('button[aria-label="Acciones de la tarea Leer artículo"]').exists(),
       ).toBe(true)
+      // Las acciones ya no son botones sueltos en la fila.
+      expect(envoltorio.find('button[aria-label="Editar tarea Escribir informe"]').exists()).toBe(
+        false,
+      )
+
+      await menu.trigger('click')
+      await flushPromises()
+      const opciones = [
+        ...document.body.querySelectorAll<HTMLButtonElement>(
+          '[data-slot="popover-content"] button',
+        ),
+      ]
+      expect(opciones.map((opcion) => opcion.getAttribute('aria-label'))).toEqual([
+        'Editar tarea Escribir informe',
+        'Ver detalle de la tarea Escribir informe',
+        'Eliminar la tarea Escribir informe',
+      ])
+      expect(opciones.map((opcion) => opcion.textContent?.trim())).toEqual([
+        'Editar',
+        'Ver detalle',
+        'Eliminar',
+      ])
+    })
+
+    it('al elegir una acción se cierra el menú', async () => {
+      const envoltorio = await montar()
+
+      await pulsarAccionFila(envoltorio, 'Escribir informe', 'Ver detalle de la tarea')
+
+      expect(
+        document.body.querySelector('button[aria-label="Editar tarea Escribir informe"]'),
+      ).toBeNull()
+      expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
     })
 
     it('"Detalle" abre la modal con todos los campos de esa tarea y se cierra con "Cerrar"', async () => {
       const envoltorio = await montar([TAREA_OPORTUNIDAD, TAREAS[1]])
 
-      await envoltorio
-        .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
-        .trigger('click')
+      await pulsarAccionFila(envoltorio, 'Escribir informe', 'Ver detalle de la tarea')
       await flushPromises()
 
       const modal = panelActual()
@@ -1000,9 +1052,7 @@ describe('VistaTareas', () => {
     it('la modal de detalle se cierra con Escape', async () => {
       const envoltorio = await montar()
 
-      await envoltorio
-        .find('button[aria-label="Ver detalle de la tarea Leer artículo"]')
-        .trigger('click')
+      await pulsarAccionFila(envoltorio, 'Leer artículo', 'Ver detalle de la tarea')
       await flushPromises()
       expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Leer artículo')
 
@@ -1013,7 +1063,9 @@ describe('VistaTareas', () => {
 
     describe('completar tarea', () => {
       function botonCompletar(envoltorio: VueWrapper, nombre: string) {
-        return envoltorio.get(`button[aria-label="Marcar como completada la tarea ${nombre}"]`)
+        return envoltorio.get(
+          `[role="checkbox"][aria-label="Marcar como completada la tarea ${nombre}"]`,
+        )
       }
 
       function celdasDatos(envoltorio: VueWrapper, fila: number) {
@@ -1026,30 +1078,29 @@ describe('VistaTareas', () => {
         return celdas[celdas.length - 1]!
       }
 
-      it('junto a "Detalle" hay un icono sin pulsar con nombre accesible y title "Pendiente"', async () => {
+      it('al inicio de la fila hay una casilla sin marcar con nombre accesible y title "Pendiente"', async () => {
         const envoltorio = await montar()
 
-        const botones = celdaAcciones(envoltorio, 0).findAll('button')
-        expect(botones.map((boton) => boton.attributes('aria-label'))).toEqual([
-          'Editar tarea Escribir informe',
-          'Ver detalle de la tarea Escribir informe',
-          'Marcar como completada la tarea Escribir informe',
-          'Eliminar la tarea Escribir informe',
-        ])
+        const primeraCelda = envoltorio.findAll('tbody tr')[0]!.findAll('td')[0]!
         const completar = botonCompletar(envoltorio, 'Escribir informe')
-        expect(completar.attributes('aria-pressed')).toBe('false')
+        expect(primeraCelda.element.firstElementChild?.contains(completar.element)).toBe(true)
+        expect(primeraCelda.text()).toBe('Escribir informe')
+        expect(completar.attributes('aria-checked')).toBe('false')
         expect(completar.attributes('title')).toBe('Pendiente')
-        expect(completar.text()).toBe('')
-        expect(completar.find('svg').classes()).toContain('lucide-circle')
+        // La celda de acciones solo tiene el menú.
+        expect(
+          celdaAcciones(envoltorio, 0)
+            .findAll('button')
+            .map((boton) => boton.attributes('aria-label')),
+        ).toEqual(['Acciones de la tarea Escribir informe'])
       })
 
-      it('una tarea completada muestra el icono pulsado con title "Completada"', async () => {
+      it('una tarea completada muestra la casilla marcada con title "Completada"', async () => {
         const envoltorio = await montar([{ ...TAREAS[0], completada: true }])
 
         const completar = botonCompletar(envoltorio, 'Escribir informe')
-        expect(completar.attributes('aria-pressed')).toBe('true')
+        expect(completar.attributes('aria-checked')).toBe('true')
         expect(completar.attributes('title')).toBe('Completada')
-        expect(completar.find('svg').classes()).toContain('lucide-circle-check')
       })
 
       it('tacha las celdas de datos solo de las tareas completadas, cuenta atrás incluida, y nunca los botones', async () => {
@@ -1084,7 +1135,7 @@ describe('VistaTareas', () => {
         expect(clienteApi.parchear).toHaveBeenLastCalledWith('/tareas/1/completada', {
           completada: true,
         })
-        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-pressed')).toBe(
+        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-checked')).toBe(
           'true',
         )
         expect(celdasDatos(envoltorio, 0)[0]!.classes()).toContain('line-through')
@@ -1095,7 +1146,7 @@ describe('VistaTareas', () => {
         expect(clienteApi.parchear).toHaveBeenLastCalledWith('/tareas/1/completada', {
           completada: false,
         })
-        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-pressed')).toBe(
+        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-checked')).toBe(
           'false',
         )
         expect(celdasDatos(envoltorio, 0)[0]!.classes()).not.toContain('line-through')
@@ -1110,7 +1161,7 @@ describe('VistaTareas', () => {
         await flushPromises()
 
         expect(envoltorio.get('[role="alert"]').text()).toBe('Tarea no encontrada')
-        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-pressed')).toBe(
+        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-checked')).toBe(
           'false',
         )
         expect(celdasDatos(envoltorio, 0)[0]!.classes()).not.toContain('line-through')
@@ -1119,9 +1170,7 @@ describe('VistaTareas', () => {
       it('la modal de detalle muestra el estado de la tarea', async () => {
         const envoltorio = await montar([{ ...TAREAS[0], completada: true }])
 
-        await envoltorio
-          .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
-          .trigger('click')
+        await pulsarAccionFila(envoltorio, 'Escribir informe', 'Ver detalle de la tarea')
         await flushPromises()
 
         expect(panelActual().textContent).toContain('EstadoCompletada')
@@ -1130,9 +1179,7 @@ describe('VistaTareas', () => {
 
     describe('avance de las subtareas', () => {
       async function abrirDetalle(envoltorio: VueWrapper): Promise<HTMLElement> {
-        await envoltorio
-          .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
-          .trigger('click')
+        await pulsarAccionFila(envoltorio, 'Escribir informe', 'Ver detalle de la tarea')
         await flushPromises()
         return panelActual()
       }
@@ -1179,9 +1226,11 @@ describe('VistaTareas', () => {
 
     describe('eliminar tarea', () => {
       function botonEliminar(envoltorio: VueWrapper, nombre: string) {
-        const boton = envoltorio.find(`button[aria-label="Eliminar la tarea ${nombre}"]`)
-        if (!boton.exists()) throw new Error(`No se encontró el botón de eliminar de "${nombre}"`)
-        return boton
+        return botonAccionFila(envoltorio, nombre, 'Eliminar la tarea')
+      }
+
+      function botonMenu(envoltorio: VueWrapper, nombre: string) {
+        return envoltorio.get(`button[aria-label="Acciones de la tarea ${nombre}"]`)
       }
 
       function confirmacion(): HTMLElement {
@@ -1198,21 +1247,19 @@ describe('VistaTareas', () => {
         return boton
       }
 
-      it('cada fila tiene un botón con icono "Eliminar la tarea X"', async () => {
+      it('el menú de cada fila tiene la opción "Eliminar la tarea X"', async () => {
         const envoltorio = await montar()
 
-        const eliminar = botonEliminar(envoltorio, 'Escribir informe')
-        expect(eliminar.attributes('title')).toBe('Eliminar')
-        expect(eliminar.text()).toBe('')
+        const eliminar = await botonEliminar(envoltorio, 'Escribir informe')
+        expect(eliminar.text()).toBe('Eliminar')
         expect(eliminar.find('svg').exists()).toBe(true)
-        expect(botonEliminar(envoltorio, 'Leer artículo').exists()).toBe(true)
       })
 
       it('desde la lista pide confirmación y al confirmar la elimina y lleva el foco a la siguiente fila', async () => {
         vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
         const envoltorio = await montar()
 
-        await botonEliminar(envoltorio, 'Escribir informe').trigger('click')
+        await (await botonEliminar(envoltorio, 'Escribir informe')).trigger('click')
         await flushPromises()
 
         const dialogo = confirmacion()
@@ -1232,7 +1279,7 @@ describe('VistaTareas', () => {
         expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
         expect(filasTabla(envoltorio).map((fila) => fila[0])).toEqual(['Leer artículo'])
         expect(document.activeElement?.getAttribute('aria-label')).toBe(
-          'Eliminar la tarea Leer artículo',
+          'Acciones de la tarea Leer artículo',
         )
       })
 
@@ -1240,7 +1287,7 @@ describe('VistaTareas', () => {
         vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
         const envoltorio = await montar([TAREAS[0]])
 
-        await botonEliminar(envoltorio, 'Escribir informe').trigger('click')
+        await (await botonEliminar(envoltorio, 'Escribir informe')).trigger('click')
         await flushPromises()
         botonDe(confirmacion(), 'Eliminar').click()
         await flushPromises()
@@ -1250,10 +1297,10 @@ describe('VistaTareas', () => {
         expect(document.activeElement?.textContent?.trim()).toBe('Tareas')
       })
 
-      it('"Cancelar" cierra la confirmación sin eliminar y devuelve el foco al botón', async () => {
+      it('"Cancelar" cierra la confirmación sin eliminar y devuelve el foco al menú de la fila', async () => {
         const envoltorio = await montar()
-        const eliminar = botonEliminar(envoltorio, 'Escribir informe')
-        ;(eliminar.element as HTMLButtonElement).focus()
+        const eliminar = await botonEliminar(envoltorio, 'Escribir informe')
+        eliminar.element.focus()
 
         await eliminar.trigger('click')
         await flushPromises()
@@ -1263,14 +1310,14 @@ describe('VistaTareas', () => {
         expect(clienteApi.eliminar).not.toHaveBeenCalled()
         expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
         expect(filasTabla(envoltorio)).toHaveLength(2)
-        expect(document.activeElement).toBe(eliminar.element)
+        expect(document.activeElement).toBe(botonMenu(envoltorio, 'Escribir informe').element)
       })
 
       it('si la API falla muestra el error en la confirmación y conserva la tarea', async () => {
         vi.mocked(clienteApi.eliminar).mockRejectedValue(new Error('Tarea no encontrada'))
         const envoltorio = await montar()
 
-        await botonEliminar(envoltorio, 'Escribir informe').trigger('click')
+        await (await botonEliminar(envoltorio, 'Escribir informe')).trigger('click')
         await flushPromises()
         botonDe(confirmacion(), 'Eliminar').click()
         await flushPromises()
@@ -1284,9 +1331,7 @@ describe('VistaTareas', () => {
       it('desde el detalle pide confirmación; cancelar mantiene el detalle y confirmar lo cierra', async () => {
         vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
         const envoltorio = await montar()
-        await envoltorio
-          .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
-          .trigger('click')
+        await pulsarAccionFila(envoltorio, 'Escribir informe', 'Ver detalle de la tarea')
         await flushPromises()
 
         const detalle = panelActual()
@@ -1317,7 +1362,7 @@ describe('VistaTareas', () => {
         expect(filasTabla(envoltorio).map((fila) => fila[0])).toEqual(['Leer artículo'])
         expect(document.activeElement).not.toBe(document.body)
         expect(document.activeElement?.getAttribute('aria-label')).toBe(
-          'Eliminar la tarea Leer artículo',
+          'Acciones de la tarea Leer artículo',
         )
       })
     })
@@ -1716,38 +1761,90 @@ describe('VistaTareas', () => {
       })
     }
 
-    it('muestra el panel "Filtros" abierto por defecto y se puede contraer', async () => {
+    function botonFiltrar(envoltorio: VueWrapper) {
+      const boton = envoltorio.findAll('button').find((b) => b.text() === 'Filtrar')
+      if (!boton) throw new Error('No se encontró el botón "Filtrar"')
+      return boton
+    }
+
+    // Monta la vista y despliega el panel de filtros, que empieza plegado.
+    async function montarConFiltros(tareas: unknown[]): Promise<VueWrapper> {
+      const envoltorio = await montar(tareas)
+      await botonFiltrar(envoltorio).trigger('click')
+      await flushPromises()
+      return envoltorio
+    }
+
+    it('muestra una barra de una línea con Buscar, Persona, Filtrar, Columnas y exportar', async () => {
       const envoltorio = await montar(TAREAS_FILTRO)
 
-      const boton = disparador(envoltorio, 'Contraer filtros')
-      expect(boton.text()).toBe('Filtros')
+      const barra = envoltorio.get('[data-testid="barra-tareas"]')
+      const controles = [
+        barra.get('#filtro-buscar'),
+        barra.get('button[aria-label^="Filtrar por persona: "]'),
+        botonFiltrar(envoltorio),
+        barra.get('button[aria-label="Elegir columnas visibles"]'),
+        barra.get('button[aria-label="Exportar a Excel"]'),
+        barra.get('button[aria-label="Exportar a PDF"]'),
+      ]
+      // En el orden del documento.
+      for (let i = 1; i < controles.length; i++) {
+        const posicion = controles[i - 1]!.element.compareDocumentPosition(controles[i]!.element)
+        expect(posicion & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      }
+      expect(barra.classes()).toContain('flex')
+    })
+
+    it('el panel de filtros empieza plegado y "Filtrar" lo despliega y lo pliega', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      const boton = botonFiltrar(envoltorio)
+      expect(boton.attributes('aria-expanded')).toBe('false')
+      expect(envoltorio.find('#filtro-creacion-desde').exists()).toBe(false)
+      // El buscador está en la barra, siempre visible.
       expect(envoltorio.find('#filtro-buscar').exists()).toBe(true)
 
       await boton.trigger('click')
       await flushPromises()
+      expect(botonFiltrar(envoltorio).attributes('aria-expanded')).toBe('true')
+      expect(envoltorio.find('#filtro-creacion-desde').exists()).toBe(true)
+      for (const nombre of [
+        'Filtrar por prioridad',
+        'Filtrar por etiquetas',
+        'Filtrar por asignado a',
+        'Filtrar por tipo',
+      ]) {
+        expect(disparador(envoltorio, nombre).exists()).toBe(true)
+      }
+      expect(envoltorio.find('#filtro-estado-titulo').exists()).toBe(true)
 
-      expect(disparador(envoltorio, 'Expandir filtros').exists()).toBe(true)
-      // "Limpiar filtros" queda en la barra, visible aunque se pliegue; el buscador
-      // está dentro del panel, en su propia línea bajo el Estado.
-      expect(envoltorio.find('#filtro-buscar').exists()).toBe(false)
-      expect(envoltorio.findAll('button').some((b) => b.text() === 'Limpiar filtros')).toBe(true)
+      await botonFiltrar(envoltorio).trigger('click')
+      await flushPromises()
       expect(envoltorio.find('#filtro-creacion-desde').exists()).toBe(false)
       expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
     })
 
-    it('coloca el buscador en una línea propia bajo la fila del Estado', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+    it('"Persona" es un atajo del filtro "Asignado a"', async () => {
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
-      const filaEstado = envoltorio.find('#filtro-estado-titulo').element.closest('.grid')
-      const filaBuscar = envoltorio.find('#filtro-buscar').element.closest('[data-fila="buscar"]')
-      expect(filaEstado).not.toBeNull()
-      expect(filaBuscar).not.toBeNull()
-      expect(filaEstado!.contains(filaBuscar)).toBe(false)
-      expect(filaEstado!.nextElementSibling).toBe(filaBuscar)
+      expect(disparador(envoltorio, 'Filtrar por persona').text()).toBe('Todas las personas')
+      await alternar(envoltorio, 'Filtrar por persona', 'Sin asignar')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Revisar código'])
+      // Es el mismo filtro: el del panel refleja el cambio.
+      expect(disparador(envoltorio, 'Filtrar por asignado a').text()).toBe('2 personas')
+    })
+
+    it('"Limpiar filtros" solo aparece en la barra con algún filtro activo', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+      const limpiar = () => envoltorio.findAll('button').find((b) => b.text() === 'Limpiar filtros')
+
+      expect(limpiar()).toBeUndefined()
+      await escribir(entrada(envoltorio, 'filtro-buscar'), 'café')
+      expect(limpiar()).toBeDefined()
     })
 
     it('el botón "Filtros" indica cuántos filtros hay activos', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
       const contador = () => envoltorio.find('[data-testid="filtros-activos"]')
 
       expect(contador().exists()).toBe(false)
@@ -1764,7 +1861,7 @@ describe('VistaTareas', () => {
     })
 
     it('agrupa las fechas por tipo con "Desde" y "Hasta" visibles', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       const grupos = envoltorio.findAll('fieldset').map((f) => f.get('legend').text())
       expect(grupos).toEqual(expect.arrayContaining(['Fecha de creación', 'Fecha de vencimiento']))
@@ -1780,7 +1877,7 @@ describe('VistaTareas', () => {
     })
 
     it('todos los controles del panel tienen nombre accesible', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       const etiquetas = new Map(
         envoltorio.findAll('label[for]').map((l) => [l.attributes('for'), l.text()]),
@@ -1805,7 +1902,7 @@ describe('VistaTareas', () => {
     })
 
     it('busca en nombre y descripción sin distinguir mayúsculas ni acentos', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       await escribir(entrada(envoltorio, 'filtro-buscar'), 'angela')
       expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código'])
@@ -1815,7 +1912,7 @@ describe('VistaTareas', () => {
     })
 
     it('filtra por prioridad, incluida la opción "Sin prioridad"', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       await conDesplegable(envoltorio, 'Filtrar por prioridad', () => {
         const opciones = [
@@ -1831,7 +1928,7 @@ describe('VistaTareas', () => {
     })
 
     it('filtra por etiquetas: pasa si tiene alguna marcada o, sin etiquetas, si "Sin etiquetas" lo está', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       await alternar(envoltorio, 'Filtrar por etiquetas', 'Urgente')
       expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
@@ -1844,7 +1941,7 @@ describe('VistaTareas', () => {
     })
 
     it('filtra por asignado a, incluida la opción "Sin asignar"', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       await alternar(envoltorio, 'Filtrar por asignado a', 'Sin asignar')
       expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión', 'Revisar código'])
@@ -1854,7 +1951,7 @@ describe('VistaTareas', () => {
     })
 
     it('filtra por fecha de creación con ambos extremos incluidos por día', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       await escribir(entrada(envoltorio, 'filtro-creacion-desde'), '2026-03-11')
       expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código', 'Comprar café'])
@@ -1867,7 +1964,7 @@ describe('VistaTareas', () => {
     })
 
     it('filtra por fecha de vencimiento con ambos extremos incluidos y excluye las tareas sin vencimiento', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       await escribir(entrada(envoltorio, 'filtro-vencimiento-desde'), '2026-03-16')
       expect(nombresEnTabla(envoltorio)).toEqual(['Comprar café'])
@@ -1881,7 +1978,7 @@ describe('VistaTareas', () => {
     })
 
     it('"Limpiar filtros" restablece todos los filtros', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
       await escribir(entrada(envoltorio, 'filtro-buscar'), 'zzz')
       await escribir(entrada(envoltorio, 'filtro-creacion-desde'), '2026-03-11')
       await escribir(entrada(envoltorio, 'filtro-creacion-hasta'), '2026-03-11')
@@ -1911,7 +2008,7 @@ describe('VistaTareas', () => {
     })
 
     it('sin coincidencias muestra "Ninguna tarea coincide con los filtros." en lugar de la tabla', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
       await escribir(entrada(envoltorio, 'filtro-buscar'), 'zzz')
 
@@ -1921,14 +2018,14 @@ describe('VistaTareas', () => {
     })
 
     it('sin tareas muestra solo "Todavía no hay tareas."', async () => {
-      const envoltorio = await montar([])
+      const envoltorio = await montarConFiltros([])
 
       expect(envoltorio.text()).toContain('Todavía no hay tareas.')
       expect(envoltorio.text()).not.toContain('Ninguna tarea coincide con los filtros.')
     })
 
     it('ordena solo las filas filtradas', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
       await alternar(envoltorio, 'Filtrar por prioridad', '1')
 
       const cabecera = envoltorio.findAll('th button').find((b) => b.text() === 'Nombre')!
@@ -1939,7 +2036,7 @@ describe('VistaTareas', () => {
     })
 
     it('exporta solo las filas filtradas', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
       await escribir(entrada(envoltorio, 'filtro-buscar'), 'cafe')
 
       await disparador(envoltorio, 'Exportar a Excel').trigger('click')
@@ -1949,7 +2046,7 @@ describe('VistaTareas', () => {
     })
 
     it('al recargar los catálogos marca los nombres nuevos y conserva los desmarcados', async () => {
-      const envoltorio = await montar(TAREAS_FILTRO)
+      const envoltorio = await montarConFiltros(TAREAS_FILTRO)
       await alternar(envoltorio, 'Filtrar por etiquetas', 'Urgente')
       await alternar(envoltorio, 'Filtrar por asignado a', 'Luis')
       vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
@@ -1977,7 +2074,7 @@ describe('VistaTareas', () => {
     })
 
     it('filtra por tipo, incluida la opción "Sin tipo"', async () => {
-      const envoltorio = await montar([
+      const envoltorio = await montarConFiltros([
         { ...TAREAS_FILTRO[0], tipo: 'oportunidad', oportunidad: OPORTUNIDAD },
         TAREAS_FILTRO[1],
         TAREAS_FILTRO[2],
@@ -2022,7 +2119,7 @@ describe('VistaTareas', () => {
       }
 
       it('por defecto muestra todas las tareas, completadas o no', async () => {
-        const envoltorio = await montar(CON_COMPLETADA)
+        const envoltorio = await montarConFiltros(CON_COMPLETADA)
 
         expect(envoltorio.get('#filtro-estado-titulo').text()).toBe('Estado')
         expect((opcionEstado(envoltorio, 'Todas').element as HTMLInputElement).checked).toBe(true)
@@ -2036,7 +2133,7 @@ describe('VistaTareas', () => {
       })
 
       it('"Completadas" muestra solo las tareas completadas', async () => {
-        const envoltorio = await montar(CON_COMPLETADA)
+        const envoltorio = await montarConFiltros(CON_COMPLETADA)
 
         await opcionEstado(envoltorio, 'Completadas').setValue(true)
         await flushPromises()
@@ -2045,7 +2142,7 @@ describe('VistaTareas', () => {
       })
 
       it('"No completadas" muestra solo las tareas sin completar', async () => {
-        const envoltorio = await montar(CON_COMPLETADA)
+        const envoltorio = await montarConFiltros(CON_COMPLETADA)
 
         await opcionEstado(envoltorio, 'No completadas').setValue(true)
         await flushPromises()
@@ -2054,7 +2151,7 @@ describe('VistaTareas', () => {
       })
 
       it('se combina con los demás filtros', async () => {
-        const envoltorio = await montar(CON_COMPLETADA)
+        const envoltorio = await montarConFiltros(CON_COMPLETADA)
 
         await opcionEstado(envoltorio, 'No completadas').setValue(true)
         await escribir(entrada(envoltorio, 'filtro-buscar'), 'café')
@@ -2063,7 +2160,7 @@ describe('VistaTareas', () => {
       })
 
       it('"Limpiar filtros" vuelve a "Todas"', async () => {
-        const envoltorio = await montar(CON_COMPLETADA)
+        const envoltorio = await montarConFiltros(CON_COMPLETADA)
         await opcionEstado(envoltorio, 'Completadas').setValue(true)
         await flushPromises()
 
@@ -3107,9 +3204,7 @@ describe('VistaTareas', () => {
     }
 
     async function abrirDetalle(envoltorio: VueWrapper, nombre: string): Promise<HTMLElement> {
-      await envoltorio
-        .find(`button[aria-label="Ver detalle de la tarea ${nombre}"]`)
-        .trigger('click')
+      await pulsarAccionFila(envoltorio, nombre, 'Ver detalle de la tarea')
       await flushPromises()
       return panelActual()
     }
@@ -3323,9 +3418,7 @@ describe('VistaTareas', () => {
     it('en el detalle se pulsan las etiquetas, las personas y la persona de una subtarea', async () => {
       const envoltorio = await montar([TAREAS[0], CON_SUBTAREA_DE_ANA])
 
-      await envoltorio
-        .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
-        .trigger('click')
+      await pulsarAccionFila(envoltorio, 'Escribir informe', 'Ver detalle de la tarea')
       await flushPromises()
       const detalle = dialogoTitulado('Escribir informe')
       const campos = detalle.querySelector('[data-testid="campos-tarea"]')
@@ -3340,9 +3433,7 @@ describe('VistaTareas', () => {
       ])
 
       // Se cambia al detalle de la otra tarea para pulsar la persona de su subtarea.
-      await envoltorio
-        .find('button[aria-label="Ver detalle de la tarea Leer artículo"]')
-        .trigger('click')
+      await pulsarAccionFila(envoltorio, 'Leer artículo', 'Ver detalle de la tarea')
       await flushPromises()
       dialogoTitulado('Leer artículo')
         .querySelector<HTMLButtonElement>('button[aria-label="Ver tareas y subtareas de Ana"]')

@@ -1,17 +1,5 @@
 <script setup lang="ts">
-import {
-  CalendarDays,
-  ChevronRight,
-  Circle,
-  CircleCheck,
-  Columns3,
-  Eye,
-  Kanban,
-  List,
-  Pencil,
-  Search,
-  Trash,
-} from '@lucide/vue'
+import { CalendarDays, ChevronDown, Columns3, Kanban, List, ListFilter, Search } from '@lucide/vue'
 import { computed, nextTick, onMounted, reactive, ref, watch, type Component } from 'vue'
 
 import {
@@ -42,6 +30,7 @@ import DetalleTarea from '@/componentes/compartido/DetalleTarea.vue'
 import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vue'
 import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
+import MenuAccionesTarea from '@/componentes/compartido/MenuAccionesTarea.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import ModalTareasRelacionadas from '@/componentes/compartido/ModalTareasRelacionadas.vue'
 import { useProveedorTareasRelacionadas } from '@/composables/useTareasRelacionadas'
@@ -107,23 +96,26 @@ function textoTipoEnTabla(tarea: Tarea): string {
 }
 
 // --- Eliminar tarea, con confirmación --------------------------------------
-// Se pide desde la papelera de la fila o desde el detalle. Al confirmar se
+// Se pide desde el menú "⋯" de la fila o desde el detalle. Al confirmar se
 // borra (con sus subtareas y comentarios) y se cierra el detalle si estaba
-// abierto. Como el botón que abrió la confirmación desaparece, el foco pasa a
-// la papelera de la fila siguiente (o la anterior) o, si no quedan filas, al
-// título de la lista; nunca al <body>.
+// abierto. Como la fila desaparece, el foco pasa al menú de la fila siguiente
+// (o la anterior) o, si no quedan filas, al título de la lista; nunca al
+// <body>. Si se cancela desde la fila, vuelve a su menú (la opción "Eliminar"
+// ya no existe porque el menú se cerró al elegirla).
 const ID_TITULO_LISTA = 'titulo-lista-tareas'
 const tareaAEliminar = ref<Tarea | null>(null)
 const eliminando = ref(false)
 const errorEliminar = ref<string | null>(null)
 let destinoFocoTrasEliminar: string | null = null
+let destinoFocoAlCancelar: string | null = null
 
-function idBotonEliminar(id: number): string {
-  return `eliminar-tarea-${id}`
+function idBotonAcciones(id: number): string {
+  return `acciones-tarea-${id}`
 }
 
-function pedirEliminar(tarea: Tarea): void {
+function pedirEliminar(tarea: Tarea, desdeFila = false): void {
   errorEliminar.value = null
+  destinoFocoAlCancelar = desdeFila ? idBotonAcciones(tarea.id) : null
   tareaAEliminar.value = tarea
 }
 
@@ -132,12 +124,12 @@ function alCambiarConfirmacion(abierta: boolean): void {
 }
 
 function destinoFocoTras(id: number): string {
-  // En el tablero y el calendario no hay papeleras por fila.
+  // En el tablero y el calendario no hay menús por fila.
   if (vista.value !== 'lista') return ID_TITULO_LISTA
   const filas = filasOrdenadas.value
   const indice = filas.findIndex((tarea) => tarea.id === id)
   const vecina = filas[indice + 1] ?? filas[indice - 1]
-  return vecina && indice !== -1 ? idBotonEliminar(vecina.id) : ID_TITULO_LISTA
+  return vecina && indice !== -1 ? idBotonAcciones(vecina.id) : ID_TITULO_LISTA
 }
 
 async function confirmarEliminar(): Promise<void> {
@@ -169,12 +161,18 @@ function enfocarTrasEliminar(): void {
 }
 
 // Al cerrar la confirmación tras borrar, el foco no vuelve al botón que la
-// abrió (ya no existe) sino al destino calculado.
+// abrió (ya no existe) sino al destino calculado; al cancelar desde la fila,
+// al menú de esa fila.
 function alDevolverFocoConfirmacion(evento: Event): void {
-  if (destinoFocoTrasEliminar === null) return
-  evento.preventDefault()
-  enfocarTrasEliminar()
-  destinoFocoTrasEliminar = null
+  if (destinoFocoTrasEliminar !== null) {
+    evento.preventDefault()
+    enfocarTrasEliminar()
+    destinoFocoTrasEliminar = null
+  } else if (destinoFocoAlCancelar !== null) {
+    evento.preventDefault()
+    document.getElementById(destinoFocoAlCancelar)?.focus()
+  }
+  destinoFocoAlCancelar = null
 }
 
 const ERROR_FECHA_HORA = 'La fecha y hora debe tener el formato dd/mm/aaaa hh:mm:ss y ser válida.'
@@ -452,7 +450,8 @@ const numeroFiltrosActivos = computed(
     ].filter(Boolean).length,
 )
 
-const filtrosAbiertos = ref(true)
+// El panel con todos los filtros se despliega solo al pedirlo con "Filtrar".
+const filtrosAbiertos = ref(false)
 
 // Las fechas llegan en ISO (`YYYY-MM-DDTHH:MM:SS`), que ya ordena bien como texto.
 // Las listas vacías y el vencimiento sin fecha quedan al final en ambos sentidos.
@@ -779,160 +778,220 @@ async function guardar(): Promise<void> {
       </div>
     </div>
 
-    <div class="bg-muted/40 mt-4 rounded-lg border p-4">
-      <Collapsible v-model:open="filtrosAbiertos">
-        <!-- Barra siempre visible: plegar y limpiar. -->
-        <div class="flex flex-wrap items-end gap-3">
-          <CollapsibleTrigger
-            class="text-muted-foreground hover:text-foreground flex h-9 items-center gap-1 text-sm font-medium"
-            :aria-label="filtrosAbiertos ? 'Contraer filtros' : 'Expandir filtros'"
-          >
-            <ChevronRight
+    <Collapsible v-model:open="filtrosAbiertos" class="mt-4">
+      <!-- Barra de una línea: buscar, persona, filtrar, columnas y exportar. -->
+      <div data-testid="barra-tareas" class="flex flex-wrap items-center gap-2">
+        <div class="relative w-full sm:w-64">
+          <Label for="filtro-buscar" class="sr-only">Buscar</Label>
+          <Search
+            class="text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4"
+            aria-hidden="true"
+          />
+          <Input id="filtro-buscar" v-model="busqueda" placeholder="Buscar tareas…" class="pl-8" />
+        </div>
+        <!-- Atajo del filtro "Asignado a" del panel: comparten la selección. -->
+        <div class="w-44">
+          <FiltroMultiple
+            v-model="asignadosFiltro"
+            :items="itemsAsignadosFiltro"
+            id-base="filtro-persona"
+            etiqueta-boton="Filtrar por persona"
+            nombre-singular="persona"
+            nombre-plural="personas"
+          />
+        </div>
+        <CollapsibleTrigger as-child>
+          <Button type="button" variant="outline">
+            <ListFilter aria-hidden="true" />
+            Filtrar
+            <ChevronDown
               class="size-4 transition-transform"
-              :class="filtrosAbiertos ? 'rotate-90' : ''"
+              :class="filtrosAbiertos ? 'rotate-180' : ''"
+              aria-hidden="true"
             />
-            Filtros
-          </CollapsibleTrigger>
-          <!-- Fuera del botón: dentro, su texto no formaría parte del nombre
-               "Contraer filtros" (WCAG 2.5.3). -->
-          <span
-            v-if="numeroFiltrosActivos > 0"
-            data-testid="filtros-activos"
-            class="bg-primary text-primary-foreground mb-2 rounded-full px-2 py-0.5 text-xs"
-            >{{ numeroFiltrosActivos === 1 ? '1 activo' : `${numeroFiltrosActivos} activos` }}</span
-          >
-          <Button type="button" variant="secondary" class="ml-auto" @click="limpiarFiltros"
-            >Limpiar filtros</Button
-          >
+          </Button>
+        </CollapsibleTrigger>
+        <!-- Fuera del botón: dentro, su texto no formaría parte del nombre
+             "Filtrar" (WCAG 2.5.3). -->
+        <span
+          v-if="numeroFiltrosActivos > 0"
+          data-testid="filtros-activos"
+          class="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs"
+          >{{ numeroFiltrosActivos === 1 ? '1 activo' : `${numeroFiltrosActivos} activos` }}</span
+        >
+        <Button
+          v-if="numeroFiltrosActivos > 0"
+          type="button"
+          variant="ghost"
+          @click="limpiarFiltros"
+          >Limpiar filtros</Button
+        >
+        <div
+          v-if="vista === 'lista' && filasFiltradas.length > 0"
+          class="ml-auto flex flex-wrap items-center gap-2"
+        >
+          <Popover>
+            <PopoverTrigger as-child>
+              <Button
+                variant="outline"
+                type="button"
+                aria-label="Elegir columnas visibles"
+                title="Columnas"
+              >
+                <Columns3 aria-hidden="true" />
+                Columnas
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" class="w-60 p-2">
+              <ul class="space-y-1">
+                <li
+                  v-for="columna in COLUMNAS_ORDENABLES"
+                  :key="columna.campo"
+                  class="flex items-center gap-2 px-2 py-1.5"
+                >
+                  <Checkbox
+                    :id="`columna-visible-${columna.campo}`"
+                    :model-value="esVisible(columna.campo)"
+                    :disabled="columna.campo === COLUMNA_FIJA"
+                    @update:model-value="
+                      (valor) => cambiarVisibilidad(columna.campo, valor === true)
+                    "
+                  />
+                  <Label :for="`columna-visible-${columna.campo}`" class="font-normal">{{
+                    columna.etiqueta
+                  }}</Label>
+                </li>
+              </ul>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="mt-1 w-full"
+                :disabled="columnasOcultas.length === 0"
+                @click="mostrarTodasLasColumnas"
+                >Mostrar todas</Button
+              >
+            </PopoverContent>
+          </Popover>
+          <BotonesExportarTabla
+            nombre-fichero="Tareas"
+            titulo="Tareas"
+            :columnas="COLUMNAS_EXPORTACION"
+            :filas="filasExportacion"
+          />
+        </div>
+      </div>
+
+      <CollapsibleContent class="bg-muted/40 mt-3 flex flex-col gap-4 rounded-lg border p-4">
+        <!-- Listas desplegables, todas del mismo ancho. -->
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="flex min-w-0 flex-col gap-1.5">
+            <Label>Prioridad</Label>
+            <FiltroMultiple
+              v-model="prioridadesFiltro"
+              :items="ITEMS_PRIORIDAD"
+              id-base="filtro-prioridad"
+              etiqueta-boton="Filtrar por prioridad"
+              nombre-singular="prioridad"
+              nombre-plural="prioridades"
+            />
+          </div>
+          <div class="flex min-w-0 flex-col gap-1.5">
+            <Label>Etiquetas</Label>
+            <FiltroMultiple
+              v-model="etiquetasFiltro"
+              :items="itemsEtiquetasFiltro"
+              id-base="filtro-etiquetas"
+              etiqueta-boton="Filtrar por etiquetas"
+              nombre-singular="etiqueta"
+              nombre-plural="etiquetas"
+            />
+          </div>
+          <div class="flex min-w-0 flex-col gap-1.5">
+            <Label>Asignado a</Label>
+            <FiltroMultiple
+              v-model="asignadosFiltro"
+              :items="itemsAsignadosFiltro"
+              id-base="filtro-asignados"
+              etiqueta-boton="Filtrar por asignado a"
+              nombre-singular="persona"
+              nombre-plural="personas"
+            />
+          </div>
+          <div class="flex min-w-0 flex-col gap-1.5">
+            <Label>Tipo</Label>
+            <FiltroMultiple
+              v-model="tiposFiltro"
+              :items="ITEMS_TIPO"
+              id-base="filtro-tipo"
+              etiqueta-boton="Filtrar por tipo"
+              nombre-singular="tipo"
+              nombre-plural="tipos"
+              genero="masculino"
+            />
+          </div>
         </div>
 
-        <CollapsibleContent class="mt-4 flex flex-col gap-4">
-          <!-- Listas desplegables, todas del mismo ancho. -->
-          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="flex min-w-0 flex-col gap-1.5">
-              <Label>Prioridad</Label>
-              <FiltroMultiple
-                v-model="prioridadesFiltro"
-                :items="ITEMS_PRIORIDAD"
-                id-base="filtro-prioridad"
-                etiqueta-boton="Filtrar por prioridad"
-                nombre-singular="prioridad"
-                nombre-plural="prioridades"
-              />
-            </div>
-            <div class="flex min-w-0 flex-col gap-1.5">
-              <Label>Etiquetas</Label>
-              <FiltroMultiple
-                v-model="etiquetasFiltro"
-                :items="itemsEtiquetasFiltro"
-                id-base="filtro-etiquetas"
-                etiqueta-boton="Filtrar por etiquetas"
-                nombre-singular="etiqueta"
-                nombre-plural="etiquetas"
-              />
-            </div>
-            <div class="flex min-w-0 flex-col gap-1.5">
-              <Label>Asignado a</Label>
-              <FiltroMultiple
-                v-model="asignadosFiltro"
-                :items="itemsAsignadosFiltro"
-                id-base="filtro-asignados"
-                etiqueta-boton="Filtrar por asignado a"
-                nombre-singular="persona"
-                nombre-plural="personas"
-              />
-            </div>
-            <div class="flex min-w-0 flex-col gap-1.5">
-              <Label>Tipo</Label>
-              <FiltroMultiple
-                v-model="tiposFiltro"
-                :items="ITEMS_TIPO"
-                id-base="filtro-tipo"
-                etiqueta-boton="Filtrar por tipo"
-                nombre-singular="tipo"
-                nombre-plural="tipos"
-                genero="masculino"
-              />
-            </div>
-          </div>
-
-          <!-- Estado y rangos de fechas. -->
-          <div class="grid gap-4 lg:grid-cols-3">
-            <div class="flex min-w-0 flex-col gap-1.5">
-              <span id="filtro-estado-titulo" class="text-sm leading-none font-medium select-none"
-                >Estado</span
-              >
-              <!-- Control segmentado con radios nativos: el radio, transparente, cubre
-                   cada opción para que el clic y el teclado sigan siendo los del radio. -->
-              <div
-                role="radiogroup"
-                aria-labelledby="filtro-estado-titulo"
-                class="bg-muted inline-flex w-full rounded-md border p-0.5"
-              >
-                <div v-for="opcion in OPCIONES_ESTADO" :key="opcion.valor" class="relative flex-1">
-                  <input
-                    :id="`filtro-estado-${opcion.valor}`"
-                    v-model="estadoFiltro"
-                    type="radio"
-                    name="filtro-estado"
-                    :value="opcion.valor"
-                    class="peer absolute inset-0 z-10 cursor-pointer opacity-0"
-                  />
-                  <Label
-                    :for="`filtro-estado-${opcion.valor}`"
-                    class="text-muted-foreground peer-checked:bg-background peer-checked:text-foreground peer-focus-visible:ring-ring/50 flex h-8 items-center justify-center rounded-sm px-2 text-center font-normal whitespace-nowrap peer-checked:shadow-sm peer-focus-visible:ring-[3px]"
-                    >{{ opcion.etiqueta }}</Label
-                  >
-                </div>
-              </div>
-            </div>
-            <fieldset
-              v-for="rango in RANGOS_FECHA"
-              :key="rango.id"
-              class="flex min-w-0 flex-col gap-1.5"
+        <!-- Estado y rangos de fechas. -->
+        <div class="grid gap-4 lg:grid-cols-3">
+          <div class="flex min-w-0 flex-col gap-1.5">
+            <span id="filtro-estado-titulo" class="text-sm leading-none font-medium select-none"
+              >Estado</span
             >
-              <legend class="mb-1.5 text-sm leading-none font-medium">{{ rango.titulo }}</legend>
-              <div class="grid gap-2 sm:grid-cols-2">
-                <div
-                  v-for="extremo in EXTREMOS_RANGO"
-                  :key="extremo"
-                  class="flex min-w-0 flex-col gap-1"
+            <!-- Control segmentado con radios nativos: el radio, transparente, cubre
+                   cada opción para que el clic y el teclado sigan siendo los del radio. -->
+            <div
+              role="radiogroup"
+              aria-labelledby="filtro-estado-titulo"
+              class="bg-muted inline-flex w-full rounded-md border p-0.5"
+            >
+              <div v-for="opcion in OPCIONES_ESTADO" :key="opcion.valor" class="relative flex-1">
+                <input
+                  :id="`filtro-estado-${opcion.valor}`"
+                  v-model="estadoFiltro"
+                  type="radio"
+                  name="filtro-estado"
+                  :value="opcion.valor"
+                  class="peer absolute inset-0 z-10 cursor-pointer opacity-0"
+                />
+                <Label
+                  :for="`filtro-estado-${opcion.valor}`"
+                  class="text-muted-foreground peer-checked:bg-background peer-checked:text-foreground peer-focus-visible:ring-ring/50 flex h-8 items-center justify-center rounded-sm px-2 text-center font-normal whitespace-nowrap peer-checked:shadow-sm peer-focus-visible:ring-[3px]"
+                  >{{ opcion.etiqueta }}</Label
                 >
-                  <Label
-                    :for="`filtro-${rango.id}-${extremo}`"
-                    class="text-muted-foreground text-xs font-normal"
-                    ><span class="sr-only">{{ `${rango.titulo} ` }}</span
-                    ><span class="capitalize">{{ extremo }}</span></Label
-                  >
-                  <Input
-                    :id="`filtro-${rango.id}-${extremo}`"
-                    v-model="fechasFiltro[rango.id][extremo]"
-                    type="date"
-                    class="min-w-0"
-                  />
-                </div>
               </div>
-            </fieldset>
-          </div>
-
-          <!-- Buscador, en su propia línea bajo el Estado. -->
-          <div data-fila="buscar" class="flex min-w-0 flex-col gap-1.5 sm:max-w-md">
-            <Label for="filtro-buscar">Buscar</Label>
-            <div class="relative">
-              <Search
-                class="text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4"
-              />
-              <Input
-                id="filtro-buscar"
-                v-model="busqueda"
-                placeholder="Buscar tareas…"
-                class="pl-8"
-              />
             </div>
           </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
+          <fieldset
+            v-for="rango in RANGOS_FECHA"
+            :key="rango.id"
+            class="flex min-w-0 flex-col gap-1.5"
+          >
+            <legend class="mb-1.5 text-sm leading-none font-medium">{{ rango.titulo }}</legend>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <div
+                v-for="extremo in EXTREMOS_RANGO"
+                :key="extremo"
+                class="flex min-w-0 flex-col gap-1"
+              >
+                <Label
+                  :for="`filtro-${rango.id}-${extremo}`"
+                  class="text-muted-foreground text-xs font-normal"
+                  ><span class="sr-only">{{ `${rango.titulo} ` }}</span
+                  ><span class="capitalize">{{ extremo }}</span></Label
+                >
+                <Input
+                  :id="`filtro-${rango.id}-${extremo}`"
+                  v-model="fechasFiltro[rango.id][extremo]"
+                  type="date"
+                  class="min-w-0"
+                />
+              </div>
+            </div>
+          </fieldset>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
 
     <!-- Alta y edición en ventanas modales centradas, como el detalle. Ambas
          usan el mismo formulario. -->
@@ -1004,55 +1063,6 @@ async function guardar(): Promise<void> {
       >
         Ninguna tarea coincide con los filtros.
       </p>
-      <div v-if="filasFiltradas.length > 0" class="mt-4 flex flex-wrap justify-end gap-2">
-        <Popover>
-          <PopoverTrigger as-child>
-            <Button
-              variant="outline"
-              type="button"
-              aria-label="Elegir columnas visibles"
-              title="Columnas"
-            >
-              <Columns3 aria-hidden="true" />
-              Columnas
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" class="w-60 p-2">
-            <ul class="space-y-1">
-              <li
-                v-for="columna in COLUMNAS_ORDENABLES"
-                :key="columna.campo"
-                class="flex items-center gap-2 px-2 py-1.5"
-              >
-                <Checkbox
-                  :id="`columna-visible-${columna.campo}`"
-                  :model-value="esVisible(columna.campo)"
-                  :disabled="columna.campo === COLUMNA_FIJA"
-                  @update:model-value="(valor) => cambiarVisibilidad(columna.campo, valor === true)"
-                />
-                <Label :for="`columna-visible-${columna.campo}`" class="font-normal">{{
-                  columna.etiqueta
-                }}</Label>
-              </li>
-            </ul>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              class="mt-1 w-full"
-              :disabled="columnasOcultas.length === 0"
-              @click="mostrarTodasLasColumnas"
-              >Mostrar todas</Button
-            >
-          </PopoverContent>
-        </Popover>
-        <BotonesExportarTabla
-          nombre-fichero="Tareas"
-          titulo="Tareas"
-          :columnas="COLUMNAS_EXPORTACION"
-          :filas="filasExportacion"
-        />
-      </div>
       <Table v-if="filasFiltradas.length > 0" class="mt-2">
         <TableHeader>
           <TableRow>
@@ -1073,7 +1083,18 @@ async function guardar(): Promise<void> {
         </TableHeader>
         <TableBody>
           <TableRow v-for="tarea in filasOrdenadas" :key="tarea.id">
-            <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{ tarea.nombre }}</TableCell>
+            <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">
+              <div class="flex items-start gap-2">
+                <Checkbox
+                  class="mt-0.5"
+                  :model-value="tarea.completada"
+                  :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
+                  :title="tarea.completada ? 'Completada' : 'Pendiente'"
+                  @update:model-value="tienda.alternarCompletada(tarea.id)"
+                />
+                <span>{{ tarea.nombre }}</span>
+              </div>
+            </TableCell>
             <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">{{
               tarea.prioridad ?? '—'
             }}</TableCell>
@@ -1123,49 +1144,14 @@ async function guardar(): Promise<void> {
             <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">{{
               textoTipoEnTabla(tarea)
             }}</TableCell>
-            <TableCell>
-              <div class="flex gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  :aria-label="`Editar tarea ${tarea.nombre}`"
-                  title="Editar"
-                  @click="abrirParaEditar(tarea)"
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  :aria-label="`Ver detalle de la tarea ${tarea.nombre}`"
-                  title="Detalle"
-                  @click="idEnDetalle = tarea.id"
-                >
-                  <Eye />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
-                  :aria-pressed="tarea.completada"
-                  :title="tarea.completada ? 'Completada' : 'Pendiente'"
-                  @click="tienda.alternarCompletada(tarea.id)"
-                >
-                  <CircleCheck v-if="tarea.completada" />
-                  <Circle v-else />
-                </Button>
-                <Button
-                  :id="idBotonEliminar(tarea.id)"
-                  variant="outline"
-                  size="icon"
-                  class="text-destructive"
-                  :aria-label="`Eliminar la tarea ${tarea.nombre}`"
-                  title="Eliminar"
-                  @click="pedirEliminar(tarea)"
-                >
-                  <Trash />
-                </Button>
-              </div>
+            <TableCell class="w-0">
+              <MenuAccionesTarea
+                :nombre="tarea.nombre"
+                :id-disparador="idBotonAcciones(tarea.id)"
+                @editar="abrirParaEditar(tarea)"
+                @detalle="idEnDetalle = tarea.id"
+                @eliminar="pedirEliminar(tarea, true)"
+              />
             </TableCell>
           </TableRow>
         </TableBody>

@@ -2,6 +2,13 @@ import { test, expect, type APIRequestContext, type Locator, type Page } from '@
 import AxeBuilder from '@axe-core/playwright'
 import { activarModoOscuro } from './utilidades'
 
+// Las acciones de cada fila de la lista (Editar, Ver detalle, Eliminar) están en
+// su menú "⋯", con el mismo nombre accesible que tenían como botones sueltos.
+async function accionDeFila(page: Page, nombre: string, accion: string): Promise<void> {
+  await page.getByRole('button', { name: `Acciones de la tarea ${nombre}`, exact: true }).click()
+  await page.getByRole('button', { name: `${accion} ${nombre}`, exact: true }).click()
+}
+
 // Cada test crea sus propios workflows con nombres únicos: no comparten estado.
 
 function pasosDe(page: Page, workflow: string) {
@@ -174,7 +181,7 @@ test('el workflow de la tarea añade sus pasos como subtareas al crearla y al ca
   await expect(ventana).toBeHidden()
 
   const abrirDetalle = async () => {
-    await page.getByRole('button', { name: `Ver detalle de la tarea ${tarea}` }).click()
+    await accionDeFila(page, tarea, 'Ver detalle de la tarea')
     return page.getByRole('dialog', { name: tarea })
   }
   let detalle = await abrirDetalle()
@@ -187,7 +194,7 @@ test('el workflow de la tarea añade sus pasos como subtareas al crearla y al ca
   await page.keyboard.press('Escape')
 
   // Editar y elegir otro workflow: añade sus pasos y conserva los anteriores.
-  await page.getByRole('button', { name: `Editar tarea ${tarea}` }).click()
+  await accionDeFila(page, tarea, 'Editar tarea')
   const edicion = page.getByRole('dialog', { name: 'Editar tarea' })
   await expect(edicion.getByRole('combobox', { name: 'Workflow' })).toHaveValue(/\d+/)
   await edicion.getByRole('combobox', { name: 'Workflow' }).selectOption({ label: segundo })
@@ -306,7 +313,7 @@ test('los comentarios del paso se copian a las subtareas y luego son independien
   await expect(ventana).toBeHidden()
 
   const abrirComentariosSubtarea = async (tarea: string) => {
-    await page.getByRole('button', { name: `Ver detalle de la tarea ${tarea}` }).click()
+    await accionDeFila(page, tarea, 'Ver detalle de la tarea')
     const detalle = page.getByRole('dialog', { name: tarea })
     await detalle.getByRole('button', { name: 'Comentarios de la subtarea Llamar: 2' }).click()
     const panel = detalle.getByTestId('comentarios-subtarea')
@@ -323,7 +330,7 @@ test('los comentarios del paso se copian a las subtareas y luego son independien
   await page.keyboard.press('Escape')
 
   // Elegir el workflow al editar otra tarea también copia los comentarios.
-  await page.getByRole('button', { name: `Editar tarea ${conEdicion}` }).click()
+  await accionDeFila(page, conEdicion, 'Editar tarea')
   const edicion = page.getByRole('dialog', { name: 'Editar tarea' })
   await edicion.getByRole('combobox', { name: 'Workflow' }).selectOption({ label: workflow })
   await edicion.getByRole('button', { name: 'Guardar' }).click()
