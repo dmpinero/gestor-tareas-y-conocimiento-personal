@@ -32,8 +32,10 @@ def upgrade() -> None:
     Crea la tabla ``workflows`` con el workflow «Workflow Oportunidades» y le asigna
     todos los pasos que ya existían, con sus mismos ids, números y nombres: la tabla
     de los pasos se renombra a ``pasos_workflow`` y recibe la columna del workflow. El
-    número pasa a ser único dentro de cada workflow. Las tareas que ya existían quedan
-    sin workflow; sus subtareas y el resto de sus datos no cambian.
+    número pasa a ser único dentro de cada workflow. Las tareas de tipo oportunidad
+    que ya existían pasan a tener el workflow «Workflow Oportunidades» (sus subtareas
+    salieron de él, y así elegirlo después no duplica sus pasos); las demás quedan sin
+    workflow. Las subtareas y el resto de los datos de las tareas no cambian.
     """
     op.create_table(
         "workflows",
@@ -67,6 +69,12 @@ def upgrade() -> None:
     )
     op.add_column("tareas", sa.Column("workflow_id", sa.Integer(), nullable=True))
     op.create_foreign_key("fk_tareas_workflow", "tareas", "workflows", ["workflow_id"], ["id"])
+    op.execute(
+        sa.text(
+            "UPDATE tareas SET workflow_id = (SELECT id FROM workflows WHERE nombre = :nombre) "
+            "WHERE tipo = 'oportunidad'"
+        ).bindparams(nombre=_WORKFLOW_OPORTUNIDADES)
+    )
 
 
 def downgrade() -> None:
