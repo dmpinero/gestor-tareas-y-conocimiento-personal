@@ -17,10 +17,10 @@ User's choice (verbatim): "Quiero las mejoras de los 4 puntos, pero mantén el t
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S4 | delegated writer — reason: context backstop (long parent session); same file as T2–T4, so one writer runs all units sequentially | done | see Log L4 |
-| T2 | S1 | same writer | done | see Log L5 |
-| T3 | S2 | same writer | done | see Log L6 |
-| T4 | S3 | same writer | done | see Log L7 |
+| T1 | S4 | delegated writer — reason: context backstop (long parent session); same file as T2–T4, so one writer runs all units sequentially | done | bb67453 |
+| T2 | S1 | same writer | done | ae24f6f |
+| T3 | S2 | same writer | done | b8d677b |
+| T4 | S3 | same writer | done | 34389d7 |
 | T5 | all | parent: isolated preview stack (copy of real data) for the user | pending | |
 
 ## Log
@@ -32,3 +32,4 @@ User's choice (verbatim): "Quiero las mejoras de los 4 puntos, pero mantén el t
 - L5 (T2/S1): table split into `<tbody data-grupo="pendientes|completadas">`, each with a header button (name + count, `aria-expanded`), blue/emerald `border-l-4` on the first cell of every row, collapsed groups remembered in localStorage `gestor-tareas:grupos-plegados-tareas` (both expanded by default). "+ Agregar tarea" input per group creates with `tienda.crear` (assumption: the API requires `descripcion`, so the name is sent as description; "Completadas" then calls `tienda.alternarCompletada`); errors shown in the group. Footer row with `BarraPrioridades` under the Prioridad column (hidden when that column is hidden or the group is empty). Sorting applies inside each group; export stays the flat sorted list; delete-focus neighbour uses visible rows. RED: 9 new tests + selector-dependent ones failing → GREEN 618/618.
 - L6 (T3/S2): pills via `lib/coloresTarea.ts` (priority 1 red, 2 orange, 3 blue, 4 teal, 5 gray as `bg-*-100 text-*-800` / dark `bg-*-950 text-*-200`; none "—"; tipo violet). New "Estado" column (after Tipo; sortable, hideable, exported) because the table had no estado column — assumption: color by position in its grupo de estados (first gray, last emerald, middle blue; unknown gray). Vencimiento: `VencimientoCorto` ("20 nov", `<time datetime title="dd/mm/aaaa hh:mm:ss">`, full date as sr-only text, ✓ emerald when completed, ! `text-destructive` when overdue) with the unchanged `ContadorVencimiento` below. Board/calendar untouched. RED: 9 new tests (incl. `formatearFechaCorta`) → GREEN 627/627.
 - L7 (T4/S3): `AvatarPersona` (initials of the first two words, stable `bg-*-700 text-white` color from an FNV-1a hash of the name, `title` = name, name also as sr-only text) rendered through a new default slot of `NombreRelacionado`, so the button keeps "Ver tareas y subtareas de X" and opens the related-tasks modal. Etiquetas: pill with a stable color from `colorEtiqueta(nombre)` (10-color palette, light/dark variants), still "Ver tareas con la etiqueta X". Board not changed (optional). Note: avatar initials such as "LP" are not a substring of the accessible name (WCAG 2.5.3 is satisfied only loosely; axe's rule for it is experimental and off by default). RED: 12 new tests → GREEN 639/639.
+- L8: writer checks after T4 (frontend): `pnpm vitest run` 41 files / 639 tests passed; `vue-tsc --build`, `oxlint src`, `eslint src` exit 0; `prettier --check src e2e` clean. e2e specs updated (row menu helper `accionDeFila`, "Filtrar" before panel filters, completion checkbox role) but not run (no isolated stack). Next: T5 preview.
