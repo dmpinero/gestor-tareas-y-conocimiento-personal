@@ -6,6 +6,7 @@ import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
 import type { TipoRelacion } from '@/composables/useTareasRelacionadas'
 import { formatearFechaHora } from '@/lib/fechas'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
+import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import SubtareasTarea from '@/componentes/compartido/SubtareasTarea.vue'
@@ -120,7 +121,15 @@ function alCambiarApertura(abierta: boolean): void {
   <Dialog :open="props.tarea !== null" @update:open="alCambiarApertura">
     <DialogContent sin-aspa class="flex h-[90vh] w-[90vw] max-w-none flex-col sm:max-w-none">
       <DialogHeader>
-        <DialogTitle class="[overflow-wrap:anywhere]">{{ tareaMostrada?.nombre }}</DialogTitle>
+        <div class="flex items-start gap-2">
+          <DialogTitle class="[overflow-wrap:anywhere]">{{ tareaMostrada?.nombre }}</DialogTitle>
+          <AvisoVencimiento
+            v-if="tareaMostrada"
+            class="mt-1"
+            :vencimiento="tareaMostrada.fecha_vencimiento"
+            :completada="tareaMostrada.completada"
+          />
+        </div>
         <DialogDescription class="sr-only">Todos los datos de la tarea.</DialogDescription>
       </DialogHeader>
 

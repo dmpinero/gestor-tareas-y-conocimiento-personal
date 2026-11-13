@@ -4150,4 +4150,176 @@ describe('VistaTareas', () => {
       ])
     })
   })
+
+  describe('clic en la fila', () => {
+    function fila(nombre: string): HTMLElement {
+      const encontrada = [
+        ...document.body.querySelectorAll<HTMLElement>('tr[data-fila-tarea]'),
+      ].find((tr) => tr.textContent?.includes(nombre))
+      if (!encontrada) throw new Error(`No se encontró la fila "${nombre}"`)
+      return encontrada
+    }
+
+    function titulosDialogos(): string[] {
+      return [...document.body.querySelectorAll('[role="dialog"]')].map(
+        (d) => d.querySelector('h2')?.textContent?.trim() ?? '',
+      )
+    }
+
+    it('pulsar cualquier celda de la fila abre el detalle de esa tarea', async () => {
+      await montar()
+
+      fila('Leer artículo').querySelectorAll('td')[3]!.click()
+      await flushPromises()
+
+      expect(titulosDialogos()).toEqual(['Leer artículo'])
+    })
+
+    it('la fila indica con el cursor que se puede pulsar', async () => {
+      await montar()
+      expect(fila('Escribir informe').className).toContain('cursor-pointer')
+    })
+
+    it('la casilla de completada y el menú de acciones no abren el detalle', async () => {
+      const envoltorio = await montar()
+
+      fila('Escribir informe')
+        .querySelector<HTMLElement>(
+          '[role="checkbox"][aria-label="Marcar como completada la tarea Escribir informe"]',
+        )!
+        .click()
+      await flushPromises()
+      await envoltorio
+        .get('button[aria-label="Acciones de la tarea Escribir informe"]')
+        .trigger('click')
+      await flushPromises()
+
+      expect(titulosDialogos()).not.toContain('Escribir informe')
+    })
+
+    it('pulsar una etiqueta de la fila abre solo la modal de tareas relacionadas', async () => {
+      await montar()
+
+      fila('Escribir informe')
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Ver tareas con la etiqueta Urgente"]',
+        )!
+        .click()
+      await flushPromises()
+
+      expect(titulosDialogos()).toEqual(['Etiqueta: Urgente'])
+    })
+
+    it('no abre el detalle si se está seleccionando texto de la fila', async () => {
+      await montar()
+      const celda = fila('Leer artículo').querySelectorAll('td')[3]!
+      const seleccion = window.getSelection()!
+      seleccion.selectAllChildren(celda)
+
+      celda.click()
+      await flushPromises()
+
+      expect(titulosDialogos()).toEqual([])
+      seleccion.removeAllRanges()
+    })
+  })
+
+  describe('aviso de vencimiento con campanas', () => {
+    // La vista elegida (lista, tablero o calendario) se recuerda entre montajes.
+    beforeEach(() => {
+      localStorage.clear()
+    })
+
+    // AHORA es el 09/11/2026 a las 18:45:30.
+    const GRUPO = {
+      id: 1,
+      nombre: 'Desarrollo',
+      tareas: 3,
+      estados: [{ id: 10, nombre: 'Pendiente', posicion: 1, tareas: 3 }],
+    }
+    const EN_GRUPO = {
+      grupo_estados: { id: 1, nombre: 'Desarrollo' },
+      estado: { id: 10, nombre: 'Pendiente' },
+    }
+    // Menos de 1 día: dos campanas.
+    const URGENTE = {
+      ...TAREAS[1],
+      ...EN_GRUPO,
+      id: 21,
+      nombre: 'Urgente hoy',
+      fecha_vencimiento: '2026-11-10T10:00:00',
+    }
+    // Entre 1 y 2 días: una campana.
+    const PRONTO = {
+      ...TAREAS[1],
+      ...EN_GRUPO,
+      id: 22,
+      nombre: 'Pronto',
+      fecha_vencimiento: '2026-11-11T10:00:00',
+    }
+    // 2 días o más: sin campana.
+    const HOLGADA = {
+      ...TAREAS[1],
+      ...EN_GRUPO,
+      id: 23,
+      nombre: 'Holgada',
+      fecha_vencimiento: '2026-11-20T10:00:00',
+    }
+    const TAREAS_AVISO = [URGENTE, PRONTO, HOLGADA]
+
+    function avisos(): Record<string, string> {
+      const resultado: Record<string, string> = {}
+      for (const aviso of document.body.querySelectorAll('[data-aviso-vencimiento]')) {
+        const contenedor = aviso.closest('tr, [data-tarjeta], li, [role="dialog"]')
+        const nombre = ['Urgente hoy', 'Pronto', 'Holgada'].find((n) =>
+          contenedor?.textContent?.includes(n),
+        )
+        resultado[nombre ?? '?'] =
+          `${aviso.getAttribute('aria-label')} (${aviso.querySelectorAll('[data-campana]').length})`
+      }
+      return resultado
+    }
+
+    function pulsarVista(etiqueta: string): void {
+      document.body.querySelector<HTMLButtonElement>(`button[aria-label="${etiqueta}"]`)!.click()
+    }
+
+    const ESPERADO = {
+      'Urgente hoy': 'Vence en menos de 1 día (2)',
+      Pronto: 'Vence en menos de 2 días (1)',
+    }
+
+    it('la lista muestra una campana con menos de 2 días y dos con menos de 1 día', async () => {
+      await montar(TAREAS_AVISO, [GRUPO])
+      expect(avisos()).toEqual(ESPERADO)
+    })
+
+    it('el tablero muestra las campanas en las tarjetas', async () => {
+      await montar(TAREAS_AVISO, [GRUPO])
+      pulsarVista('Ver como tablero')
+      await flushPromises()
+      expect(avisos()).toEqual(ESPERADO)
+    })
+
+    it('el calendario muestra las campanas junto a cada tarea', async () => {
+      await montar(TAREAS_AVISO, [GRUPO])
+      pulsarVista('Ver como calendario')
+      await flushPromises()
+      expect(avisos()).toEqual(ESPERADO)
+    })
+
+    it('el detalle muestra las campanas junto al título', async () => {
+      await montar(TAREAS_AVISO, [GRUPO])
+      const fila = [...document.body.querySelectorAll<HTMLElement>('tr[data-fila-tarea]')].find(
+        (tr) => tr.textContent?.includes('Urgente hoy'),
+      )!
+      fila.querySelectorAll('td')[2]!.click()
+      await flushPromises()
+      const dialogo = document.body.querySelector('[role="dialog"]')!
+      expect(dialogo.querySelector('h2')?.textContent?.trim()).toBe('Urgente hoy')
+      expect(dialogo.querySelector('[data-aviso-vencimiento]')?.getAttribute('aria-label')).toBe(
+        'Vence en menos de 1 día',
+      )
+    })
+  })
 })
