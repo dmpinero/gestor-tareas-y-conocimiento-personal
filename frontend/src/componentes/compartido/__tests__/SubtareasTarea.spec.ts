@@ -60,6 +60,7 @@ const TAREA: Tarea = {
   subtareas: SUBTAREAS,
   grupo_estados: null,
   estado: null,
+  workflow: null,
 }
 
 // Comentarios que devuelve la API para cualquier subtarea.

@@ -25,6 +25,7 @@ import {
 import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
 import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
+import { useTiendaWorkflows } from '@/stores/workflows'
 import { useTiendaTareas } from '@/stores/tareas'
 import { useBusquedaTabla } from '@/composables/useBusquedaTabla'
 import {
@@ -68,6 +69,7 @@ import {
 
 const tienda = useTiendaTareas()
 const tiendaGrupos = useTiendaGruposEstados()
+const tiendaWorkflows = useTiendaWorkflows()
 // El alta y la edición se hacen en ventanas modales; las dos comparten el
 // formulario y su estado.
 const modalAltaAbierta = ref(false)
@@ -82,8 +84,8 @@ const tareaEnDetalle = computed<Tarea | null>(
   () => tienda.tareas.find((tarea) => tarea.id === idEnDetalle.value) ?? null,
 )
 
-// Texto del tipo en la tabla; en una oportunidad con subtareas (sus pasos del
-// workflow se crean como subtareas), con su avance: resueltas / total
+// Texto del tipo en la tabla; en una oportunidad con subtareas (p. ej. los pasos
+// de su workflow), con su avance: resueltas / total
 // ("Oportunidad · 3/7"). Ordenar, filtrar y exportar usan solo el tipo.
 function textoTipoEnTabla(tarea: Tarea): string {
   const etiqueta = etiquetaTipoTarea(tarea.tipo)
@@ -184,12 +186,14 @@ const formulario = reactive<ValoresFormularioTarea>({
   tipo: '',
   oportunidad: { codigo: '', descripcion: '', observaciones: '' },
   grupoEstadosId: '',
+  workflowId: '',
 })
 
 onMounted(() => {
   void tienda.cargar()
   void tienda.cargarCatalogos()
   void tiendaGrupos.cargar()
+  void tiendaWorkflows.cargar()
 })
 
 // --- Lista / Tablero ---
@@ -554,6 +558,7 @@ function limpiarFormulario(): void {
   formulario.tipo = ''
   formulario.oportunidad = { codigo: '', descripcion: '', observaciones: '' }
   formulario.grupoEstadosId = ''
+  formulario.workflowId = ''
   errorFormulario.value = null
   idEnEdicion.value = null
   destinoAlta = null
@@ -585,6 +590,7 @@ function abrirParaEditar(tarea: Tarea): void {
   formulario.asignados = [...tarea.asignados]
   formulario.tipo = tarea.tipo ?? ''
   formulario.grupoEstadosId = tarea.grupo_estados?.id ?? ''
+  formulario.workflowId = tarea.workflow?.id ?? ''
   if (tarea.oportunidad) {
     formulario.oportunidad = {
       codigo: tarea.oportunidad.codigo,
@@ -648,6 +654,7 @@ async function guardar(): Promise<void> {
     tipo: formulario.tipo === '' ? null : formulario.tipo,
     oportunidad: datosOportunidad(),
     grupo_estados_id: formulario.grupoEstadosId === '' ? null : formulario.grupoEstadosId,
+    workflow_id: formulario.workflowId === '' ? null : formulario.workflowId,
   }
   const destino = destinoAlta
   try {
@@ -864,6 +871,7 @@ async function guardar(): Promise<void> {
         <FormularioTarea
           v-model:valores="formulario"
           :error="errorFormulario"
+          alta
           @guardar="guardar"
           @cancelar="cerrarFormulario"
         />

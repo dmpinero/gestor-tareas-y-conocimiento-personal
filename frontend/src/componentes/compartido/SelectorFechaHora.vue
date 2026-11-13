@@ -143,7 +143,14 @@ function alCambiarTiempo(unidad: UnidadTiempo, maximo: number, valor: string | n
       </div>
     </PopoverAnchor>
 
-    <PopoverContent align="end" class="w-auto">
+    <!-- Con poco espacio arriba y abajo (formulario largo en un modal), el calendario
+         se limita a la altura disponible en la ventana y hace scroll en vez de quedar
+         cortado fuera de ella. -->
+    <PopoverContent
+      align="end"
+      :collision-padding="8"
+      class="max-h-(--reka-popover-content-available-height) w-auto overflow-y-auto"
+    >
       <Calendar
         v-model:placeholder="mesVisible"
         :model-value="diaSeleccionado"

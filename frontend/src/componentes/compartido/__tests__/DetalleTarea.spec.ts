@@ -38,6 +38,7 @@ const TAREA_SIN_TIPO: Tarea = {
   subtareas: [],
   grupo_estados: null,
   estado: null,
+  workflow: null,
 }
 
 const TAREA_OPORTUNIDAD: Tarea = {
@@ -59,6 +60,7 @@ const TAREA_OPORTUNIDAD: Tarea = {
   subtareas: [],
   grupo_estados: null,
   estado: null,
+  workflow: null,
 }
 
 let contenedor: VueWrapper | null = null
@@ -137,6 +139,7 @@ describe('DetalleTarea', () => {
       ['Fecha de creación', '01/12/2026 17:05:09'],
       ['Fecha de vencimiento', '—'],
       ['Tipo', '—'],
+      ['Workflow', '—'],
       ['Estado', 'Pendiente'],
       ['Grupo de estados', '—'],
       ['Estado del grupo', '—'],
@@ -150,6 +153,12 @@ describe('DetalleTarea', () => {
 
     expect(paresDe(listaDe('campos-tarea'))).toContainEqual(['Estado', 'Completada'])
     expect(paresDe(listaDe('campos-tarea'))).not.toContainEqual(['Estado', 'Pendiente'])
+  })
+
+  it('muestra el workflow de la tarea', async () => {
+    await montar({ ...TAREA_SIN_TIPO, workflow: { id: 3, nombre: 'Altas' } })
+
+    expect(paresDe(listaDe('campos-tarea'))).toContainEqual(['Workflow', 'Altas'])
   })
 
   it('muestra el grupo de estados de la tarea y su estado en el grupo', async () => {
@@ -178,6 +187,7 @@ describe('DetalleTarea', () => {
       ['Fecha de creación', '10/11/2026 09:30:00'],
       ['Fecha de vencimiento', '20/11/2026 18:00:00 Vence en 2 d 03 h 15 min 20 s'],
       ['Tipo', 'Oportunidad'],
+      ['Workflow', '—'],
       ['Estado', 'Pendiente'],
       ['Grupo de estados', '—'],
       ['Estado del grupo', '—'],
