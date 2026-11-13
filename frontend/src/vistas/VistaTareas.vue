@@ -33,6 +33,7 @@ import {
   valorAriaSort,
 } from '@/composables/useOrdenacionTabla'
 import BarraPrioridades from '@/componentes/compartido/BarraPrioridades.vue'
+import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
@@ -52,6 +53,7 @@ import {
   PILDORA_PRIORIDAD,
   PILDORA_TIPO,
   clavePrioridad,
+  colorEtiqueta,
   pildoraEstado,
 } from '@/lib/coloresTarea'
 import type { CeldaExportada } from '@/lib/exportarTabla'
@@ -1283,17 +1285,31 @@ async function guardar(): Promise<void> {
                 :key="campoLista"
                 :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
               >
-                <ul v-if="tarea[campoLista].length > 0" class="flex flex-wrap gap-1">
+                <ul
+                  v-if="tarea[campoLista].length > 0 && campoLista === 'asignados'"
+                  class="flex flex-wrap gap-1"
+                >
                   <li
-                    v-for="nombre in tarea[campoLista]"
+                    v-for="nombre in tarea.asignados"
                     :key="nombre"
                     data-testid="chip-tabla"
-                    class="bg-secondary text-secondary-foreground inline-flex max-w-full rounded-md border px-2 py-0.5 text-xs font-medium"
+                    :data-nombre="nombre"
+                    class="inline-flex"
                   >
-                    <NombreRelacionado
-                      :tipo="campoLista === 'etiquetas' ? 'etiqueta' : 'persona'"
-                      :nombre="nombre"
-                    />
+                    <NombreRelacionado tipo="persona" :nombre="nombre" class="rounded-full">
+                      <AvatarPersona :nombre="nombre" />
+                    </NombreRelacionado>
+                  </li>
+                </ul>
+                <ul v-else-if="tarea[campoLista].length > 0" class="flex flex-wrap gap-1">
+                  <li
+                    v-for="nombre in tarea.etiquetas"
+                    :key="nombre"
+                    data-testid="chip-tabla"
+                    :data-nombre="nombre"
+                    :class="`${CLASE_PILDORA} ${colorEtiqueta(nombre)}`"
+                  >
+                    <NombreRelacionado tipo="etiqueta" :nombre="nombre" />
                   </li>
                 </ul>
                 <template v-else>—</template>

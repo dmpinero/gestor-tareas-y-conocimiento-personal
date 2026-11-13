@@ -214,8 +214,11 @@ const FILAS_TAREA = 'tbody tr[data-fila-tarea]'
 function filasTabla(envoltorio: VueWrapper): string[][] {
   return envoltorio.findAll(FILAS_TAREA).map((tr) =>
     tr.findAll('td').map((td) => {
+      // Las personas se ven como iniciales: se lee el nombre que representa cada chip.
       const chips = td.findAll('[data-testid="chip-tabla"]')
-      return chips.length > 0 ? chips.map((chip) => chip.text()).join(' | ') : td.text()
+      return chips.length > 0
+        ? chips.map((chip) => chip.attributes('data-nombre')).join(' | ')
+        : td.text()
     }),
   )
 }
@@ -1743,6 +1746,71 @@ describe('VistaTareas', () => {
         expect(hecha.attributes('data-icono')).toBe('completada')
         expect(hecha.get('svg').attributes('aria-hidden')).toBe('true')
       })
+    })
+  })
+
+  describe('avatares y etiquetas', () => {
+    const CON_EQUIPO = { ...TAREAS[0], asignados: ['Ana', 'Luis Pérez'] }
+
+    function celda(envoltorio: VueWrapper, columna: string) {
+      const indice = envoltorio.findAll('thead th').findIndex((th) => th.text().trim() === columna)
+      return envoltorio.findAll(FILAS_TAREA)[0]!.findAll('td')[indice]!
+    }
+
+    it('muestra cada persona como un círculo con sus iniciales y su nombre en el tooltip', async () => {
+      const envoltorio = await montar([CON_EQUIPO])
+
+      const avatares = celda(envoltorio, 'Asignado a').findAll('[data-testid="avatar-persona"]')
+      expect(avatares.map((avatar) => avatar.get('[aria-hidden="true"]').text())).toEqual([
+        'A',
+        'LP',
+      ])
+      expect(avatares.map((avatar) => avatar.attributes('title'))).toEqual(['Ana', 'Luis Pérez'])
+      expect(avatares[0]!.classes()).toContain('rounded-full')
+      // El nombre completo sigue en el texto para los lectores de pantalla y las búsquedas.
+      expect(avatares[0]!.get('.sr-only').text()).toBe('Ana')
+    })
+
+    it('el avatar sigue abriendo las tareas de la persona con el mismo nombre accesible', async () => {
+      const envoltorio = await montar([CON_EQUIPO])
+
+      const boton = celda(envoltorio, 'Asignado a').get(
+        'button[aria-label="Ver tareas y subtareas de Ana"]',
+      )
+      expect(boton.find('[data-testid="avatar-persona"]').exists()).toBe(true)
+      await boton.trigger('click')
+      await flushPromises()
+
+      const titulos = [...document.body.querySelectorAll('[role="dialog"] h2')].map((h) =>
+        h.textContent?.trim(),
+      )
+      expect(titulos).toContain('Persona: Ana')
+    })
+
+    it('cada etiqueta tiene un color estable derivado de su nombre y sigue abriendo sus tareas', async () => {
+      const envoltorio = await montar([TAREAS[0], { ...TAREAS[1], etiquetas: ['Backend'] }])
+
+      const chip = (fila: number, nombre: string) =>
+        envoltorio
+          .findAll(FILAS_TAREA)
+          [fila]!.get(`[data-testid="chip-tabla"][data-nombre="${nombre}"]`)
+      const colorDe = (fila: number, nombre: string) =>
+        chip(fila, nombre)
+          .classes()
+          .filter((clase) => /^(dark:)?(bg|text)-/.test(clase))
+      expect(colorDe(0, 'Backend').length).toBeGreaterThan(0)
+      // El mismo nombre, el mismo color en cualquier fila.
+      expect(colorDe(1, 'Backend')).toEqual(colorDe(0, 'Backend'))
+      expect(chip(0, 'Backend').text()).toBe('Backend')
+
+      await chip(0, 'Urgente')
+        .get('button[aria-label="Ver tareas con la etiqueta Urgente"]')
+        .trigger('click')
+      await flushPromises()
+      const titulos = [...document.body.querySelectorAll('[role="dialog"] h2')].map((h) =>
+        h.textContent?.trim(),
+      )
+      expect(titulos).toContain('Etiqueta: Urgente')
     })
   })
 
