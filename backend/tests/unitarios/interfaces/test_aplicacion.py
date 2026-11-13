@@ -7,7 +7,7 @@ from gestor_tareas.main import crear_aplicacion
 cliente = TestClient(crear_aplicacion())
 
 
-def test_la_api_expone_salud_tareas_catalogos_workflow_y_grupos_de_estados_bajo_api_v1() -> None:
+def test_la_api_expone_salud_tareas_catalogos_workflows_y_grupos_de_estados_bajo_api_v1() -> None:
     rutas = set(cliente.get("/openapi.json").json()["paths"])
 
     assert rutas == {
@@ -25,9 +25,11 @@ def test_la_api_expone_salud_tareas_catalogos_workflow_y_grupos_de_estados_bajo_
         "/api/v1/tareas/{id_tarea}/comentarios/{id_comentario}",
         "/api/v1/etiquetas",
         "/api/v1/personas",
-        "/api/v1/workflow-oportunidades/pasos",
-        "/api/v1/workflow-oportunidades/pasos/{id_paso}",
-        "/api/v1/workflow-oportunidades/pasos/orden",
+        "/api/v1/workflows",
+        "/api/v1/workflows/{id_workflow}",
+        "/api/v1/workflows/{id_workflow}/pasos",
+        "/api/v1/workflows/{id_workflow}/pasos/{id_paso}",
+        "/api/v1/workflows/{id_workflow}/orden",
         "/api/v1/grupos-estados",
         "/api/v1/grupos-estados/{id_grupo}",
         "/api/v1/grupos-estados/{id_grupo}/estados",
@@ -50,6 +52,54 @@ def test_la_api_publica_los_metodos_de_cada_ruta_nueva_o_cambiada() -> None:
     assert set(rutas[f"{grupos}/{{id_grupo}}/estados/{{id_estado}}"]) == {"put", "delete"}
     assert set(rutas[f"{grupos}/{{id_grupo}}/orden"]) == {"put"}
     assert set(rutas["/api/v1/tareas/{id_tarea}/estado"]) == {"patch"}
+    workflows = "/api/v1/workflows"
+    assert set(rutas[workflows]) == {"get", "post"}
+    assert set(rutas[f"{workflows}/{{id_workflow}}"]) == {"put", "delete"}
+    assert set(rutas[f"{workflows}/{{id_workflow}}/pasos"]) == {"post"}
+    assert set(rutas[f"{workflows}/{{id_workflow}}/pasos/{{id_paso}}"]) == {"put", "delete"}
+    assert set(rutas[f"{workflows}/{{id_workflow}}/orden"]) == {"put"}
+
+
+def test_las_operaciones_de_los_pasos_devuelven_el_workflow_completo() -> None:
+    rutas = cliente.get("/openapi.json").json()["paths"]
+    base = "/api/v1/workflows/{id_workflow}"
+    referencia = {"$ref": "#/components/schemas/WorkflowSalidaEsquema"}
+
+    def esquema_de_exito(ruta: str, metodo: str, codigo: str) -> dict:
+        respuesta = rutas[ruta][metodo]["responses"][codigo]
+        return respuesta["content"]["application/json"]["schema"]
+
+    for ruta, metodo, codigo in (
+        ("/api/v1/workflows", "post", "201"),
+        (base, "put", "200"),
+        (f"{base}/pasos", "post", "201"),
+        (f"{base}/pasos/{{id_paso}}", "put", "200"),
+        (f"{base}/pasos/{{id_paso}}", "delete", "200"),
+        (f"{base}/orden", "put", "200"),
+    ):
+        assert esquema_de_exito(ruta, metodo, codigo) == referencia
+    assert esquema_de_exito("/api/v1/workflows", "get", "200")["items"] == referencia
+    assert set(rutas[base]["delete"]["responses"]) >= {"204"}
+
+
+def test_la_tarea_publica_su_workflow_como_clave_obligatoria() -> None:
+    componentes = cliente.get("/openapi.json").json()["components"]["schemas"]
+    salida = componentes["TareaSalidaEsquema"]
+
+    assert "workflow" in salida["required"]
+    assert salida["properties"]["workflow"]["anyOf"] == [
+        {"$ref": "#/components/schemas/WorkflowDeTareaEsquema"},
+        {"type": "null"},
+    ]
+    for esquema in ("TareaCrearEsquema", "TareaActualizarEsquema"):
+        cuerpo = componentes.get(esquema)
+        if cuerpo is None:
+            continue
+        assert "workflow_id" not in cuerpo.get("required", [])
+        assert cuerpo["properties"]["workflow_id"]["anyOf"] == [
+            {"type": "integer"},
+            {"type": "null"},
+        ]
 
 
 def test_la_tarea_publica_su_grupo_de_estados_y_su_estado_como_claves_obligatorias() -> None:

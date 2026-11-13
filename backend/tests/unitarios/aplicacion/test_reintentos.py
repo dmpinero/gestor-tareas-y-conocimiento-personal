@@ -11,7 +11,7 @@ from tests.unitarios.aplicacion.dobles import (
     RepositorioGruposEstadosFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
-    RepositorioWorkflowOportunidadesFalso,
+    RepositorioWorkflowsFalso,
 )
 
 
@@ -91,7 +91,7 @@ def test_crear_tarea_repite_el_alta_completa_si_choca_con_otra_peticion() -> Non
         tareas,
         RepositorioEtiquetasFalso(),
         RepositorioPersonasFalso(),
-        RepositorioWorkflowOportunidadesFalso(),
+        RepositorioWorkflowsFalso(),
         RepositorioGruposEstadosFalso(),
     ).ejecutar(
         nombre="Uno",

@@ -4,16 +4,27 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, Field
 
 from gestor_tareas.interfaces.api.v1.esquemas.texto import PATRON_NO_VACIO, TextoObligatorio
 
-
-class PasoWorkflowEsquema(BaseModel):
-    """Cuerpo del alta y del cambio de nombre de un paso."""
-
-    nombre: TextoObligatorio = Field(
+NombreWorkflowOPaso = Annotated[
+    TextoObligatorio,
+    Field(
         min_length=1,
         max_length=50,
         json_schema_extra=PATRON_NO_VACIO,
         description="Se guarda sin los espacios de los extremos.",
-    )
+    ),
+]
+
+
+class WorkflowEsquema(BaseModel):
+    """Cuerpo del alta y del cambio de nombre de un workflow."""
+
+    nombre: NombreWorkflowOPaso
+
+
+class PasoWorkflowEsquema(BaseModel):
+    """Cuerpo del alta y del cambio de nombre de un paso de un workflow."""
+
+    nombre: NombreWorkflowOPaso
 
 
 def _normalizar_entero(valor: object) -> object:
@@ -46,7 +57,7 @@ class OrdenPasosEsquema(BaseModel):
         json_schema_extra={"uniqueItems": True},
         description=(
             "Ids de todos los pasos del workflow en el nuevo orden: cada uno exactamente "
-            "una vez. Si falta alguno, se repite o no existe, 422."
+            "una vez. Si falta alguno, se repite o no es del workflow, 422."
         ),
     )
 
@@ -54,4 +65,15 @@ class OrdenPasosEsquema(BaseModel):
 class PasoWorkflowSalidaEsquema(BaseModel):
     id: int
     numero: int
+    nombre: str
+
+
+class WorkflowSalidaEsquema(BaseModel):
+    id: int
+    nombre: str
+    pasos: list[PasoWorkflowSalidaEsquema] = Field(description="Pasos por número (1..n).")
+
+
+class WorkflowDeTareaEsquema(BaseModel):
+    id: int
     nombre: str
