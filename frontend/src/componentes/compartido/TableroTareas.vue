@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 
 import type { EstadoGrupo, GrupoEstados, Tarea } from '@/api/tipos'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
+import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import { Button } from '@/componentes/ui/button'
 import { Label } from '@/componentes/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
@@ -223,7 +224,10 @@ function terminarArrastre(): void {
                   class="text-muted-foreground text-xs [overflow-wrap:anywhere]"
                 >
                   <span class="sr-only">{{ 'Asignado a: ' }}</span
-                  >{{ tarea.asignados.join(', ') }}
+                  ><template v-for="(persona, indice) in tarea.asignados" :key="persona"
+                    ><template v-if="indice > 0">, </template
+                    ><NombreRelacionado tipo="persona" :nombre="persona"
+                  /></template>
                 </p>
 
                 <p v-if="tarea.fecha_vencimiento" class="text-xs">
@@ -242,7 +246,7 @@ function terminarArrastre(): void {
                     :key="etiqueta"
                     class="bg-secondary text-secondary-foreground inline-flex max-w-full rounded-md border px-2 py-0.5 text-xs font-medium [overflow-wrap:anywhere]"
                   >
-                    {{ etiqueta }}
+                    <NombreRelacionado tipo="etiqueta" :nombre="etiqueta" />
                   </li>
                 </ul>
 

@@ -42,6 +42,9 @@ import DetalleTarea from '@/componentes/compartido/DetalleTarea.vue'
 import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vue'
 import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
+import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
+import ModalTareasRelacionadas from '@/componentes/compartido/ModalTareasRelacionadas.vue'
+import { useProveedorTareasRelacionadas } from '@/composables/useTareasRelacionadas'
 import CalendarioTareas from '@/componentes/compartido/CalendarioTareas.vue'
 import TableroTareas from '@/componentes/compartido/TableroTareas.vue'
 import type { CeldaExportada } from '@/lib/exportarTabla'
@@ -598,6 +601,15 @@ function editarEnDetalle(): void {
   editandoEnDetalle.value = true
 }
 
+// Modal con las tareas y subtareas de la etiqueta o persona pulsada.
+const tareasRelacionadas = useProveedorTareasRelacionadas()
+
+function abrirDesdeRelacionadas(id: number): void {
+  tareasRelacionadas.cerrar()
+  cerrarDetalle()
+  idEnDetalle.value = id
+}
+
 function cerrarDetalle(): void {
   idEnDetalle.value = null
   editandoEnDetalle.value = false
@@ -1082,7 +1094,10 @@ async function guardar(): Promise<void> {
                   data-testid="chip-tabla"
                   class="bg-secondary text-secondary-foreground inline-flex max-w-full rounded-md border px-2 py-0.5 text-xs font-medium"
                 >
-                  {{ nombre }}
+                  <NombreRelacionado
+                    :tipo="campoLista === 'etiquetas' ? 'etiqueta' : 'persona'"
+                    :nombre="nombre"
+                  />
                 </li>
               </ul>
               <template v-else>—</template>
@@ -1201,6 +1216,13 @@ async function guardar(): Promise<void> {
         </FormularioTarea>
       </template>
     </DetalleTarea>
+
+    <ModalTareasRelacionadas
+      :seleccion="tareasRelacionadas.seleccion.value"
+      :tareas="tienda.tareas"
+      @cerrar="tareasRelacionadas.cerrar"
+      @ver-tarea="abrirDesdeRelacionadas"
+    />
 
     <DialogoConfirmacion
       :abierto="tareaAEliminar !== null"

@@ -3,9 +3,11 @@ import { Pencil, Trash } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
 import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
+import type { TipoRelacion } from '@/composables/useTareasRelacionadas'
 import { formatearFechaHora } from '@/lib/fechas'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
+import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import SubtareasTarea from '@/componentes/compartido/SubtareasTarea.vue'
 import { Button } from '@/componentes/ui/button'
 import {
@@ -57,6 +59,8 @@ interface Campo {
   multilinea?: boolean
   // Fecha ISO de la que mostrar la cuenta atrás junto al valor.
   cuentaAtras?: string
+  // Etiquetas o personas que se pueden pulsar para ver sus tareas relacionadas.
+  relacionados?: { tipo: TipoRelacion; nombres: string[] }
 }
 
 const camposTarea = computed<Campo[]>(() => {
@@ -66,8 +70,16 @@ const camposTarea = computed<Campo[]>(() => {
     { termino: 'Nombre', valor: tarea.nombre },
     { termino: 'Prioridad', valor: textoOVacio(tarea.prioridad) },
     { termino: 'Descripción', valor: textoOVacio(tarea.descripcion), multilinea: true },
-    { termino: 'Etiquetas', valor: unirNombres(tarea.etiquetas) },
-    { termino: 'Asignado a', valor: unirNombres(tarea.asignados) },
+    {
+      termino: 'Etiquetas',
+      valor: unirNombres(tarea.etiquetas),
+      relacionados: { tipo: 'etiqueta', nombres: tarea.etiquetas },
+    },
+    {
+      termino: 'Asignado a',
+      valor: unirNombres(tarea.asignados),
+      relacionados: { tipo: 'persona', nombres: tarea.asignados },
+    },
     { termino: 'Fecha de creación', valor: formatearFechaHora(tarea.fecha_creacion) },
     {
       termino: 'Fecha de vencimiento',
@@ -144,6 +156,15 @@ function alCambiarApertura(abierta: boolean): void {
               <dd v-if="campo.cuentaAtras" class="text-sm [overflow-wrap:anywhere]">
                 {{ campo.valor }}
                 <ContadorVencimiento :vencimiento="campo.cuentaAtras" class="ml-2" />
+              </dd>
+              <dd
+                v-else-if="campo.relacionados && campo.relacionados.nombres.length > 0"
+                class="text-sm [overflow-wrap:anywhere]"
+              >
+                <template v-for="(nombre, indice) in campo.relacionados.nombres" :key="nombre"
+                  ><template v-if="indice > 0">, </template
+                  ><NombreRelacionado :tipo="campo.relacionados.tipo" :nombre="nombre"
+                /></template>
               </dd>
               <dd
                 v-else
