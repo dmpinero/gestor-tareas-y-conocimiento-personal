@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { clienteApi } from '@/api/cliente'
+import { colorEtiqueta } from '@/lib/coloresTarea'
 import { exportarTablaExcel, exportarTablaPDF } from '@/lib/exportarTabla'
 import { useTiendaTareas } from '@/stores/tareas'
 import VistaTareas from '../VistaTareas.vue'
@@ -2972,7 +2973,10 @@ describe('VistaTareas', () => {
       it('en una tarjeta se pulsan las personas y las etiquetas para ver sus tareas', async () => {
         await montarTablero()
         const tarjeta = columna('Pendiente').querySelector<HTMLElement>('[data-tarjeta]')!
-        expect(tarjeta.textContent).toContain('Asignado a: Ana')
+        expect(
+          tarjeta.querySelector('ul[aria-label="Asignados"] [data-testid="avatar-persona"]')
+            ?.textContent,
+        ).toContain('Ana')
 
         tarjeta
           .querySelector<HTMLButtonElement>('button[aria-label="Ver tareas y subtareas de Ana"]')!
@@ -3126,6 +3130,227 @@ describe('VistaTareas', () => {
         expect(tarjetas('Pendiente')).toEqual(['Escribir informe'])
         expect(tarjetas('En curso')).toEqual([])
         expect(contador('En curso')).toBe('0')
+      })
+
+      describe('aspecto kanban', () => {
+        const CON_SUBTAREAS = {
+          ...INFORME,
+          subtareas: [{ ...SUBTAREAS[0]!, asignado: 'Luis' }, SUBTAREAS[1]!, SUBTAREAS[2]!],
+        }
+        const NUEVA_SUBTAREA = {
+          id: 13,
+          nombre: 'Revisar',
+          asignado: null,
+          prioridad: null,
+          resuelta: false,
+          comentarios: 0,
+        }
+
+        function cabecera(nombre: string): HTMLElement {
+          return columna(nombre).querySelector<HTMLElement>('h3')!
+        }
+
+        function tarjeta(nombre: string): HTMLElement {
+          return columna(nombre).querySelector<HTMLElement>('[data-tarjeta]')!
+        }
+
+        async function desplegarSubtareas(): Promise<HTMLButtonElement> {
+          const boton = botonEn(columna('Pendiente'), '3 subtareas de Escribir informe')
+          boton.click()
+          await flushPromises()
+          return boton
+        }
+
+        function nombresSubtareas(): string[] {
+          const lista = document.body.querySelector(
+            'ul[aria-label="Subtareas de Escribir informe"]',
+          )
+          return [...(lista?.querySelectorAll('[data-nombre-subtarea]') ?? [])].map((s) =>
+            s.firstChild!.textContent!.trim(),
+          )
+        }
+
+        it('cada columna tiene una cabecera de color con el nombre del estado y su contador', async () => {
+          await montarTablero()
+
+          expect(cabecera('Pendiente').className).toContain('bg-gray-600')
+          expect(cabecera('En curso').className).toContain('bg-blue-700')
+          expect(cabecera('Hecho').className).toContain('bg-emerald-700')
+          for (const nombre of ['Pendiente', 'En curso', 'Hecho']) {
+            expect(cabecera(nombre).className).toContain('text-white')
+            expect(cabecera(nombre).textContent).toContain(nombre)
+          }
+          expect(cabecera('Pendiente').querySelector('[data-contador]')?.textContent?.trim()).toBe(
+            '1',
+          )
+          expect(cabecera('Hecho').textContent).toContain('(0 tareas)')
+        })
+
+        it('la tarjeta muestra avatares, vencimiento corto y etiquetas de color', async () => {
+          await montarTablero()
+
+          const persona = botonEn(tarjeta('Pendiente'), 'Ver tareas y subtareas de Ana')
+          expect(persona.querySelector('[data-testid="avatar-persona"]')).not.toBeNull()
+          expect(
+            tarjeta('Pendiente').querySelector('[data-testid="vencimiento-corto"]'),
+          ).not.toBeNull()
+          const etiqueta = [
+            ...tarjeta('Pendiente').querySelectorAll('ul[aria-label="Etiquetas"] li'),
+          ]
+          expect(etiqueta[0]?.className).toContain(colorEtiqueta('Backend'))
+          expect(etiqueta[1]?.className).toContain(colorEtiqueta('Urgente'))
+        })
+
+        it('el botón de comentarios abre el detalle de la tarea', async () => {
+          await montarTablero()
+
+          botonEn(tarjeta('Pendiente'), 'Comentarios de Escribir informe').click()
+          await flushPromises()
+
+          expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
+        })
+
+        it('el botón de subtareas muestra cuántas tiene la tarea', async () => {
+          await montarTablero([CON_SUBTAREAS, ARTICULO])
+
+          // El número visible forma parte del nombre accesible (WCAG 2.5.3).
+          const boton = botonEn(tarjeta('Pendiente'), '3 subtareas de Escribir informe')
+          expect(boton.textContent?.trim()).toBe('3')
+          expect(boton.getAttribute('aria-expanded')).toBe('false')
+          expect(
+            botonEn(tarjeta('En curso'), '0 subtareas de Leer artículo').textContent?.trim(),
+          ).toBe('0')
+        })
+
+        it('el botón de subtareas las despliega bajo la tarjeta y las vuelve a plegar', async () => {
+          await montarTablero([CON_SUBTAREAS, ARTICULO])
+
+          const boton = await desplegarSubtareas()
+          expect(boton.getAttribute('aria-expanded')).toBe('true')
+          const panel = document.getElementById(boton.getAttribute('aria-controls')!)
+          expect(panel).not.toBeNull()
+          expect(tarjeta('Pendiente').contains(panel)).toBe(false)
+          expect(columna('Pendiente').contains(panel)).toBe(true)
+          expect(nombresSubtareas()).toEqual(['Contactar', 'Enviar propuesta', 'Firmar contrato'])
+          const resuelta = panel!.querySelector<HTMLElement>('[data-nombre-subtarea]')!
+          expect(resuelta.className).toContain('line-through')
+          expect(resuelta.textContent).toContain('(resuelta)')
+          expect(
+            panel!.querySelector('button[aria-label="Ver tareas y subtareas de Luis"]'),
+          ).not.toBeNull()
+          // Las subtareas no son tarjetas de tarea.
+          expect(tarjetas('Pendiente')).toEqual(['Escribir informe'])
+
+          boton.click()
+          await flushPromises()
+          expect(boton.getAttribute('aria-expanded')).toBe('false')
+          expect(nombresSubtareas()).toEqual([])
+        })
+
+        it('pulsar una subtarea abre el detalle de su tarea', async () => {
+          await montarTablero([CON_SUBTAREAS, ARTICULO])
+          await desplegarSubtareas()
+
+          document.body.querySelector<HTMLButtonElement>('[data-nombre-subtarea]')!.click()
+          await flushPromises()
+
+          expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
+        })
+
+        it('"+ Agregar subtarea" crea una subtarea solo con su nombre', async () => {
+          await montarTablero([CON_SUBTAREAS, ARTICULO])
+          vi.mocked(clienteApi.crear).mockResolvedValue({
+            ...CON_SUBTAREAS,
+            subtareas: [...CON_SUBTAREAS.subtareas, NUEVA_SUBTAREA],
+          })
+          const boton = await desplegarSubtareas()
+
+          const agregar = botonEn(columna('Pendiente'), 'Agregar subtarea a Escribir informe')
+          expect(agregar.textContent?.trim()).toBe('Agregar subtarea')
+          agregar.click()
+          await flushPromises()
+          const entrada = campo<HTMLInputElement>(
+            columna('Pendiente'),
+            'input[name="nombre-subtarea"]',
+          )
+          expect(document.activeElement).toBe(entrada)
+          expect(
+            document.body.querySelector(`label[for="${entrada.id}"]`)?.textContent?.trim(),
+          ).toBe('Nombre de la subtarea')
+          await escribir(entrada, '  Revisar  ')
+          botonEn(columna('Pendiente'), 'Guardar subtarea').click()
+          await flushPromises()
+
+          expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/subtareas', {
+            nombre: 'Revisar',
+          })
+          expect(nombresSubtareas()).toEqual([
+            'Contactar',
+            'Enviar propuesta',
+            'Firmar contrato',
+            'Revisar',
+          ])
+          expect(boton.textContent?.trim()).toBe('4')
+          // Se queda abierto y vacío para añadir otra.
+          expect(entrada.value).toBe('')
+          expect(document.activeElement).toBe(entrada)
+        })
+
+        it('"+ Agregar subtarea" valida el nombre sin llamar a la API y Cancelar lo cierra', async () => {
+          await montarTablero([CON_SUBTAREAS, ARTICULO])
+          await desplegarSubtareas()
+          botonEn(columna('Pendiente'), 'Agregar subtarea a Escribir informe').click()
+          await flushPromises()
+          const entrada = campo<HTMLInputElement>(
+            columna('Pendiente'),
+            'input[name="nombre-subtarea"]',
+          )
+
+          await escribir(entrada, '   ')
+          botonEn(columna('Pendiente'), 'Guardar subtarea').click()
+          await flushPromises()
+          expect(columna('Pendiente').querySelector('[role="alert"]')?.textContent).toContain(
+            'El nombre de la subtarea es obligatorio.',
+          )
+          await escribir(entrada, 'x'.repeat(201))
+          botonEn(columna('Pendiente'), 'Guardar subtarea').click()
+          await flushPromises()
+          expect(columna('Pendiente').querySelector('[role="alert"]')?.textContent).toContain(
+            'El nombre de la subtarea no puede superar 200 caracteres.',
+          )
+          expect(clienteApi.crear).not.toHaveBeenCalled()
+
+          botonEn(columna('Pendiente'), 'Cancelar subtarea').click()
+          await flushPromises()
+          expect(columna('Pendiente').querySelector('input[name="nombre-subtarea"]')).toBeNull()
+          expect(document.activeElement?.getAttribute('aria-label')).toBe(
+            'Agregar subtarea a Escribir informe',
+          )
+        })
+
+        it('la barra de distribución refleja las tareas del tablero por estado', async () => {
+          await montarTablero()
+
+          const barra = document.body.querySelector<HTMLElement>('[data-testid="barra-estados"]')!
+          expect(barra.getAttribute('role')).toBe('img')
+          expect(barra.getAttribute('aria-label')).toBe(
+            'Distribución de estados en Desarrollo: Pendiente, 1 tarea; En curso, 1 tarea',
+          )
+          const segmentos = [...barra.querySelectorAll<HTMLElement>('[data-estado]')]
+          expect(segmentos.map((s) => s.dataset.estado)).toEqual(['Pendiente', 'En curso'])
+          expect(segmentos.map((s) => s.style.width)).toEqual(['50%', '50%'])
+          expect(segmentos[0]!.className).toContain('bg-gray-600')
+          expect(segmentos[1]!.className).toContain('bg-blue-700')
+
+          await escribir(campo<HTMLInputElement>(document.body, '#filtro-buscar'), 'informe')
+          expect(barra.getAttribute('aria-label')).toBe(
+            'Distribución de estados en Desarrollo: Pendiente, 1 tarea',
+          )
+          await escribir(campo<HTMLInputElement>(document.body, '#filtro-buscar'), 'nada')
+          expect(barra.getAttribute('aria-label')).toBe(
+            'Distribución de estados en Desarrollo: sin tareas',
+          )
+        })
       })
 
       describe('mover tareas', () => {
