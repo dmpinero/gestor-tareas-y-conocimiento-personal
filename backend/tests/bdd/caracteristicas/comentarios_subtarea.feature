@@ -19,6 +19,11 @@ Característica: Comentarios de las subtareas
     Y al consultar las tareas la subtarea "Camión" de "Mudanza" tiene 0 comentarios
     Y los comentarios de "Mudanza" son ""
 
+  Escenario: Añadir un comentario a una subtarea sanea su HTML como en las tareas
+    Cuando comento "<p><strong>Pedir</strong> cajas<script>alert(1)</script></p>" en la subtarea "Cajas" de "Mudanza"
+    Entonces la API responde 201 con el comentario "<p><strong>Pedir</strong> cajas</p>" fechado ahora en UTC
+    Y los comentarios de la subtarea "Cajas" de "Mudanza" son "<p><strong>Pedir</strong> cajas</p>"
+
   Escenario: Los comentarios de una subtarea se devuelven en orden cronológico
     Cuando comento "Uno" en la subtarea "Cajas" de "Mudanza"
     Y comento "Dos" en la subtarea "Cajas" de "Mudanza"

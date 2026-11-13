@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 
 import schemathesis
+from pydantic import ValidationError
 from sqlalchemy import text
 
 from gestor_tareas.dominio.excepciones import NombreDuplicadoError
@@ -13,6 +14,7 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflo
     RepositorioWorkflowsSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
+from gestor_tareas.interfaces.api.v1.esquemas.comentario import ComentarioCrearEsquema
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import PATRON_FECHA_HORA
 from gestor_tareas.main import crear_aplicacion
 
@@ -176,6 +178,25 @@ def _reordenar_los_estados_que_existen(case: schemathesis.Case) -> None:
         case.body["ids"] = [e.id for e in grupo.estados][::-1]
 
 
+def _comentar_con_texto_visible_valido(case: schemathesis.Case) -> None:
+    """JSON Schema no puede contar el texto visible del HTML: que tenga de 1 a 500
+    caracteres sin etiquetas, y que el HTML saneado no pase de 10000 (si no, 422), no
+    figura en el contrato más que en la descripción de `texto`. En los casos que el
+    contrato da por válidos, si el texto generado no cumple esas reglas se envía uno
+    que sí; el resto de la petición se sigue probando entera."""
+    if not (
+        case.method in ("POST", "PUT")
+        and "/comentarios" in case.path
+        and _es_positivo_con_cuerpo(case)
+        and isinstance(case.body.get("texto"), str)
+    ):
+        return
+    try:
+        ComentarioCrearEsquema(texto=case.body["texto"])
+    except ValidationError:
+        case.body["texto"] = "Comentario del contrato"
+
+
 @esquema.parametrize()
 def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     """Genera peticiones a partir del OpenAPI y valida que las respuestas cumplen el esquema."""
@@ -185,5 +206,6 @@ def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     _asignar_workflows_que_existen(case)
     _mover_a_un_estado_del_grupo_de_la_tarea(case)
     _reordenar_los_estados_que_existen(case)
+    _comentar_con_texto_visible_valido(case)
     excluidos = _CHECKS_EXCLUIDOS_POR_RUTA.get(case.path)
     case.call_and_validate(excluded_checks=excluidos or None)

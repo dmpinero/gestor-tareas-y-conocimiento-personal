@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from tests.bdd.comentarios_html import html_guardado
+
 scenarios("comentarios.feature")
 
 _TAREAS = "/api/v1/tareas"
@@ -18,6 +20,14 @@ _INSTANTE_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 _CLAVES = {"id", "texto", "creado", "editado"}
 
+# 500 caracteres visibles (250 + espacio + 248 + "&"): las etiquetas no cuentan y
+# cada entidad cuenta como un carácter.
+_HTML_500_VISIBLES = f"<p><strong>{'á' * 250}</strong> {'á' * 248}&amp;</p>"
+_HTML_501_VISIBLES = f"<p><strong>{'á' * 251}</strong>{'á' * 250}</p>"
+# 400 caracteres visibles y 3207 de entrada, pero al sanear cada enlace recibe su
+# `rel` y el HTML guardado pasaría de 10000 caracteres.
+_HTML_SANEADO_DE_MAS_DE_10000 = f"<p>{'<a>a</a>' * 400}</p>"
+
 
 def _texto(texto: str) -> str:
     """Los "\\n" escritos en el escenario son saltos de línea."""
@@ -26,6 +36,15 @@ def _texto(texto: str) -> str:
 
 def _lista(texto: str) -> list[str]:
     return [_texto(t) for t in texto.split("; ")] if texto else []
+
+
+def _guardado(texto: str) -> str:
+    """El HTML guardado para un comentario escrito en el escenario."""
+    return html_guardado(_texto(texto))
+
+
+def _guardados(textos: str) -> list[str]:
+    return [html_guardado(t) for t in _lista(textos)]
 
 
 def _id_tarea(cliente: TestClient, nombre: str) -> int:
@@ -53,7 +72,7 @@ def _listar(cliente: TestClient, tarea: str) -> list[dict]:
 
 
 def _id_comentario(cliente: TestClient, tarea: str, texto: str) -> int:
-    return next(c["id"] for c in _listar(cliente, tarea) if c["texto"] == texto)
+    return next(c["id"] for c in _listar(cliente, tarea) if c["texto"] == _guardado(texto))
 
 
 def _ruta_por_texto(cliente: TestClient, tarea: str, texto: str) -> str:
@@ -116,6 +135,40 @@ def comentar(cliente: TestClient, texto: str, tarea: str) -> Response:
 )
 def comentar_en_el_limite(cliente: TestClient, tarea: str) -> Response:
     return _comentar(cliente, tarea, {"texto": "á" * 500})
+
+
+@when(
+    parsers.re(r'^comento en "(?P<tarea>[^"]+)" el HTML (?P<html>.+)$'),
+    target_fixture="respuesta",
+)
+def comentar_html(cliente: TestClient, tarea: str, html: str) -> Response:
+    return _comentar(cliente, tarea, {"texto": html})
+
+
+@when(
+    parsers.re(r'^comento en "(?P<tarea>[^"]+)" un HTML con 500 caracteres visibles$'),
+    target_fixture="respuesta",
+)
+def comentar_html_en_el_limite(cliente: TestClient, tarea: str) -> Response:
+    return _comentar(cliente, tarea, {"texto": _HTML_500_VISIBLES})
+
+
+@when(
+    parsers.re(r'^intento comentar en "(?P<tarea>[^"]+)" un HTML con 501 caracteres visibles$'),
+    target_fixture="respuesta",
+)
+def comentar_html_largo(cliente: TestClient, tarea: str) -> Response:
+    return _comentar(cliente, tarea, {"texto": _HTML_501_VISIBLES})
+
+
+@when(
+    parsers.re(
+        r'^intento comentar en "(?P<tarea>[^"]+)" un HTML que saneado pasa de 10000 caracteres$'
+    ),
+    target_fixture="respuesta",
+)
+def comentar_html_saneado_largo(cliente: TestClient, tarea: str) -> Response:
+    return _comentar(cliente, tarea, {"texto": _HTML_SANEADO_DE_MAS_DE_10000})
 
 
 @when(
@@ -214,7 +267,7 @@ def eliminar_comentario(cliente: TestClient, comentario: str, tarea: str) -> Res
 def operar_en_tarea_inexistente(
     cliente: TestClient, originales: dict[int, dict], accion: str, comentario: str, i: str
 ) -> Response:
-    id_comentario = next(i for i, c in originales.items() if c["texto"] == comentario)
+    id_comentario = next(i for i, c in originales.items() if c["texto"] == _guardado(comentario))
     return _operar(cliente, accion, _ruta_comentario(int(i), id_comentario))
 
 
@@ -251,18 +304,37 @@ def la_api_responde_con_el_comentario(respuesta: Response, texto: str) -> None:
     comentario = respuesta.json()
     assert set(comentario) == _CLAVES
     assert isinstance(comentario["id"], int)
-    assert comentario["texto"] == _texto(texto)
+    assert comentario["texto"] == _guardado(texto)
     assert comentario["editado"] is None
     ahora = datetime.now(UTC)
     assert ahora - timedelta(seconds=30) <= _creado(comentario) <= ahora
 
 
+@then(parsers.re(r"^la API responde 201 con el HTML (?P<html><.+)$"))
+def la_api_responde_con_el_html(respuesta: Response, html: str) -> None:
+    assert respuesta.status_code == 201
+    assert set(respuesta.json()) == _CLAVES
+    assert respuesta.json()["texto"] == html
+
+
+@then("la API responde 201 con el HTML de 500 caracteres visibles")
+def la_api_responde_con_el_html_en_el_limite(respuesta: Response) -> None:
+    assert respuesta.status_code == 201
+    assert respuesta.json()["texto"] == _HTML_500_VISIBLES
+
+
+@then(parsers.re(r'^"(?P<tarea>[^"]+)" solo tiene ese comentario$'))
+def solo_tiene_ese_comentario(cliente: TestClient, respuesta: Response, tarea: str) -> None:
+    # Lo guardado es justo lo que devolvió el alta.
+    assert _listar(cliente, tarea) == [respuesta.json()]
+
+
 @then("la API responde 201 con un comentario de 500 caracteres")
 def la_api_responde_en_el_limite(cliente: TestClient, respuesta: Response) -> None:
     assert respuesta.status_code == 201
-    assert respuesta.json()["texto"] == "á" * 500
+    assert respuesta.json()["texto"] == f"<p>{'á' * 500}</p>"
     listado = cliente.get(_ruta(_id_tarea(cliente, "Mudanza"))).json()
-    assert [c["texto"] for c in listado] == ["á" * 500]
+    assert [c["texto"] for c in listado] == [f"<p>{'á' * 500}</p>"]
 
 
 def _comprobar_editado(comentario: dict, original: dict, texto: str) -> None:
@@ -286,7 +358,7 @@ def la_api_responde_con_el_comentario_editado(
 ) -> None:
     assert respuesta.status_code == 200
     comentario = respuesta.json()
-    _comprobar_editado(comentario, originales[comentario["id"]], _texto(texto))
+    _comprobar_editado(comentario, originales[comentario["id"]], _guardado(texto))
 
 
 @then("la API responde 200 con un comentario editado de 500 caracteres")
@@ -295,7 +367,7 @@ def la_api_responde_editado_en_el_limite(
 ) -> None:
     assert respuesta.status_code == 200
     comentario = respuesta.json()
-    _comprobar_editado(comentario, originales[comentario["id"]], "á" * 500)
+    _comprobar_editado(comentario, originales[comentario["id"]], f"<p>{'á' * 500}</p>")
     assert _listar(cliente, "Mudanza") == [comentario]
 
 
@@ -315,10 +387,10 @@ def solo_esta_editado(
     assert set(c["id"] for c in comentarios) == set(originales)
     for comentario in comentarios:
         original = originales[comentario["id"]]
-        if comentario["texto"] == _texto(texto):
+        if comentario["texto"] == _guardado(texto):
             # Lo guardado es justo lo que devolvió la edición.
             assert comentario == respuesta.json()
-            _comprobar_editado(comentario, original, _texto(texto))
+            _comprobar_editado(comentario, original, _guardado(texto))
         else:
             assert comentario == original
 
@@ -344,7 +416,7 @@ def los_comentarios_son(cliente: TestClient, tarea: str, textos: str) -> None:
     assert respuesta.status_code == 200
     comentarios = respuesta.json()
     assert all(set(c) == _CLAVES for c in comentarios)
-    assert [c["texto"] for c in comentarios] == _lista(textos)
+    assert [c["texto"] for c in comentarios] == _guardados(textos)
     claves = [(_creado(c), c["id"]) for c in comentarios]
     assert claves == sorted(claves)
 

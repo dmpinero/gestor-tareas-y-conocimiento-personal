@@ -115,6 +115,12 @@ Característica: Comentarios de los pasos de los workflows
     Y la subtarea "Cierre" de "Venta" tiene los comentarios copiados "Firmar" fechados ahora y sin editar
     Y al consultar las tareas las subtareas de "Venta" tienen "2; 1" comentarios
 
+  Escenario: Los comentarios con formato de un paso se copian tal cual a la subtarea
+    Dado que el paso "Contacto" de "Ventas" tiene los comentarios "<p><strong>Llamar</strong> <em>antes</em><script>alert(1)</script></p>; <ul><li>a&amp;b</li></ul>"
+    Entonces los comentarios del paso "Contacto" de "Ventas" son "<p><strong>Llamar</strong> <em>antes</em></p>; <ul><li>a&amp;b</li></ul>"
+    Cuando creo la tarea "Venta" con el workflow "Ventas"
+    Entonces la subtarea "Contacto" de "Venta" tiene los comentarios copiados "<p><strong>Llamar</strong> <em>antes</em></p>; <ul><li>a&amp;b</li></ul>" fechados ahora y sin editar
+
   Escenario: Editar una tarea para darle otro workflow copia los comentarios de sus pasos
     Dado que el paso "Pedido" de "Compras" tiene los comentarios "Pedir presupuesto"
     Y que existe la tarea "Venta" con el workflow "Ventas"
