@@ -15,7 +15,8 @@ class RepositorioTareas(Protocol):
         """Guarda una tarea nueva, con el estado ``tarea.completada``, su
         ``tarea.workflow`` (que debe existir) y sus ``tarea.subtareas`` en ese orden
         (a las que asigna id; su ``asignado`` debe existir ya en el catálogo de
-        personas, y se ignora ``comentarios``)."""
+        personas, y se ignora ``comentarios``). Cada subtarea se guarda con sus
+        ``comentarios_iniciales``, en ese orden y en la misma transacción."""
         ...
 
     def listar(self) -> list[Tarea]:
@@ -57,7 +58,8 @@ class RepositorioTareas(Protocol):
         Las subtareas que ya tiene no cambian (se ignora ``tarea.subtareas``),
         tampoco al cambiar el tipo de la tarea. ``subtareas_nuevas`` se añaden,
         pendientes y en ese orden, después de las que ya tiene (su ``asignado``
-        debe existir ya en el catálogo de personas).
+        debe existir ya en el catálogo de personas), con sus
+        ``comentarios_iniciales`` como en ``crear``.
 
         Lanza ``EntidadNoEncontradaError`` si otra petición ha borrado la tarea
         mientras tanto.

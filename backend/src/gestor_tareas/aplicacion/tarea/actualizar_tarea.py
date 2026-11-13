@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from datetime import datetime
 
+from gestor_tareas.aplicacion.comentario.anadir_comentario import ahora_en_utc
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.asignar_grupo_estados import GrupoPedido
 from gestor_tareas.aplicacion.tarea.asignar_workflow import WorkflowPedido
@@ -37,12 +39,14 @@ class ActualizarTarea:
         repositorio_personas: RepositorioPersonas,
         repositorio_grupos: RepositorioGruposEstados,
         repositorio_workflows: RepositorioWorkflows,
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ) -> None:
         self._repositorio = repositorio
         self._repositorio_etiquetas = repositorio_etiquetas
         self._repositorio_personas = repositorio_personas
         self._repositorio_grupos = repositorio_grupos
         self._repositorio_workflows = repositorio_workflows
+        self._reloj = reloj
 
     def ejecutar(
         self,
@@ -64,7 +68,7 @@ class ActualizarTarea:
             # WorkflowPedido y GrupoPedido). La tarea se lee con bloqueo: así se
             # conservan el estado y el workflow que tiene ahora, no los de una
             # lectura anterior.
-            workflow = WorkflowPedido(self._repositorio_workflows, workflow_id)
+            workflow = WorkflowPedido(self._repositorio_workflows, workflow_id, self._reloj)
             grupo = GrupoPedido(self._repositorio_grupos, grupo_estados_id)
             tarea = self._repositorio.obtener_para_modificar(id_tarea)
             if tarea is None:

@@ -2692,7 +2692,7 @@ describe('VistaTareas', () => {
     const OPORTUNIDADES = {
       id: 1,
       nombre: 'Workflow Oportunidades',
-      pasos: [{ id: 10, numero: 1, nombre: 'Contacto' }],
+      pasos: [{ id: 10, numero: 1, nombre: 'Contacto', comentarios: 0 }],
     }
     const ALTAS = { id: 2, nombre: 'Altas', pasos: [] }
     const WORKFLOWS = [OPORTUNIDADES, ALTAS]

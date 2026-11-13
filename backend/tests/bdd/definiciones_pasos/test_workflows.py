@@ -75,7 +75,7 @@ def _pasos_guardados(id_workflow: int) -> list[tuple[int, str]]:
 
 def _comprobar_pasos(pasos: list[dict], nombres: list[str]) -> None:
     assert [(p["numero"], p["nombre"]) for p in pasos] == list(enumerate(nombres, start=1))
-    assert all(set(p) == {"id", "numero", "nombre"} for p in pasos)
+    assert all(set(p) == {"id", "numero", "nombre", "comentarios"} for p in pasos)
     assert len({p["id"] for p in pasos}) == len(pasos)
 
 

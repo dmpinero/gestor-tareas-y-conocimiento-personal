@@ -23,7 +23,13 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
+from sqlalchemy.orm import (
+    Mapped,
+    WriteOnlyMapped,
+    column_property,
+    mapped_column,
+    relationship,
+)
 
 from gestor_tareas.dominio.tarea.entidades import TipoTarea
 from gestor_tareas.infraestructura.persistencia.sesion import Base
@@ -131,6 +137,10 @@ class SubtareaModelo(Base):
         Boolean, nullable=False, default=False, server_default=false()
     )
     asignado: Mapped[PersonaModelo | None] = relationship(lazy="selectin")
+    # Solo para dar de alta los comentarios con los que nace la subtarea en la misma
+    # transacción ("write_only": nunca se cargan). Al borrar la subtarea los borra el
+    # ON DELETE CASCADE.
+    comentarios: WriteOnlyMapped[ComentarioSubtareaModelo] = relationship(passive_deletes=True)
     # Número de comentarios, calculado en la misma consulta que carga la subtarea
     # (subconsulta correlacionada): no es una columna de la tabla. Los comentarios
     # no se cargan con la subtarea.
@@ -213,6 +223,28 @@ class WorkflowModelo(Base):
     )
 
 
+class ComentarioPasoModelo(Base):
+    """Comentario del histórico de un paso de un workflow; borrar el paso (o su
+    workflow) borra sus comentarios.
+
+    ``editado`` es el instante de su última edición, o NULL si nunca se editó.
+    """
+
+    __tablename__ = "comentarios_paso_workflow"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    paso_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "pasos_workflow.id", name="fk_comentarios_paso_workflow_paso", ondelete="CASCADE"
+        ),
+        nullable=False,
+    )
+    texto: Mapped[str] = mapped_column(String(500), nullable=False)
+    # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
+    creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+
 class PasoWorkflowModelo(Base):
     """Paso de un workflow; borrar el workflow borra sus pasos.
 
@@ -230,6 +262,14 @@ class PasoWorkflowModelo(Base):
     workflow_id: Mapped[int] = mapped_column(
         ForeignKey("workflows.id", name="fk_pasos_workflow_workflow", ondelete="CASCADE"),
         nullable=False,
+    )
+    # Número de comentarios, calculado en la misma consulta que carga el paso
+    # (subconsulta correlacionada, sin bloqueo): no es una columna de la tabla.
+    numero_comentarios: Mapped[int] = column_property(
+        select(func.count(ComentarioPasoModelo.id))
+        .where(ComentarioPasoModelo.paso_id == id)
+        .correlate_except(ComentarioPasoModelo)
+        .scalar_subquery()
     )
 
 
@@ -325,6 +365,7 @@ class TareaModelo(Base):
 __all__ = [
     "Base",
     "ComentarioModelo",
+    "ComentarioPasoModelo",
     "ComentarioSubtareaModelo",
     "EstadoGrupoModelo",
     "EtiquetaModelo",

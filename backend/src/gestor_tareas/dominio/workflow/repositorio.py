@@ -58,11 +58,15 @@ class RepositorioWorkflows(Protocol):
 
     def leer_para_copiar(self, id_workflow: int) -> Workflow | None:
         """El workflow con sus pasos por número, para asignarlo a una tarea y
-        copiar sus pasos en ella, o ``None`` si no existe.
+        copiar sus pasos en ella, o ``None`` si no existe. Cada paso trae también los
+        textos de sus comentarios (``comentarios_para_copiar``), para copiarlos en la
+        subtarea que nace de él.
 
         La lectura ve lo último confirmado, nunca ve el workflow a medias de un
         alta, una baja o una reordenación simultánea, e impide que el workflow o
         sus pasos cambien (o se borre) hasta que termine la transacción de quien
-        lee: la tarea debe guardarse en esa misma transacción. No confirma.
+        lee: la tarea debe guardarse en esa misma transacción. Lo mismo con los
+        comentarios de los pasos: la copia nunca ve un alta, una edición o un borrado
+        a medias, y los impide hasta que termine la transacción. No confirma.
         """
         ...

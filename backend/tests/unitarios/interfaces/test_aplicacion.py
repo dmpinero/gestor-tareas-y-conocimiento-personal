@@ -29,6 +29,8 @@ def test_la_api_expone_salud_tareas_catalogos_workflows_y_grupos_de_estados_bajo
         "/api/v1/workflows/{id_workflow}",
         "/api/v1/workflows/{id_workflow}/pasos",
         "/api/v1/workflows/{id_workflow}/pasos/{id_paso}",
+        "/api/v1/workflows/{id_workflow}/pasos/{id_paso}/comentarios",
+        "/api/v1/workflows/{id_workflow}/pasos/{id_paso}/comentarios/{id_comentario}",
         "/api/v1/workflows/{id_workflow}/orden",
         "/api/v1/grupos-estados",
         "/api/v1/grupos-estados/{id_grupo}",
@@ -184,3 +186,11 @@ def test_el_contrato_no_publica_esquemas_sin_usar() -> None:
     }
 
     assert componentes - referenciados == set()
+
+
+def test_la_api_publica_los_metodos_de_los_comentarios_de_los_pasos() -> None:
+    rutas = cliente.get("/openapi.json").json()["paths"]
+    comentarios = "/api/v1/workflows/{id_workflow}/pasos/{id_paso}/comentarios"
+
+    assert set(rutas[comentarios]) == {"get", "post"}
+    assert set(rutas[comentarios + "/{id_comentario}"]) == {"put", "delete"}

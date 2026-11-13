@@ -1,4 +1,16 @@
-from gestor_tareas.dominio.tarea.entidades import ReferenciaWorkflow, Subtarea, Tarea
+from collections.abc import Callable
+from datetime import datetime
+
+from gestor_tareas.aplicacion.comentario.anadir_comentario import (
+    ahora_en_utc,
+    instante_de_comentario,
+)
+from gestor_tareas.dominio.tarea.entidades import (
+    ComentarioInicial,
+    ReferenciaWorkflow,
+    Subtarea,
+    Tarea,
+)
 from gestor_tareas.dominio.workflow.errores import workflow_no_asignable
 from gestor_tareas.dominio.workflow.repositorio import RepositorioWorkflows
 
@@ -12,8 +24,14 @@ class WorkflowPedido:
     workflow tampoco valga.
     """
 
-    def __init__(self, repositorio: RepositorioWorkflows, id_workflow: int | None) -> None:
+    def __init__(
+        self,
+        repositorio: RepositorioWorkflows,
+        id_workflow: int | None,
+        reloj: Callable[[], datetime] = ahora_en_utc,
+    ) -> None:
         self._id_workflow = id_workflow
+        self._reloj = reloj
         self._workflow = (
             repositorio.leer_para_copiar(id_workflow) if id_workflow is not None else None
         )
@@ -23,9 +41,11 @@ class WorkflowPedido:
 
         Si el workflow es distinto del que tenía la tarea (también si no tenía
         ninguno), recibe una subtarea pendiente, sin persona ni prioridad, por cada
-        paso del workflow en su orden; con el mismo workflow o sin workflow, no
-        recibe ninguna. Es una copia fija: las subtareas no guardan relación con los
-        pasos, así que cambiar el workflow después no las altera. Lanza
+        paso del workflow en su orden, con una copia de los comentarios del paso en
+        su orden (mismo texto, fechados en el instante de la copia y sin editar);
+        con el mismo workflow o sin workflow, no recibe ninguna. Es una copia fija:
+        las subtareas y sus comentarios no guardan relación con los pasos, así que
+        cambiar el workflow o sus comentarios después no las altera. Lanza
         ``AsignacionDeWorkflowInvalidaError`` si el workflow no existe.
         """
         if self._id_workflow is None:
@@ -38,4 +58,14 @@ class WorkflowPedido:
         if anterior == self._workflow.id:
             return []
         pasos = sorted(self._workflow.pasos, key=lambda paso: paso.numero or 0)
-        return [Subtarea(nombre=paso.nombre) for paso in pasos]
+        copia = instante_de_comentario(self._reloj)
+        return [
+            Subtarea(
+                nombre=paso.nombre,
+                comentarios_iniciales=[
+                    ComentarioInicial(texto=texto, creado=copia)
+                    for texto in paso.comentarios_para_copiar
+                ],
+            )
+            for paso in pasos
+        ]

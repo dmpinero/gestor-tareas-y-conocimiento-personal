@@ -20,7 +20,11 @@ afterEach(() => {
 
 const WORKFLOWS: Workflow[] = [
   { id: 1, nombre: 'Altas', pasos: [] },
-  { id: 2, nombre: 'Workflow Oportunidades', pasos: [{ id: 10, numero: 1, nombre: 'Contacto' }] },
+  {
+    id: 2,
+    nombre: 'Workflow Oportunidades',
+    pasos: [{ id: 10, numero: 1, nombre: 'Contacto', comentarios: 0 }],
+  },
 ]
 
 function montar(

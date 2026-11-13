@@ -53,6 +53,16 @@ class ReferenciaWorkflow:
 
 
 @dataclass
+class ComentarioInicial:
+    """Comentario con el que nace una subtarea: la copia de uno del paso del workflow
+    del que nace. ``creado`` es el instante de la copia (en UTC, sin fracción de
+    segundo); nace sin editar."""
+
+    texto: str
+    creado: datetime
+
+
+@dataclass
 class Subtarea:
     """Parte de una tarea, que solo existe dentro de ella.
 
@@ -62,7 +72,9 @@ class Subtarea:
     pendiente.
 
     ``comentarios`` es el número de comentarios de la subtarea; solo se lee (lo
-    calcula el repositorio y se ignora al guardarla).
+    calcula el repositorio y se ignora al guardarla). ``comentarios_iniciales`` son
+    los comentarios que recibe al darla de alta, en ese orden; solo se usan al
+    guardar una subtarea nueva (al leerla va vacío).
     """
 
     nombre: str
@@ -71,6 +83,7 @@ class Subtarea:
     resuelta: bool = False
     comentarios: int = 0
     id: int | None = None
+    comentarios_iniciales: list[ComentarioInicial] = field(default_factory=list)
 
 
 @dataclass

@@ -3,12 +3,21 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 
-from gestor_tareas.dominio.comentario.entidades import Comentario, ComentarioSubtarea
+from gestor_tareas.dominio.comentario.entidades import (
+    Comentario,
+    ComentarioPaso,
+    ComentarioSubtarea,
+)
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
-from gestor_tareas.dominio.tarea.entidades import ReferenciaEstado, Subtarea, Tarea
+from gestor_tareas.dominio.tarea.entidades import (
+    ComentarioInicial,
+    ReferenciaEstado,
+    Subtarea,
+    Tarea,
+)
 from gestor_tareas.dominio.workflow.entidades import PasoWorkflow, Workflow
 
 
@@ -19,6 +28,8 @@ class RepositorioTareasFalso:
         self._tareas: dict[int, Tarea] = {}
         self._siguiente_id = 1
         self._siguiente_id_subtarea = 1
+        # Comentarios con los que nació cada subtarea, por id de subtarea.
+        self.comentarios_iniciales: dict[int, list[ComentarioInicial]] = {}
 
     def crear(self, tarea: Tarea) -> Tarea:
         tarea.id = self._siguiente_id
@@ -71,7 +82,16 @@ class RepositorioTareasFalso:
         return self._tareas.pop(id_tarea, None) is not None
 
     def _nueva_subtarea(self, subtarea: Subtarea, resuelta: bool) -> Subtarea:
-        nueva = replace(subtarea, id=self._siguiente_id_subtarea, resuelta=resuelta, comentarios=0)
+        # Como el repositorio real: guarda sus comentarios iniciales (los cuenta y no
+        # los devuelve).
+        nueva = replace(
+            subtarea,
+            id=self._siguiente_id_subtarea,
+            resuelta=resuelta,
+            comentarios=len(subtarea.comentarios_iniciales),
+            comentarios_iniciales=[],
+        )
+        self.comentarios_iniciales[nueva.id] = deepcopy(subtarea.comentarios_iniciales)
         self._siguiente_id_subtarea += 1
         return nueva
 
@@ -243,6 +263,12 @@ class RepositorioWorkflowsFalso:
                 id_paso += 1
             self.workflows[id_workflow] = Workflow(id=id_workflow, nombre=nombre, pasos=entidades)
         self.lecturas_para_copiar: list[int] = []
+        # Comentarios de los pasos (los gestiona RepositorioComentariosPasoFalso).
+        self.comentarios: list[ComentarioPaso] = []
+
+    def paso(self, workflow: str, paso: str) -> PasoWorkflow:
+        pasos = self.workflows[self.id_de(workflow)].pasos
+        return next(p for p in pasos if p.nombre == paso)
 
     def id_de(self, nombre: str) -> int:
         return next(w.id for w in self.workflows.values() if w.nombre == nombre)
@@ -255,7 +281,77 @@ class RepositorioWorkflowsFalso:
         # Como el repositorio real: los pasos por número.
         copia = deepcopy(workflow)
         copia.pasos.sort(key=lambda p: p.numero)
+        # Y con los textos de los comentarios de cada paso, en su orden.
+        for paso in copia.pasos:
+            propios = sorted(
+                (c for c in self.comentarios if c.id_paso == paso.id),
+                key=lambda c: (c.creado, c.id),
+            )
+            paso.comentarios = len(propios)
+            paso.comentarios_para_copiar = [c.texto for c in propios]
         return copia
+
+
+class RepositorioComentariosPasoFalso:
+    """Doble de RepositorioComentariosPaso en memoria, sobre los workflows de otro
+    doble (guarda los comentarios en ``workflows.comentarios``)."""
+
+    def __init__(self, workflows: RepositorioWorkflowsFalso) -> None:
+        self._workflows = workflows
+        self._siguiente_id = 0
+
+    @property
+    def comentarios(self) -> list[ComentarioPaso]:
+        return self._workflows.comentarios
+
+    def existe_workflow(self, id_workflow: int) -> bool:
+        return id_workflow in self._workflows.workflows
+
+    def existe_paso(self, id_workflow: int, id_paso: int) -> bool:
+        workflow = self._workflows.workflows.get(id_workflow)
+        return workflow is not None and any(p.id == id_paso for p in workflow.pasos)
+
+    def crear(self, comentario: ComentarioPaso) -> ComentarioPaso | None:
+        if not self.existe_paso(comentario.id_workflow, comentario.id_paso):
+            return None
+        self._siguiente_id += 1
+        guardado = replace(comentario, id=self._siguiente_id)
+        self.comentarios.append(guardado)
+        return replace(guardado)
+
+    def listar_de_paso(self, id_workflow: int, id_paso: int) -> list[ComentarioPaso] | None:
+        if not self.existe_paso(id_workflow, id_paso):
+            return None
+        propios = [c for c in self.comentarios if c.id_paso == id_paso]
+        return [replace(c) for c in sorted(propios, key=lambda c: (c.creado, c.id))]
+
+    def _indice(self, id_workflow: int, id_paso: int, id_comentario: int) -> int | None:
+        if not self.existe_paso(id_workflow, id_paso):
+            return None
+        return next(
+            (
+                i
+                for i, c in enumerate(self.comentarios)
+                if c.id == id_comentario and c.id_paso == id_paso
+            ),
+            None,
+        )
+
+    def editar(
+        self, id_workflow: int, id_paso: int, id_comentario: int, texto: str, editado: datetime
+    ) -> ComentarioPaso | None:
+        indice = self._indice(id_workflow, id_paso, id_comentario)
+        if indice is None:
+            return None
+        self.comentarios[indice] = replace(self.comentarios[indice], texto=texto, editado=editado)
+        return replace(self.comentarios[indice])
+
+    def eliminar(self, id_workflow: int, id_paso: int, id_comentario: int) -> bool:
+        indice = self._indice(id_workflow, id_paso, id_comentario)
+        if indice is None:
+            return False
+        del self.comentarios[indice]
+        return True
 
 
 class RepositorioGruposEstadosFalso:
