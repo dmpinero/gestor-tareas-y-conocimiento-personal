@@ -1,5 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, h, onMounted, ref } from 'vue'
 
 import { clienteApi, ErrorApi } from '@/api/cliente'
 import type { Comentario } from '@/lib/comentarios'
@@ -35,12 +36,56 @@ const COMENTARIOS: Comentario[] = [
   { id: 3, texto: '<b>sin formato</b>', creado: isoUtcDesdeLocal(4, 2, 8, 0), editado: null },
 ]
 
+// ProseMirror no admite escribir en jsdom: en estos tests el editor se
+// sustituye por un <textarea> con su misma interfaz (v-model con HTML, `id`,
+// `etiqueta`, `limite`, `enviar` con Ctrl/Cmd+Enter). El editor real se prueba
+// en EditorComentario.spec.ts y con un montaje sin sustituir más abajo.
+const editorComentarioFalso = defineComponent({
+  name: 'EditorComentario',
+  props: {
+    modelValue: { type: String, required: true },
+    etiqueta: { type: String, required: true },
+    id: { type: String, default: undefined },
+    placeholder: { type: String, default: undefined },
+    limite: { type: Number, default: 500 },
+    describedBy: { type: String, default: undefined },
+    invalido: Boolean,
+    soloLectura: Boolean,
+    autoenfoque: Boolean,
+  },
+  emits: ['update:modelValue', 'enviar'],
+  setup(props, { emit }) {
+    const campo = ref<HTMLTextAreaElement | null>(null)
+    onMounted(() => {
+      if (props.autoenfoque) campo.value?.focus()
+    })
+    return () =>
+      h('textarea', {
+        ref: campo,
+        id: props.id,
+        value: props.modelValue,
+        'aria-label': props.etiqueta,
+        placeholder: props.placeholder,
+        maxlength: props.limite,
+        'aria-describedby': props.describedBy,
+        'aria-invalid': props.invalido ? 'true' : undefined,
+        readonly: props.soloLectura,
+        onInput: (evento: Event) =>
+          emit('update:modelValue', (evento.target as HTMLTextAreaElement).value),
+        onKeydown: (evento: KeyboardEvent) => {
+          if (evento.key === 'Enter' && (evento.ctrlKey || evento.metaKey)) emit('enviar')
+        },
+      })
+  },
+})
+
 let contenedor: VueWrapper | null = null
 
-async function montar(idTarea = 7): Promise<VueWrapper> {
+async function montar(idTarea = 7, sustituirEditor = true): Promise<VueWrapper> {
   contenedor = mount(ComentariosTarea, {
     props: { ruta: `/tareas/${idTarea}/comentarios` },
     attachTo: document.body,
+    global: { stubs: sustituirEditor ? { EditorComentario: editorComentarioFalso } : {} },
   })
   await flushPromises()
   return contenedor
@@ -52,6 +97,12 @@ function historial(envoltorio: VueWrapper): HTMLElement {
 
 function campoTexto(envoltorio: VueWrapper) {
   return envoltorio.get('textarea[aria-label="Escribe un comentario"]')
+}
+
+function textosComentarios(envoltorio: VueWrapper): (string | null)[] {
+  return [...historial(envoltorio).querySelectorAll('[data-testid="texto-comentario"]')].map(
+    (elemento) => elemento.textContent,
+  )
 }
 
 function botonEnviar(envoltorio: VueWrapper) {
@@ -150,12 +201,13 @@ describe('ComentariosTarea: historial', () => {
 
     const filas = [...lista.querySelectorAll('li li')].map((fila) => [
       fila.querySelector('time')!.textContent,
-      fila.querySelector('p')!.textContent,
+      fila.querySelector('[data-testid="texto-comentario"]')!.textContent,
     ])
+    // `<b>` no está en la lista permitida: se quita la etiqueta y queda su texto.
     expect(filas).toEqual([
       ['09:05', 'Primer comentario'],
-      ['18:30', 'Línea 1\nLínea 2'],
-      ['08:00', '<b>sin formato</b>'],
+      ['18:30', 'Línea 1Línea 2'],
+      ['08:00', 'sin formato'],
     ])
     expect(lista.querySelector('b')).toBeNull()
   })
@@ -171,13 +223,54 @@ describe('ComentariosTarea: historial', () => {
     expect(listaDia?.querySelectorAll('li')).toHaveLength(2)
   })
 
-  it('respeta los saltos de línea del texto', async () => {
+  it('respeta los saltos de línea del texto plano: un párrafo por línea', async () => {
     obtener.mockResolvedValue(COMENTARIOS)
 
     const envoltorio = await montar()
 
-    const parrafos = historial(envoltorio).querySelectorAll('li li p')
-    expect(parrafos[1]!.classList.contains('whitespace-pre-wrap')).toBe(true)
+    const textos = historial(envoltorio).querySelectorAll('[data-testid="texto-comentario"]')
+    expect(textos[1]!.innerHTML).toBe('<p>Línea 1</p><p>Línea 2</p>')
+  })
+
+  it('muestra el formato del comentario y no sus etiquetas', async () => {
+    obtener.mockResolvedValue([
+      {
+        ...COMENTARIOS[0]!,
+        texto:
+          '<p><strong>N</strong> <em>C</em> <u>S</u> <s>T</s> <span style="color: #dc2626">rojo</span> <mark data-color="#fef08a" style="background-color: #fef08a">res</mark></p>' +
+          '<ul><li><p>uno</p></li></ul><ol><li><p>dos</p></li></ol>' +
+          '<p><a href="https://ejemplo.com">enlace</a></p>',
+      },
+    ])
+
+    const envoltorio = await montar()
+
+    const texto = historial(envoltorio).querySelector('[data-testid="texto-comentario"]')!
+    expect(texto.textContent).not.toContain('<')
+    const selectores = ['strong', 'em', 'u', 's', 'span[style]', 'mark', 'ul > li', 'ol > li']
+    expect(selectores.filter((selector) => texto.querySelector(selector) === null)).toEqual([])
+    const enlace = texto.querySelector('a')!
+    expect(enlace.getAttribute('href')).toBe('https://ejemplo.com')
+    expect(enlace.getAttribute('rel')).toBe('noopener noreferrer nofollow')
+    expect(enlace.getAttribute('target')).toBe('_blank')
+  })
+
+  it('no pinta ni ejecuta HTML peligroso que llegue de la API', async () => {
+    obtener.mockResolvedValue([
+      {
+        ...COMENTARIOS[0]!,
+        texto:
+          '<p onclick="alert(1)">Hola</p><img src=x onerror=alert(1)><script>alert(1)</script>' +
+          '<a href="javascript:alert(1)">mal</a><iframe src="https://ejemplo.com"></iframe>',
+      },
+    ])
+
+    const envoltorio = await montar()
+
+    const texto = historial(envoltorio).querySelector('[data-testid="texto-comentario"]')!
+    expect(texto.querySelector('img, script, iframe, [onclick], [onerror]')).toBeNull()
+    expect(texto.querySelector('a')?.hasAttribute('href')).toBe(false)
+    expect(texto.textContent).toBe('Holamal')
   })
 
   it('desplaza el historial hasta el comentario más reciente al cargar', async () => {
@@ -223,12 +316,53 @@ describe('ComentariosTarea: envío', () => {
     expect(envoltorio.text()).toContain('4/500')
   })
 
+  it('el contador cuenta solo el texto visible, sin etiquetas y con las entidades decodificadas', async () => {
+    obtener.mockResolvedValue([])
+    const envoltorio = await montar()
+
+    await escribir(envoltorio, '<p><strong>Hola</strong> &amp;</p><ul><li><p>a</p></li></ul>')
+
+    expect(envoltorio.text()).toContain('7/500')
+  })
+
+  it('el límite de 500 se aplica al texto visible, no al HTML', async () => {
+    obtener.mockResolvedValue([])
+    const envoltorio = await montar()
+
+    await escribir(envoltorio, `<p><strong>${'a'.repeat(500)}</strong></p>`)
+
+    expect(envoltorio.text()).toContain('500/500')
+    expect(botonEnviar(envoltorio).attributes('disabled')).toBeUndefined()
+  })
+
+  it('envía el HTML del editor', async () => {
+    obtener.mockResolvedValue([])
+    crear.mockResolvedValue({
+      id: 9,
+      texto: '<p><strong>Hola</strong></p>',
+      creado: isoUtcDesdeLocal(11, 10, 11, 45),
+      editado: null,
+    })
+    const envoltorio = await montar(7)
+    await escribir(envoltorio, '<p><strong>Hola</strong></p>')
+
+    await botonEnviar(envoltorio).trigger('click')
+    await flushPromises()
+
+    expect(crear).toHaveBeenCalledWith('/tareas/7/comentarios', {
+      texto: '<p><strong>Hola</strong></p>',
+    })
+    expect(historial(envoltorio).querySelector('strong')?.textContent).toBe('Hola')
+  })
+
   it('desactiva el botón con el campo vacío o solo con espacios', async () => {
     obtener.mockResolvedValue([])
     const envoltorio = await montar()
 
     expect(botonEnviar(envoltorio).attributes('disabled')).toBeDefined()
     await escribir(envoltorio, '   \n ')
+    expect(botonEnviar(envoltorio).attributes('disabled')).toBeDefined()
+    await escribir(envoltorio, '<p> </p><p>&nbsp;</p>')
     expect(botonEnviar(envoltorio).attributes('disabled')).toBeDefined()
 
     await campoTexto(envoltorio).trigger('keydown', { key: 'Enter', ctrlKey: true })
@@ -253,8 +387,7 @@ describe('ComentariosTarea: envío', () => {
     await flushPromises()
 
     expect(crear).toHaveBeenCalledWith('/tareas/7/comentarios', { texto: '  Hola  ' })
-    const filas = [...historial(envoltorio).querySelectorAll('li li p')].map((p) => p.textContent)
-    expect(filas).toEqual(['Primer comentario', 'Hola'])
+    expect(textosComentarios(envoltorio)).toEqual(['Primer comentario', 'Hola'])
     expect(historial(envoltorio).querySelectorAll('h4')[1]!.textContent).toBe(
       'martes, 10 de noviembre',
     )
@@ -468,11 +601,12 @@ describe('ComentariosTarea: editar', () => {
     await abrirEdicion(envoltorio)
 
     const campo = campoEdicion(envoltorio).element as HTMLTextAreaElement
-    expect(campo.value).toBe('Línea 1\nLínea 2')
+    // El texto plano (datos antiguos) llega al editor como un párrafo por línea.
+    expect(campo.value).toBe('<p>Línea 1</p><p>Línea 2</p>')
     expect(campo.maxLength).toBe(500)
     expect(document.activeElement).toBe(campo)
     const contador = document.getElementById(campo.getAttribute('aria-describedby')!)
-    expect(contador?.textContent?.trim()).toBe('15/500')
+    expect(contador?.textContent?.trim()).toBe('14/500')
     expect(botonDe(envoltorio, 'form[aria-label="Editar comentario"]', 'Guardar').exists()).toBe(
       true,
     )
@@ -485,7 +619,7 @@ describe('ComentariosTarea: editar', () => {
     obtener.mockResolvedValue(COMENTARIOS)
     const envoltorio = await montar()
     await abrirEdicion(envoltorio)
-    await campoEdicion(envoltorio).setValue('  \n ')
+    await campoEdicion(envoltorio).setValue('<p>  </p>')
     await flushPromises()
 
     await pedirGuardar(envoltorio)
@@ -528,8 +662,11 @@ describe('ComentariosTarea: editar', () => {
     expect(envoltorio.find('textarea[aria-label="Nuevo texto del comentario"]').exists()).toBe(
       false,
     )
-    const textos = [...historial(envoltorio).querySelectorAll('li li p')].map((p) => p.textContent)
-    expect(textos).toEqual(['Primer comentario', 'Texto nuevo', '<b>sin formato</b>'])
+    expect(textosComentarios(envoltorio)).toEqual([
+      'Primer comentario',
+      'Texto nuevo',
+      'sin formato',
+    ])
     expect(historial(envoltorio).querySelectorAll('[data-testid="marca-editado"]')).toHaveLength(1)
     expect(document.activeElement).toBe(
       botonPorNombre(envoltorio, `Editar comentario ${REFERENCIA_2}`).element,
@@ -660,8 +797,7 @@ describe('ComentariosTarea: eliminar', () => {
     await flushPromises()
 
     expect(eliminar).toHaveBeenCalledWith('/tareas/7/comentarios/2')
-    const textos = [...historial(envoltorio).querySelectorAll('li li p')].map((p) => p.textContent)
-    expect(textos).toEqual(['Primer comentario', '<b>sin formato</b>'])
+    expect(textosComentarios(envoltorio)).toEqual(['Primer comentario', 'sin formato'])
     expect(document.activeElement).toBe(historial(envoltorio).parentElement)
     expect(envoltorio.get('[aria-live="polite"]').text()).toBe('Comentario eliminado')
   })
@@ -734,6 +870,7 @@ describe('ComentariosTarea: comentarios de una subtarea', () => {
     contenedor = mount(ComentariosTarea, {
       props: { ruta: RUTA_SUBTAREA, contexto: 'de la subtarea Revisar' },
       attachTo: document.body,
+      global: { stubs: { EditorComentario: editorComentarioFalso } },
     })
     await flushPromises()
     return contenedor
@@ -871,5 +1008,30 @@ describe('ComentariosTarea: comentarios de una subtarea', () => {
       .trigger('click')
     await flushPromises()
     expect(envoltorio.emitted('actualizados')).toEqual([[2], [3], [2]])
+  })
+})
+
+describe('ComentariosTarea: con el editor real', () => {
+  it('los campos de comentario nuevo y de edición son editores con formato y su nombre accesible', async () => {
+    obtener.mockResolvedValue([
+      { ...COMENTARIOS[1]!, texto: '<p><strong>Negrita</strong> y normal</p>' },
+    ])
+    const envoltorio = await montar(7, false)
+
+    const nuevo = envoltorio.get('[role="textbox"][aria-label="Escribe un comentario"]')
+    expect(nuevo.attributes('aria-multiline')).toBe('true')
+    expect(nuevo.attributes('contenteditable')).toBe('true')
+    expect(envoltorio.find('[role="toolbar"] button[aria-label="Negrita"]').exists()).toBe(true)
+
+    await abrirEdicion(envoltorio)
+    // Tiptap enfoca al crearse, tras un setTimeout y un fotograma.
+    await new Promise((resolver) => setTimeout(() => requestAnimationFrame(resolver)))
+    await flushPromises()
+
+    const edicion = envoltorio.get('[role="textbox"][aria-label="Nuevo texto del comentario"]')
+    expect(edicion.element.innerHTML).toContain('<strong>Negrita</strong>')
+    expect(document.activeElement).toBe(edicion.element)
+    const contador = document.getElementById(edicion.attributes('aria-describedby')!)
+    expect(contador?.textContent?.trim()).toBe('16/500')
   })
 })

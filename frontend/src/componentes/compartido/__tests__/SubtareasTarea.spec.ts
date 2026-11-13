@@ -1,11 +1,13 @@
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Editor } from '@tiptap/vue-3'
 import { defineComponent, h } from 'vue'
 
 import { clienteApi } from '@/api/cliente'
 import type { Subtarea, Tarea } from '@/api/tipos'
 import { useTiendaTareas } from '@/stores/tareas'
+import EditorComentario from '../EditorComentario.vue'
 import SubtareasTarea from '../SubtareasTarea.vue'
 
 vi.mock('@/api/cliente', () => ({
@@ -17,6 +19,19 @@ vi.mock('@/api/cliente', () => ({
     eliminar: vi.fn<(...args: unknown[]) => unknown>(),
   },
 }))
+
+// ProseMirror no admite escribir en jsdom: se fija el contenido con el editor
+// que expone EditorComentario, lo que dispara su v-model como al escribir.
+async function escribirEnEditor(envoltorio: VueWrapper, etiqueta: string, html: string) {
+  const editor = envoltorio
+    .findAllComponents(EditorComentario)
+    .find((componente) => componente.props('etiqueta') === etiqueta)
+  if (!editor) throw new Error(`No hay editor «${etiqueta}»`)
+  ;(editor.vm as unknown as { editor: Editor }).editor.commands.setContent(html, {
+    emitUpdate: true,
+  })
+  await flushPromises()
+}
 
 const SUBTAREAS: Subtarea[] = [
   {
@@ -458,15 +473,16 @@ describe('SubtareasTarea', () => {
       await botonComentarios(envoltorio, 'Revisar cifras').trigger('click')
       await flushPromises()
 
-      await envoltorio
-        .get('textarea[aria-label="Escribe un comentario de la subtarea Revisar cifras"]')
-        .setValue('Revisadas')
-      await flushPromises()
+      await escribirEnEditor(
+        envoltorio,
+        'Escribe un comentario de la subtarea Revisar cifras',
+        '<p>Revisadas</p>',
+      )
       await boton(envoltorio, 'Enviar comentario de la subtarea Revisar cifras').trigger('click')
       await flushPromises()
 
       expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/subtareas/21/comentarios', {
-        texto: 'Revisadas',
+        texto: '<p>Revisadas</p>',
       })
       expect(nombreAccesible(botonComentarios(envoltorio, 'Revisar cifras'))).toBe(
         'Comentarios de la subtarea Revisar cifras: 3',
