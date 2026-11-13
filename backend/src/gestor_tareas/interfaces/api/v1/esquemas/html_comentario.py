@@ -84,7 +84,9 @@ def sanear_html(texto: str) -> str:
     saneado = nh3.clean(
         texto,
         tags=set(ETIQUETAS_PERMITIDAS),
-        attributes=_ATRIBUTOS_PERMITIDOS,
+        # Con "*" vacío no queda ningún atributo genérico: nh3 deja por
+        # defecto lang y title en todas las etiquetas.
+        attributes={"*": set(), **_ATRIBUTOS_PERMITIDOS},
         attribute_filter=_filtrar_atributo,
         url_schemes=_ESQUEMAS_URL,
         link_rel=REL_ENLACES,

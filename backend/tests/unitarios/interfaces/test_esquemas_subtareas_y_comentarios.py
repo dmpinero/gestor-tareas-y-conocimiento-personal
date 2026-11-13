@@ -127,6 +127,9 @@ def test_el_comentario_conserva_el_formato_permitido() -> None:
             '<mark style="background-color:#ff0">a</mark>',
         ),
         ('<span style="color:url(javascript:alert(1))" class="x">a</span>', "<span>a</span>"),
+        # Ningún atributo genérico (nh3 deja lang y title si no se le dice).
+        ('<p lang="en" title="t" class="c">a</p>', "<p>a</p>"),
+        ('<p><strong title="x">a</strong></p>', "<p><strong>a</strong></p>"),
     ],
 )
 def test_el_comentario_elimina_lo_que_no_esta_permitido(texto: str, saneado: str) -> None:
