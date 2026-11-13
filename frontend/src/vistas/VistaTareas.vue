@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { CalendarDays, ChevronDown, Columns3, Kanban, List, ListFilter, Search } from '@lucide/vue'
+import {
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  Columns3,
+  Kanban,
+  List,
+  ListFilter,
+  Search,
+} from '@lucide/vue'
 import { computed, nextTick, onMounted, reactive, ref, watch, type Component } from 'vue'
 
 import {
@@ -23,6 +32,7 @@ import {
   useOrdenacionTabla,
   valorAriaSort,
 } from '@/composables/useOrdenacionTabla'
+import BarraPrioridades from '@/componentes/compartido/BarraPrioridades.vue'
 import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
@@ -126,7 +136,7 @@ function alCambiarConfirmacion(abierta: boolean): void {
 function destinoFocoTras(id: number): string {
   // En el tablero y el calendario no hay menús por fila.
   if (vista.value !== 'lista') return ID_TITULO_LISTA
-  const filas = filasOrdenadas.value
+  const filas = filasVisibles.value
   const indice = filas.findIndex((tarea) => tarea.id === id)
   const vecina = filas[indice + 1] ?? filas[indice - 1]
   return vecina && indice !== -1 ? idBotonAcciones(vecina.id) : ID_TITULO_LISTA
@@ -535,6 +545,117 @@ const columnasVisibles = computed(() =>
   COLUMNAS_ORDENABLES.filter((columna) => esVisible(columna.campo)),
 )
 const camposListaVisibles = computed(() => CAMPOS_LISTA.filter((campo) => esVisible(campo)))
+
+// --- Grupos "Pendientes" y "Completadas" ---
+// La tabla separa las tareas en dos grupos plegables, cada uno con su color en
+// el borde izquierdo. Dentro de cada grupo se mantiene el orden elegido; la
+// exportación sigue siendo la lista única. Los grupos plegados se recuerdan en
+// este navegador, como las columnas: sin almacenamiento, ambos se despliegan.
+type IdGrupoTabla = 'pendientes' | 'completadas'
+const CLAVE_GRUPOS_PLEGADOS = 'gestor-tareas:grupos-plegados-tareas'
+const GRUPOS_TABLA: { id: IdGrupoTabla; titulo: string; completada: boolean; borde: string }[] = [
+  {
+    id: 'pendientes',
+    titulo: 'Pendientes',
+    completada: false,
+    borde: 'border-l-blue-600 dark:border-l-blue-400',
+  },
+  {
+    id: 'completadas',
+    titulo: 'Completadas',
+    completada: true,
+    borde: 'border-l-emerald-600 dark:border-l-emerald-400',
+  },
+]
+
+function leerGruposPlegados(): IdGrupoTabla[] {
+  try {
+    const guardado: unknown = JSON.parse(localStorage.getItem(CLAVE_GRUPOS_PLEGADOS) ?? '[]')
+    if (!Array.isArray(guardado)) return []
+    return GRUPOS_TABLA.map((grupo) => grupo.id).filter((id) => guardado.includes(id))
+  } catch {
+    return []
+  }
+}
+
+const gruposPlegados = ref<IdGrupoTabla[]>(leerGruposPlegados())
+watch(gruposPlegados, (plegados) => {
+  try {
+    localStorage.setItem(CLAVE_GRUPOS_PLEGADOS, JSON.stringify(plegados))
+  } catch {
+    // Sin almacenamiento (p. ej. navegación privada) la preferencia dura la sesión.
+  }
+})
+
+function estaPlegado(id: IdGrupoTabla): boolean {
+  return gruposPlegados.value.includes(id)
+}
+
+function alternarGrupo(id: IdGrupoTabla): void {
+  gruposPlegados.value = estaPlegado(id)
+    ? gruposPlegados.value.filter((plegado) => plegado !== id)
+    : GRUPOS_TABLA.map((grupo) => grupo.id).filter((g) => g === id || estaPlegado(g))
+}
+
+const gruposConFilas = computed(() =>
+  GRUPOS_TABLA.map((grupo) => ({
+    ...grupo,
+    filas: filasOrdenadas.value.filter((tarea) => Boolean(tarea.completada) === grupo.completada),
+  })),
+)
+
+// Filas que se ven, en el orden de la pantalla (los grupos plegados no cuentan).
+const filasVisibles = computed(() =>
+  gruposConFilas.value.flatMap((grupo) => (estaPlegado(grupo.id) ? [] : grupo.filas)),
+)
+
+// Celdas de la tabla por fila: las columnas visibles más la de acciones.
+const numeroColumnasTabla = computed(() => columnasVisibles.value.length + 1)
+
+// Alta rápida al final de cada grupo: solo con el nombre. La API exige una
+// descripción, así que se envía el propio nombre; en "Completadas" la tarea se
+// marca como completada nada más crearla.
+const altaRapida = reactive<Record<IdGrupoTabla, string>>({ pendientes: '', completadas: '' })
+const errorAltaRapida = reactive<Record<IdGrupoTabla, string | null>>({
+  pendientes: null,
+  completadas: null,
+})
+const creandoRapida = reactive<Record<IdGrupoTabla, boolean>>({
+  pendientes: false,
+  completadas: false,
+})
+
+async function crearRapida(id: IdGrupoTabla): Promise<void> {
+  const nombre = altaRapida[id].trim()
+  if (nombre === '' || creandoRapida[id]) return
+  const fechaCreacion = aFechaHoraIso(formatearFechaHora(new Date()))
+  if (fechaCreacion === null) return
+  creandoRapida[id] = true
+  errorAltaRapida[id] = null
+  try {
+    const creada = await tienda.crear({
+      nombre,
+      prioridad: null,
+      descripcion: nombre,
+      fecha_creacion: fechaCreacion,
+      fecha_vencimiento: null,
+      etiquetas: [],
+      asignados: [],
+      tipo: null,
+      oportunidad: null,
+      grupo_estados_id: null,
+      workflow_id: null,
+    })
+    altaRapida[id] = ''
+    if (GRUPOS_TABLA.find((grupo) => grupo.id === id)?.completada) {
+      await tienda.alternarCompletada(creada.id)
+    }
+  } catch (motivo) {
+    errorAltaRapida[id] = (motivo as Error).message
+  } finally {
+    creandoRapida[id] = false
+  }
+}
 
 const COLUMNAS_EXPORTACION = computed(() => columnasVisibles.value.map((c) => c.etiqueta))
 
@@ -1081,79 +1202,134 @@ async function guardar(): Promise<void> {
             <TableHead><span class="sr-only">Acciones</span></TableHead>
           </TableRow>
         </TableHeader>
-        <TableBody>
-          <TableRow v-for="tarea in filasOrdenadas" :key="tarea.id">
-            <TableCell :class="claseCelda(tarea, TEXTO_AJUSTABLE)">
-              <div class="flex items-start gap-2">
-                <Checkbox
-                  class="mt-0.5"
-                  :model-value="tarea.completada"
-                  :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
-                  :title="tarea.completada ? 'Completada' : 'Pendiente'"
-                  @update:model-value="tienda.alternarCompletada(tarea.id)"
+        <TableBody v-for="grupo in gruposConFilas" :key="grupo.id" :data-grupo="grupo.id">
+          <TableRow class="hover:bg-transparent">
+            <TableCell :colspan="numeroColumnasTabla" :class="`border-l-4 ${grupo.borde} pt-4`">
+              <button
+                type="button"
+                class="hover:text-foreground focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-sm text-sm font-semibold outline-none focus-visible:ring-[3px]"
+                :aria-expanded="!estaPlegado(grupo.id)"
+                @click="alternarGrupo(grupo.id)"
+              >
+                <ChevronRight
+                  class="size-4 transition-transform"
+                  :class="estaPlegado(grupo.id) ? '' : 'rotate-90'"
+                  aria-hidden="true"
                 />
-                <span>{{ tarea.nombre }}</span>
-              </div>
-            </TableCell>
-            <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">{{
-              tarea.prioridad ?? '—'
-            }}</TableCell>
-            <TableCell
-              v-if="esVisible('descripcion')"
-              :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
-              >{{ tarea.descripcion }}</TableCell
-            >
-            <TableCell
-              v-for="campoLista in camposListaVisibles"
-              :key="campoLista"
-              :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
-            >
-              <ul v-if="tarea[campoLista].length > 0" class="flex flex-wrap gap-1">
-                <li
-                  v-for="nombre in tarea[campoLista]"
-                  :key="nombre"
-                  data-testid="chip-tabla"
-                  class="bg-secondary text-secondary-foreground inline-flex max-w-full rounded-md border px-2 py-0.5 text-xs font-medium"
+                {{ grupo.titulo }}
+                <span
+                  class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
+                  >{{ grupo.filas.length }}</span
                 >
-                  <NombreRelacionado
-                    :tipo="campoLista === 'etiquetas' ? 'etiqueta' : 'persona'"
-                    :nombre="nombre"
-                  />
-                </li>
-              </ul>
-              <template v-else>—</template>
-            </TableCell>
-            <TableCell
-              v-if="esVisible('fechaCreacion')"
-              :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
-              >{{ formatearFechaHora(tarea.fecha_creacion) }}</TableCell
-            >
-            <TableCell
-              v-if="esVisible('fechaVencimiento')"
-              :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
-            >
-              <template v-if="tarea.fecha_vencimiento">
-                {{ formatearFechaHora(tarea.fecha_vencimiento) }}
-                <ContadorVencimiento
-                  :vencimiento="tarea.fecha_vencimiento"
-                  :class="claseCelda(tarea, 'block text-xs')"
-                />
-              </template>
-              <template v-else>—</template>
-            </TableCell>
-            <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">{{
-              textoTipoEnTabla(tarea)
-            }}</TableCell>
-            <TableCell class="w-0">
-              <MenuAccionesTarea
-                :nombre="tarea.nombre"
-                :id-disparador="idBotonAcciones(tarea.id)"
-                @editar="abrirParaEditar(tarea)"
-                @detalle="idEnDetalle = tarea.id"
-                @eliminar="pedirEliminar(tarea, true)"
-              />
+              </button>
             </TableCell>
           </TableRow>
+          <template v-if="!estaPlegado(grupo.id)">
+            <TableRow v-for="tarea in grupo.filas" :key="tarea.id" data-fila-tarea>
+              <TableCell :class="claseCelda(tarea, `${TEXTO_AJUSTABLE} border-l-4 ${grupo.borde}`)">
+                <div class="flex items-start gap-2">
+                  <Checkbox
+                    class="mt-0.5"
+                    :model-value="tarea.completada"
+                    :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
+                    :title="tarea.completada ? 'Completada' : 'Pendiente'"
+                    @update:model-value="tienda.alternarCompletada(tarea.id)"
+                  />
+                  <span>{{ tarea.nombre }}</span>
+                </div>
+              </TableCell>
+              <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">{{
+                tarea.prioridad ?? '—'
+              }}</TableCell>
+              <TableCell
+                v-if="esVisible('descripcion')"
+                :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+                >{{ tarea.descripcion }}</TableCell
+              >
+              <TableCell
+                v-for="campoLista in camposListaVisibles"
+                :key="campoLista"
+                :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+              >
+                <ul v-if="tarea[campoLista].length > 0" class="flex flex-wrap gap-1">
+                  <li
+                    v-for="nombre in tarea[campoLista]"
+                    :key="nombre"
+                    data-testid="chip-tabla"
+                    class="bg-secondary text-secondary-foreground inline-flex max-w-full rounded-md border px-2 py-0.5 text-xs font-medium"
+                  >
+                    <NombreRelacionado
+                      :tipo="campoLista === 'etiquetas' ? 'etiqueta' : 'persona'"
+                      :nombre="nombre"
+                    />
+                  </li>
+                </ul>
+                <template v-else>—</template>
+              </TableCell>
+              <TableCell
+                v-if="esVisible('fechaCreacion')"
+                :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+                >{{ formatearFechaHora(tarea.fecha_creacion) }}</TableCell
+              >
+              <TableCell
+                v-if="esVisible('fechaVencimiento')"
+                :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+              >
+                <template v-if="tarea.fecha_vencimiento">
+                  {{ formatearFechaHora(tarea.fecha_vencimiento) }}
+                  <ContadorVencimiento
+                    :vencimiento="tarea.fecha_vencimiento"
+                    :class="claseCelda(tarea, 'block text-xs')"
+                  />
+                </template>
+                <template v-else>—</template>
+              </TableCell>
+              <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">{{
+                textoTipoEnTabla(tarea)
+              }}</TableCell>
+              <TableCell class="w-0">
+                <MenuAccionesTarea
+                  :nombre="tarea.nombre"
+                  :id-disparador="idBotonAcciones(tarea.id)"
+                  @editar="abrirParaEditar(tarea)"
+                  @detalle="idEnDetalle = tarea.id"
+                  @eliminar="pedirEliminar(tarea, true)"
+                />
+              </TableCell>
+            </TableRow>
+            <TableRow class="hover:bg-transparent">
+              <TableCell :colspan="numeroColumnasTabla" :class="`border-l-4 ${grupo.borde}`">
+                <form class="flex flex-col gap-1" @submit.prevent="crearRapida(grupo.id)">
+                  <Input
+                    v-model="altaRapida[grupo.id]"
+                    data-alta-rapida
+                    placeholder="+ Agregar tarea"
+                    :aria-label="`Agregar tarea a ${grupo.titulo}`"
+                    :disabled="creandoRapida[grupo.id]"
+                    class="h-8 max-w-sm border-dashed shadow-none"
+                    @keydown.enter.prevent="crearRapida(grupo.id)"
+                  />
+                  <p v-if="errorAltaRapida[grupo.id]" role="alert" class="text-destructive text-sm">
+                    {{ errorAltaRapida[grupo.id] }}
+                  </p>
+                </form>
+              </TableCell>
+            </TableRow>
+            <TableRow
+              v-if="grupo.filas.length > 0 && esVisible('prioridad')"
+              class="hover:bg-transparent"
+            >
+              <TableCell :class="`border-l-4 ${grupo.borde}`" />
+              <TableCell v-for="columna in columnasVisibles.slice(1)" :key="columna.campo">
+                <BarraPrioridades
+                  v-if="columna.campo === 'prioridad'"
+                  :prioridades="grupo.filas.map((tarea) => tarea.prioridad)"
+                  :titulo="grupo.titulo"
+                />
+              </TableCell>
+              <TableCell />
+            </TableRow>
+          </template>
         </TableBody>
       </Table>
     </template>

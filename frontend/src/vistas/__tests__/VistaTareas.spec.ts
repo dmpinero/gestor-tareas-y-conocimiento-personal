@@ -205,9 +205,12 @@ async function abrirPanelEdicion(envoltorio: VueWrapper, nombre: string): Promis
   return panelActual()
 }
 
+// Filas de tareas de la tabla (sin las cabeceras, altas rápidas ni pies de los grupos).
+const FILAS_TAREA = 'tbody tr[data-fila-tarea]'
+
 // Las celdas con chips se leen como sus textos unidos por " | ".
 function filasTabla(envoltorio: VueWrapper): string[][] {
-  return envoltorio.findAll('tbody tr').map((tr) =>
+  return envoltorio.findAll(FILAS_TAREA).map((tr) =>
     tr.findAll('td').map((td) => {
       const chips = td.findAll('[data-testid="chip-tabla"]')
       return chips.length > 0 ? chips.map((chip) => chip.text()).join(' | ') : td.text()
@@ -313,7 +316,7 @@ describe('VistaTareas', () => {
 
   describe('cuenta atrás del vencimiento', () => {
     function celdaVencimiento(envoltorio: VueWrapper, fila: number) {
-      return envoltorio.findAll('tbody tr')[fila]!.findAll('td')[6]!
+      return envoltorio.findAll(FILAS_TAREA)[fila]!.findAll('td')[6]!
     }
 
     it('muestra bajo la fecha de vencimiento cuánto falta, solo en las tareas con vencimiento', async () => {
@@ -787,7 +790,7 @@ describe('VistaTareas', () => {
     expect(panelAbierto?.querySelector('[role="alert"]')?.textContent?.trim()).toBe(
       'El nombre es demasiado largo',
     )
-    expect(envoltorio.findAll('tbody tr')).toHaveLength(0)
+    expect(envoltorio.findAll(FILAS_TAREA)).toHaveLength(0)
   })
 
   describe('tipo de tarea', () => {
@@ -1069,19 +1072,19 @@ describe('VistaTareas', () => {
       }
 
       function celdasDatos(envoltorio: VueWrapper, fila: number) {
-        const celdas = envoltorio.findAll('tbody tr')[fila]!.findAll('td')
+        const celdas = envoltorio.findAll(FILAS_TAREA)[fila]!.findAll('td')
         return celdas.slice(0, celdas.length - 1)
       }
 
       function celdaAcciones(envoltorio: VueWrapper, fila: number) {
-        const celdas = envoltorio.findAll('tbody tr')[fila]!.findAll('td')
+        const celdas = envoltorio.findAll(FILAS_TAREA)[fila]!.findAll('td')
         return celdas[celdas.length - 1]!
       }
 
       it('al inicio de la fila hay una casilla sin marcar con nombre accesible y title "Pendiente"', async () => {
         const envoltorio = await montar()
 
-        const primeraCelda = envoltorio.findAll('tbody tr')[0]!.findAll('td')[0]!
+        const primeraCelda = envoltorio.findAll(FILAS_TAREA)[0]!.findAll('td')[0]!
         const completar = botonCompletar(envoltorio, 'Escribir informe')
         expect(primeraCelda.element.firstElementChild?.contains(completar.element)).toBe(true)
         expect(primeraCelda.text()).toBe('Escribir informe')
@@ -1104,20 +1107,21 @@ describe('VistaTareas', () => {
       })
 
       it('tacha las celdas de datos solo de las tareas completadas, cuenta atrás incluida, y nunca los botones', async () => {
+        // Las completadas van en su grupo, tras las pendientes.
         const envoltorio = await montar([{ ...TAREAS[0], completada: true }, TAREAS[1]])
 
-        for (const celda of celdasDatos(envoltorio, 0)) {
+        for (const celda of celdasDatos(envoltorio, 1)) {
           expect(celda.classes()).toContain('line-through')
         }
         expect(
-          envoltorio.findAll('tbody tr')[0]!.get('[data-testid="contador-vencimiento"]').classes(),
+          envoltorio.findAll(FILAS_TAREA)[1]!.get('[data-testid="contador-vencimiento"]').classes(),
         ).toContain('line-through')
-        expect(celdaAcciones(envoltorio, 0).classes()).not.toContain('line-through')
-        expect(celdaAcciones(envoltorio, 0).find('.line-through').exists()).toBe(false)
-        for (const celda of celdasDatos(envoltorio, 1)) {
+        expect(celdaAcciones(envoltorio, 1).classes()).not.toContain('line-through')
+        expect(celdaAcciones(envoltorio, 1).find('.line-through').exists()).toBe(false)
+        for (const celda of celdasDatos(envoltorio, 0)) {
           expect(celda.classes()).not.toContain('line-through')
         }
-        expect(envoltorio.findAll('tbody tr')[1]!.find('.line-through').exists()).toBe(false)
+        expect(envoltorio.findAll(FILAS_TAREA)[0]!.find('.line-through').exists()).toBe(false)
       })
 
       it('al pulsarlo la marca como completada y al volver a pulsarlo vuelve a pendiente', async () => {
@@ -1127,7 +1131,8 @@ describe('VistaTareas', () => {
             completada: (cuerpo as { completada: boolean }).completada,
           }),
         )
-        const envoltorio = await montar()
+        // Una sola tarea: al completarla pasa al grupo "Completadas" y sigue siendo la primera fila.
+        const envoltorio = await montar([TAREAS[0]])
 
         await botonCompletar(envoltorio, 'Escribir informe').trigger('click')
         await flushPromises()
@@ -1368,6 +1373,206 @@ describe('VistaTareas', () => {
     })
   })
 
+  describe('grupos Pendientes y Completadas', () => {
+    const CLAVE_PLEGADOS = 'gestor-tareas:grupos-plegados-tareas'
+    const COMPLETADA = {
+      ...TAREAS[1],
+      id: 3,
+      nombre: 'Archivar facturas',
+      prioridad: 1,
+      completada: true,
+    }
+
+    beforeEach(() => localStorage.removeItem(CLAVE_PLEGADOS))
+    afterEach(() => localStorage.removeItem(CLAVE_PLEGADOS))
+
+    function grupo(envoltorio: VueWrapper, id: 'pendientes' | 'completadas') {
+      return envoltorio.get(`tbody[data-grupo="${id}"]`)
+    }
+
+    function cabeceraGrupo(envoltorio: VueWrapper, id: 'pendientes' | 'completadas') {
+      return grupo(envoltorio, id).get('button[aria-expanded]')
+    }
+
+    function nombresDe(envoltorio: VueWrapper, id: 'pendientes' | 'completadas'): string[] {
+      return grupo(envoltorio, id)
+        .findAll('tr[data-fila-tarea]')
+        .map((fila) => fila.findAll('td')[0]!.text())
+    }
+
+    function altaRapida(envoltorio: VueWrapper, id: 'pendientes' | 'completadas') {
+      return grupo(envoltorio, id).get<HTMLInputElement>('input[data-alta-rapida]')
+    }
+
+    it('divide la tabla en "Pendientes" y "Completadas", cada una con su número de tareas', async () => {
+      const envoltorio = await montar([COMPLETADA, ...TAREAS])
+
+      const grupos = envoltorio.findAll('tbody[data-grupo]')
+      expect(grupos.map((g) => g.attributes('data-grupo'))).toEqual(['pendientes', 'completadas'])
+      expect(cabeceraGrupo(envoltorio, 'pendientes').text()).toBe('Pendientes 2')
+      expect(cabeceraGrupo(envoltorio, 'completadas').text()).toBe('Completadas 1')
+      expect(nombresDe(envoltorio, 'pendientes')).toEqual(['Escribir informe', 'Leer artículo'])
+      expect(nombresDe(envoltorio, 'completadas')).toEqual(['Archivar facturas'])
+    })
+
+    it('cada grupo tiene su color en el borde izquierdo de todas sus filas', async () => {
+      const envoltorio = await montar([COMPLETADA, ...TAREAS])
+
+      for (const id of ['pendientes', 'completadas'] as const) {
+        const filas = grupo(envoltorio, id).findAll('tr')
+        const colores = new Set(
+          filas.map((fila) => {
+            const clases = fila.findAll('td')[0]!.classes()
+            expect(clases).toContain('border-l-4')
+            return clases.find((clase) => clase.startsWith('border-l-') && clase !== 'border-l-4')
+          }),
+        )
+        expect(colores.size).toBe(1)
+      }
+      const colorDe = (id: 'pendientes' | 'completadas') =>
+        grupo(envoltorio, id)
+          .findAll('td')[0]!
+          .classes()
+          .find((clase) => clase.startsWith('border-l-') && clase !== 'border-l-4')
+      expect(colorDe('pendientes')).not.toBe(colorDe('completadas'))
+    })
+
+    it('ambos grupos empiezan desplegados; al pulsar la cabecera se pliega y se recuerda al volver', async () => {
+      let envoltorio = await montar([COMPLETADA, ...TAREAS])
+
+      expect(cabeceraGrupo(envoltorio, 'pendientes').attributes('aria-expanded')).toBe('true')
+      expect(cabeceraGrupo(envoltorio, 'completadas').attributes('aria-expanded')).toBe('true')
+
+      await cabeceraGrupo(envoltorio, 'completadas').trigger('click')
+      expect(cabeceraGrupo(envoltorio, 'completadas').attributes('aria-expanded')).toBe('false')
+      expect(nombresDe(envoltorio, 'completadas')).toEqual([])
+      expect(grupo(envoltorio, 'completadas').find('input[data-alta-rapida]').exists()).toBe(false)
+      expect(nombresDe(envoltorio, 'pendientes')).toEqual(['Escribir informe', 'Leer artículo'])
+      expect(JSON.parse(localStorage.getItem(CLAVE_PLEGADOS)!)).toEqual(['completadas'])
+
+      envoltorio.unmount()
+      envoltorio = await montar([COMPLETADA, ...TAREAS])
+      expect(cabeceraGrupo(envoltorio, 'completadas').attributes('aria-expanded')).toBe('false')
+      expect(nombresDe(envoltorio, 'completadas')).toEqual([])
+
+      await cabeceraGrupo(envoltorio, 'completadas').trigger('click')
+      expect(nombresDe(envoltorio, 'completadas')).toEqual(['Archivar facturas'])
+      expect(JSON.parse(localStorage.getItem(CLAVE_PLEGADOS)!)).toEqual([])
+    })
+
+    it('un grupo sin filas sigue mostrando su cabecera (p. ej. con el filtro de estado)', async () => {
+      const envoltorio = await montar(TAREAS)
+
+      expect(cabeceraGrupo(envoltorio, 'completadas').text()).toBe('Completadas 0')
+      expect(nombresDe(envoltorio, 'completadas')).toEqual([])
+    })
+
+    it('"+ Agregar tarea" en Pendientes crea la tarea solo con el nombre', async () => {
+      const creada = {
+        ...TAREAS[1],
+        id: 9,
+        nombre: 'Llamar al proveedor',
+        descripcion: 'Llamar al proveedor',
+        fecha_creacion: AHORA_ISO,
+      }
+      vi.mocked(clienteApi.crear).mockResolvedValue(structuredClone(creada))
+      const envoltorio = await montar()
+
+      const entrada = altaRapida(envoltorio, 'pendientes')
+      expect(entrada.attributes('placeholder')).toBe('+ Agregar tarea')
+      expect(entrada.attributes('aria-label')).toBe('Agregar tarea a Pendientes')
+      await escribir(entrada.element, '  Llamar al proveedor ')
+      await pulsarEnter(entrada.element)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas', {
+        nombre: 'Llamar al proveedor',
+        prioridad: null,
+        // La API exige descripción: se usa el propio nombre.
+        descripcion: 'Llamar al proveedor',
+        fecha_creacion: AHORA_ISO,
+        ...SIN_EXTRAS,
+      })
+      expect(clienteApi.parchear).not.toHaveBeenCalled()
+      expect(nombresDe(envoltorio, 'pendientes')).toContain('Llamar al proveedor')
+      expect(altaRapida(envoltorio, 'pendientes').element.value).toBe('')
+    })
+
+    it('"+ Agregar tarea" en Completadas la crea ya completada', async () => {
+      const creada = { ...TAREAS[1], id: 9, nombre: 'Hecha', descripcion: 'Hecha' }
+      vi.mocked(clienteApi.crear).mockResolvedValue(structuredClone(creada))
+      vi.mocked(clienteApi.parchear).mockResolvedValue({
+        ...structuredClone(creada),
+        completada: true,
+      })
+      const envoltorio = await montar()
+
+      const entrada = altaRapida(envoltorio, 'completadas')
+      expect(entrada.attributes('aria-label')).toBe('Agregar tarea a Completadas')
+      await escribir(entrada.element, 'Hecha')
+      await pulsarEnter(entrada.element)
+
+      expect(clienteApi.crear).toHaveBeenCalledTimes(1)
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/9/completada', { completada: true })
+      expect(nombresDe(envoltorio, 'completadas')).toEqual(['Hecha'])
+    })
+
+    it('"+ Agregar tarea" sin nombre no llama a la API y, si la API falla, muestra el error', async () => {
+      vi.mocked(clienteApi.crear).mockRejectedValue(new Error('No se pudo crear'))
+      const envoltorio = await montar()
+      const entrada = altaRapida(envoltorio, 'pendientes')
+
+      await escribir(entrada.element, '   ')
+      await pulsarEnter(entrada.element)
+      expect(clienteApi.crear).not.toHaveBeenCalled()
+
+      await escribir(entrada.element, 'Nueva')
+      await pulsarEnter(entrada.element)
+      expect(grupo(envoltorio, 'pendientes').get('[role="alert"]').text()).toBe('No se pudo crear')
+      expect(altaRapida(envoltorio, 'pendientes').element.value).toBe('Nueva')
+    })
+
+    it('el pie de cada grupo muestra la barra de distribución de prioridades', async () => {
+      const envoltorio = await montar([COMPLETADA, ...TAREAS])
+
+      const barra = grupo(envoltorio, 'pendientes').get('[data-testid="barra-prioridades"]')
+      expect(barra.attributes('role')).toBe('img')
+      expect(barra.attributes('aria-label')).toBe(
+        'Distribución de prioridades en Pendientes: prioridad 2, 1 tarea; sin prioridad, 1 tarea',
+      )
+      const segmentos = barra.findAll('[data-prioridad]')
+      expect(segmentos.map((segmento) => segmento.attributes('data-prioridad'))).toEqual([
+        '2',
+        'sin',
+      ])
+      expect(segmentos.map((segmento) => segmento.attributes('style'))).toEqual([
+        'width: 50%;',
+        'width: 50%;',
+      ])
+      expect(
+        grupo(envoltorio, 'completadas')
+          .get('[data-testid="barra-prioridades"]')
+          .attributes('aria-label'),
+      ).toBe('Distribución de prioridades en Completadas: prioridad 1, 1 tarea')
+    })
+
+    it('ordenar se aplica dentro de cada grupo y la exportación sigue siendo una lista única', async () => {
+      const envoltorio = await montar([...TAREAS, COMPLETADA])
+
+      const cabecera = envoltorio.findAll('th button').find((b) => b.text() === 'Nombre')!
+      await cabecera.trigger('click')
+
+      expect(nombresDe(envoltorio, 'pendientes')).toEqual(['Escribir informe', 'Leer artículo'])
+      expect(nombresDe(envoltorio, 'completadas')).toEqual(['Archivar facturas'])
+      await envoltorio.get('button[aria-label="Exportar a Excel"]').trigger('click')
+      const filas = vi.mocked(exportarTablaExcel).mock.calls[0]![2] as unknown[][]
+      expect(filas.map((fila) => fila[0])).toEqual([
+        'Archivar facturas',
+        'Escribir informe',
+        'Leer artículo',
+      ])
+    })
+  })
+
   describe('ordenación', () => {
     const TAREAS_ORDEN = [
       {
@@ -1425,7 +1630,7 @@ describe('VistaTareas', () => {
     ]
 
     function nombresEnTabla(envoltorio: VueWrapper): string[] {
-      return envoltorio.findAll('tbody tr').map((fila) => fila.findAll('td')[0]!.text())
+      return envoltorio.findAll(FILAS_TAREA).map((fila) => fila.findAll('td')[0]!.text())
     }
 
     function cabecera(envoltorio: VueWrapper, etiqueta: string) {
@@ -1714,7 +1919,7 @@ describe('VistaTareas', () => {
     const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']
 
     function nombresEnTabla(envoltorio: VueWrapper): string[] {
-      return envoltorio.findAll('tbody tr').map((fila) => fila.findAll('td')[0]!.text())
+      return envoltorio.findAll(FILAS_TAREA).map((fila) => fila.findAll('td')[0]!.text())
     }
 
     function entrada(envoltorio: VueWrapper, id: string): HTMLInputElement {
@@ -2107,6 +2312,9 @@ describe('VistaTareas', () => {
         tarea.id === 2 ? { ...tarea, completada: true } : tarea,
       )
 
+      // Con los grupos, la completada se muestra tras las pendientes.
+      const TODAS_AGRUPADAS = ['Preparar reunión', 'Comprar café', 'Revisar código']
+
       function opcionEstado(envoltorio: VueWrapper, etiqueta: string) {
         const grupo = envoltorio.get('[role="radiogroup"][aria-labelledby="filtro-estado-titulo"]')
         const opcion = grupo
@@ -2129,7 +2337,7 @@ describe('VistaTareas', () => {
         expect(
           (opcionEstado(envoltorio, 'No completadas').element as HTMLInputElement).checked,
         ).toBe(false)
-        expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+        expect(nombresEnTabla(envoltorio)).toEqual(TODAS_AGRUPADAS)
       })
 
       it('"Completadas" muestra solo las tareas completadas', async () => {
@@ -2169,7 +2377,7 @@ describe('VistaTareas', () => {
         await flushPromises()
 
         expect((opcionEstado(envoltorio, 'Todas').element as HTMLInputElement).checked).toBe(true)
-        expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+        expect(nombresEnTabla(envoltorio)).toEqual(TODAS_AGRUPADAS)
       })
     })
   })
