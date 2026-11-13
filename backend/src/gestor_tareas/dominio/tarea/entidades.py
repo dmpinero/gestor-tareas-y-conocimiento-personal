@@ -45,6 +45,24 @@ class ReferenciaEstado:
 
 
 @dataclass
+class ReferenciaWorkflow:
+    """Workflow asignado a una tarea: la tarea apunta al workflow."""
+
+    id: int
+    nombre: str
+
+
+@dataclass
+class ComentarioInicial:
+    """Comentario con el que nace una subtarea: la copia de uno del paso del workflow
+    del que nace. ``creado`` es el instante de la copia (en UTC, sin fracción de
+    segundo); nace sin editar."""
+
+    texto: str
+    creado: datetime
+
+
+@dataclass
 class Subtarea:
     """Parte de una tarea, que solo existe dentro de ella.
 
@@ -54,7 +72,9 @@ class Subtarea:
     pendiente.
 
     ``comentarios`` es el número de comentarios de la subtarea; solo se lee (lo
-    calcula el repositorio y se ignora al guardarla).
+    calcula el repositorio y se ignora al guardarla). ``comentarios_iniciales`` son
+    los comentarios que recibe al darla de alta, en ese orden; solo se usan al
+    guardar una subtarea nueva (al leerla va vacío).
     """
 
     nombre: str
@@ -63,6 +83,7 @@ class Subtarea:
     resuelta: bool = False
     comentarios: int = 0
     id: int | None = None
+    comentarios_iniciales: list[ComentarioInicial] = field(default_factory=list)
 
 
 @dataclass
@@ -79,10 +100,12 @@ class Tarea:
 
     ``completada`` indica si la tarea está hecha; una tarea nueva está pendiente.
 
-    ``subtareas`` son las subtareas de la tarea por orden de alta. Una tarea creada
-    como oportunidad recibe al darla de alta una subtarea por cada paso del workflow
-    de las oportunidades, en su orden. Después solo cambian con sus propias
-    operaciones: editar la tarea o cambiar su tipo no las altera.
+    ``subtareas`` son las subtareas de la tarea por orden de alta. Solo cambian con
+    sus propias operaciones y al asignar a la tarea un workflow distinto del que
+    tenía, que le añade al final una subtarea por cada paso del workflow, en su
+    orden. El tipo de la tarea no añade subtareas.
+
+    ``workflow`` es el workflow de la tarea (opcional).
 
     ``grupo_estados`` es el grupo de estados de la tarea (opcional) y ``estado`` el
     estado del grupo en el que está: los dos son ``None`` o el estado es de ese
@@ -102,4 +125,5 @@ class Tarea:
     subtareas: list[Subtarea] = field(default_factory=list)
     grupo_estados: ReferenciaGrupoEstados | None = None
     estado: ReferenciaEstado | None = None
+    workflow: ReferenciaWorkflow | None = None
     id: int | None = None

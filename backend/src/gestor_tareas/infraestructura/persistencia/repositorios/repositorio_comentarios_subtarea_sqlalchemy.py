@@ -29,6 +29,17 @@ def _a_columna(instante: datetime) -> datetime:
     return instante.astimezone(UTC).replace(tzinfo=None)
 
 
+def nuevo_comentario_subtarea(
+    texto: str, creado: datetime, subtarea_id: int | None = None
+) -> ComentarioSubtareaModelo:
+    """La fila de un comentario de subtarea nuevo, sin editar. Sin ``subtarea_id``,
+    la subtarea se la pone su relación (la de una subtarea que aún no se ha
+    guardado)."""
+    return ComentarioSubtareaModelo(
+        subtarea_id=subtarea_id, texto=texto, creado=_a_columna(creado), editado=None
+    )
+
+
 class RepositorioComentariosSubtareaSqlAlchemy:
     def __init__(self, sesion: Session) -> None:
         self._sesion = sesion
@@ -53,10 +64,8 @@ class RepositorioComentariosSubtareaSqlAlchemy:
             ):
                 self._sesion.rollback()
                 return None
-            modelo = ComentarioSubtareaModelo(
-                subtarea_id=comentario.id_subtarea,
-                texto=comentario.texto,
-                creado=_a_columna(comentario.creado),
+            modelo = nuevo_comentario_subtarea(
+                comentario.texto, comentario.creado, comentario.id_subtarea
             )
             self._sesion.add(modelo)
             self._sesion.flush()

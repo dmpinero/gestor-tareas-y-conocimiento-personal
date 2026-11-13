@@ -1,7 +1,10 @@
+from collections.abc import Callable
 from datetime import datetime
 
+from gestor_tareas.aplicacion.comentario.anadir_comentario import ahora_en_utc
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.asignar_grupo_estados import GrupoPedido
+from gestor_tareas.aplicacion.tarea.asignar_workflow import WorkflowPedido
 from gestor_tareas.aplicacion.tarea.resolver_catalogos import resolver_nombres
 from gestor_tareas.dominio.etiqueta.repositorio import RepositorioEtiquetas
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
@@ -9,6 +12,7 @@ from gestor_tareas.dominio.grupo_estados.repositorio import RepositorioGruposEst
 from gestor_tareas.dominio.persona.repositorio import RepositorioPersonas
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from gestor_tareas.dominio.tarea.repositorio import RepositorioTareas
+from gestor_tareas.dominio.workflow.repositorio import RepositorioWorkflows
 
 
 class ActualizarTarea:
@@ -18,9 +22,11 @@ class ActualizarTarea:
     también el tipo y sus datos (sin tipo, la tarea pierde sus datos de
     oportunidad).
 
-    Las subtareas no cambian, tampoco al cambiar el tipo: una oportunidad que deja
-    de serlo conserva las que recibió del workflow, y una tarea que pasa a ser
-    oportunidad no recibe ninguna (solo se crean al dar de alta una oportunidad).
+    El tipo no cambia las subtareas. El workflow también se sustituye: con uno
+    distinto del que tenía (también si no tenía ninguno), la tarea recibe una
+    subtarea nueva por cada paso del workflow, en su orden, después de las que ya
+    tiene; con el mismo workflow o sin workflow, sus subtareas no cambian (ver
+    ``WorkflowPedido``).
 
     El grupo de estados también se sustituye: con el mismo grupo, la tarea conserva
     su estado; con otro, queda en su primer estado, y sin grupo, sin estado.
@@ -32,11 +38,15 @@ class ActualizarTarea:
         repositorio_etiquetas: RepositorioEtiquetas,
         repositorio_personas: RepositorioPersonas,
         repositorio_grupos: RepositorioGruposEstados,
+        repositorio_workflows: RepositorioWorkflows,
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ) -> None:
         self._repositorio = repositorio
         self._repositorio_etiquetas = repositorio_etiquetas
         self._repositorio_personas = repositorio_personas
         self._repositorio_grupos = repositorio_grupos
+        self._repositorio_workflows = repositorio_workflows
+        self._reloj = reloj
 
     def ejecutar(
         self,
@@ -51,11 +61,14 @@ class ActualizarTarea:
         tipo: TipoTarea | None = None,
         oportunidad: Oportunidad | None = None,
         grupo_estados_id: int | None = None,
+        workflow_id: int | None = None,
     ) -> Tarea:
         def guardar() -> Tarea:
-            # Primero el grupo y después la tarea (ver GrupoPedido). La tarea se lee
-            # con bloqueo: así se conserva el estado que tiene ahora, no el de una
+            # Primero el workflow, después el grupo y por último la tarea (ver
+            # WorkflowPedido y GrupoPedido). La tarea se lee con bloqueo: así se
+            # conservan el estado y el workflow que tiene ahora, no los de una
             # lectura anterior.
+            workflow = WorkflowPedido(self._repositorio_workflows, workflow_id, self._reloj)
             grupo = GrupoPedido(self._repositorio_grupos, grupo_estados_id)
             tarea = self._repositorio.obtener_para_modificar(id_tarea)
             if tarea is None:
@@ -70,8 +83,9 @@ class ActualizarTarea:
             tarea.asignados = resolver_nombres(self._repositorio_personas, asignados or [])
             tarea.tipo = tipo
             tarea.oportunidad = oportunidad
+            subtareas_nuevas = workflow.asignar(tarea)
             grupo.asignar(tarea)
-            return self._repositorio.actualizar(tarea)
+            return self._repositorio.actualizar(tarea, subtareas_nuevas)
 
         # Leer la tarea, dar de alta en los catálogos y guardar es una sola
         # transacción: si choca con otra petición simultánea, se repite entera.

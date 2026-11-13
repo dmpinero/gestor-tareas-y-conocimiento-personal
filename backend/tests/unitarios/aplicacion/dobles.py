@@ -1,14 +1,24 @@
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 
-from gestor_tareas.dominio.comentario.entidades import Comentario, ComentarioSubtarea
+from gestor_tareas.dominio.comentario.entidades import (
+    Comentario,
+    ComentarioPaso,
+    ComentarioSubtarea,
+)
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
-from gestor_tareas.dominio.tarea.entidades import ReferenciaEstado, Subtarea, Tarea
-from gestor_tareas.dominio.workflow_oportunidades.entidades import PasoWorkflowOportunidad
+from gestor_tareas.dominio.tarea.entidades import (
+    ComentarioInicial,
+    ReferenciaEstado,
+    Subtarea,
+    Tarea,
+)
+from gestor_tareas.dominio.workflow.entidades import PasoWorkflow, Workflow
 
 
 class RepositorioTareasFalso:
@@ -18,6 +28,8 @@ class RepositorioTareasFalso:
         self._tareas: dict[int, Tarea] = {}
         self._siguiente_id = 1
         self._siguiente_id_subtarea = 1
+        # Comentarios con los que nació cada subtarea, por id de subtarea.
+        self.comentarios_iniciales: dict[int, list[ComentarioInicial]] = {}
 
     def crear(self, tarea: Tarea) -> Tarea:
         tarea.id = self._siguiente_id
@@ -46,13 +58,16 @@ class RepositorioTareasFalso:
         tarea.estado = replace(estado)
         return deepcopy(tarea)
 
-    def actualizar(self, tarea: Tarea) -> Tarea:
+    def actualizar(self, tarea: Tarea, subtareas_nuevas: Sequence[Subtarea] = ()) -> Tarea:
         assert tarea.id in self._tareas
         guardada = self._tareas[tarea.id]
         # Como el repositorio real, la edición no cambia el estado completada ni las
-        # subtareas (tampoco al cambiar el tipo).
+        # subtareas que ya tiene (tampoco al cambiar el tipo), y añade al final las
+        # nuevas.
         tarea.completada = guardada.completada
-        tarea.subtareas = deepcopy(guardada.subtareas)
+        tarea.subtareas = deepcopy(guardada.subtareas) + [
+            self._nueva_subtarea(s, s.resuelta) for s in subtareas_nuevas
+        ]
         self._tareas[tarea.id] = deepcopy(tarea)
         return tarea
 
@@ -67,7 +82,16 @@ class RepositorioTareasFalso:
         return self._tareas.pop(id_tarea, None) is not None
 
     def _nueva_subtarea(self, subtarea: Subtarea, resuelta: bool) -> Subtarea:
-        nueva = replace(subtarea, id=self._siguiente_id_subtarea, resuelta=resuelta, comentarios=0)
+        # Como el repositorio real: guarda sus comentarios iniciales (los cuenta y no
+        # los devuelve).
+        nueva = replace(
+            subtarea,
+            id=self._siguiente_id_subtarea,
+            resuelta=resuelta,
+            comentarios=len(subtarea.comentarios_iniciales),
+            comentarios_iniciales=[],
+        )
+        self.comentarios_iniciales[nueva.id] = deepcopy(subtarea.comentarios_iniciales)
         self._siguiente_id_subtarea += 1
         return nueva
 
@@ -224,19 +248,110 @@ class RepositorioComentariosSubtareaFalso:
         return True
 
 
-class RepositorioWorkflowOportunidadesFalso:
-    """Doble del workflow en memoria: solo lo que leen los casos de uso de tareas."""
+class RepositorioWorkflowsFalso:
+    """Doble de los workflows en memoria: solo lo que leen los casos de uso de tareas.
+    ``workflows`` es {nombre: [pasos en orden]}; los ids empiezan en 300 (workflows) y
+    400 (pasos)."""
 
-    def __init__(self, *nombres: str) -> None:
-        self.pasos = [
-            PasoWorkflowOportunidad(id=10 + i, numero=i, nombre=nombre)
-            for i, nombre in enumerate(nombres, start=1)
-        ]
-        self.lecturas_para_copiar = 0
+    def __init__(self, **workflows: list[str]) -> None:
+        self.workflows: dict[int, Workflow] = {}
+        id_paso = 400
+        for id_workflow, (nombre, pasos) in enumerate(workflows.items(), start=300):
+            entidades = []
+            for numero, nombre_paso in enumerate(pasos, start=1):
+                entidades.append(PasoWorkflow(id=id_paso, nombre=nombre_paso, numero=numero))
+                id_paso += 1
+            self.workflows[id_workflow] = Workflow(id=id_workflow, nombre=nombre, pasos=entidades)
+        self.lecturas_para_copiar: list[int] = []
+        # Comentarios de los pasos (los gestiona RepositorioComentariosPasoFalso).
+        self.comentarios: list[ComentarioPaso] = []
 
-    def leer_pasos_para_copiar(self) -> list[PasoWorkflowOportunidad]:
-        self.lecturas_para_copiar += 1
-        return [replace(p) for p in sorted(self.pasos, key=lambda p: p.numero)]
+    def paso(self, workflow: str, paso: str) -> PasoWorkflow:
+        pasos = self.workflows[self.id_de(workflow)].pasos
+        return next(p for p in pasos if p.nombre == paso)
+
+    def id_de(self, nombre: str) -> int:
+        return next(w.id for w in self.workflows.values() if w.nombre == nombre)
+
+    def leer_para_copiar(self, id_workflow: int) -> Workflow | None:
+        self.lecturas_para_copiar.append(id_workflow)
+        workflow = self.workflows.get(id_workflow)
+        if workflow is None:
+            return None
+        # Como el repositorio real: los pasos por número.
+        copia = deepcopy(workflow)
+        copia.pasos.sort(key=lambda p: p.numero)
+        # Y con los textos de los comentarios de cada paso, en su orden.
+        for paso in copia.pasos:
+            propios = sorted(
+                (c for c in self.comentarios if c.id_paso == paso.id),
+                key=lambda c: (c.creado, c.id),
+            )
+            paso.comentarios = len(propios)
+            paso.comentarios_para_copiar = [c.texto for c in propios]
+        return copia
+
+
+class RepositorioComentariosPasoFalso:
+    """Doble de RepositorioComentariosPaso en memoria, sobre los workflows de otro
+    doble (guarda los comentarios en ``workflows.comentarios``)."""
+
+    def __init__(self, workflows: RepositorioWorkflowsFalso) -> None:
+        self._workflows = workflows
+        self._siguiente_id = 0
+
+    @property
+    def comentarios(self) -> list[ComentarioPaso]:
+        return self._workflows.comentarios
+
+    def existe_workflow(self, id_workflow: int) -> bool:
+        return id_workflow in self._workflows.workflows
+
+    def existe_paso(self, id_workflow: int, id_paso: int) -> bool:
+        workflow = self._workflows.workflows.get(id_workflow)
+        return workflow is not None and any(p.id == id_paso for p in workflow.pasos)
+
+    def crear(self, comentario: ComentarioPaso) -> ComentarioPaso | None:
+        if not self.existe_paso(comentario.id_workflow, comentario.id_paso):
+            return None
+        self._siguiente_id += 1
+        guardado = replace(comentario, id=self._siguiente_id)
+        self.comentarios.append(guardado)
+        return replace(guardado)
+
+    def listar_de_paso(self, id_workflow: int, id_paso: int) -> list[ComentarioPaso] | None:
+        if not self.existe_paso(id_workflow, id_paso):
+            return None
+        propios = [c for c in self.comentarios if c.id_paso == id_paso]
+        return [replace(c) for c in sorted(propios, key=lambda c: (c.creado, c.id))]
+
+    def _indice(self, id_workflow: int, id_paso: int, id_comentario: int) -> int | None:
+        if not self.existe_paso(id_workflow, id_paso):
+            return None
+        return next(
+            (
+                i
+                for i, c in enumerate(self.comentarios)
+                if c.id == id_comentario and c.id_paso == id_paso
+            ),
+            None,
+        )
+
+    def editar(
+        self, id_workflow: int, id_paso: int, id_comentario: int, texto: str, editado: datetime
+    ) -> ComentarioPaso | None:
+        indice = self._indice(id_workflow, id_paso, id_comentario)
+        if indice is None:
+            return None
+        self.comentarios[indice] = replace(self.comentarios[indice], texto=texto, editado=editado)
+        return replace(self.comentarios[indice])
+
+    def eliminar(self, id_workflow: int, id_paso: int, id_comentario: int) -> bool:
+        indice = self._indice(id_workflow, id_paso, id_comentario)
+        if indice is None:
+            return False
+        del self.comentarios[indice]
+        return True
 
 
 class RepositorioGruposEstadosFalso:

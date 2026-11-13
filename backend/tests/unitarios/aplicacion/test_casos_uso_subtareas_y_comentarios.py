@@ -17,6 +17,7 @@ from tests.unitarios.aplicacion.dobles import (
     RepositorioGruposEstadosFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
+    RepositorioWorkflowsFalso,
 )
 
 _FECHA = datetime(2026, 11, 10, 9, 0, 0)
@@ -116,7 +117,11 @@ def test_editar_la_tarea_conserva_sus_subtareas() -> None:
     MarcarSubtareaResuelta(tareas).ejecutar(id_tarea, 1, True)
 
     tarea = ActualizarTarea(
-        tareas, RepositorioEtiquetasFalso(), personas, RepositorioGruposEstadosFalso()
+        tareas,
+        RepositorioEtiquetasFalso(),
+        personas,
+        RepositorioGruposEstadosFalso(),
+        RepositorioWorkflowsFalso(),
     ).ejecutar(
         id_tarea,
         nombre="Mudanza",

@@ -18,7 +18,7 @@ from gestor_tareas.interfaces.api.v1.enrutadores import (
     personas,
     salud,
     tareas,
-    workflow_oportunidades,
+    workflows,
 )
 
 
@@ -43,7 +43,8 @@ def crear_aplicacion() -> FastAPI:
     aplicacion.include_router(comentarios.enrutador, prefix="/api/v1")
     aplicacion.include_router(etiquetas.enrutador, prefix="/api/v1")
     aplicacion.include_router(personas.enrutador, prefix="/api/v1")
-    aplicacion.include_router(workflow_oportunidades.enrutador, prefix="/api/v1")
+    aplicacion.include_router(workflows.enrutador, prefix="/api/v1")
+    aplicacion.include_router(comentarios.enrutador_pasos, prefix="/api/v1")
     aplicacion.include_router(grupos_estados.enrutador, prefix="/api/v1")
 
     Instrumentator().instrument(aplicacion).expose(

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Protocol
 
 from gestor_tareas.dominio.tarea.entidades import ReferenciaEstado, Subtarea, Tarea
@@ -11,9 +12,11 @@ class RepositorioTareas(Protocol):
     """
 
     def crear(self, tarea: Tarea) -> Tarea:
-        """Guarda una tarea nueva, con el estado ``tarea.completada`` y sus
-        ``tarea.subtareas`` en ese orden (a las que asigna id; su ``asignado`` debe
-        existir ya en el catálogo de personas, y se ignora ``comentarios``)."""
+        """Guarda una tarea nueva, con el estado ``tarea.completada``, su
+        ``tarea.workflow`` (que debe existir) y sus ``tarea.subtareas`` en ese orden
+        (a las que asigna id; su ``asignado`` debe existir ya en el catálogo de
+        personas, y se ignora ``comentarios``). Cada subtarea se guarda con sus
+        ``comentarios_iniciales``, en ese orden y en la misma transacción."""
         ...
 
     def listar(self) -> list[Tarea]:
@@ -40,7 +43,7 @@ class RepositorioTareas(Protocol):
         tarea no existe."""
         ...
 
-    def actualizar(self, tarea: Tarea) -> Tarea:
+    def actualizar(self, tarea: Tarea, subtareas_nuevas: Sequence[Subtarea] = ()) -> Tarea:
         """Guarda los datos de una tarea ya existente (``tarea.id`` debe existir).
 
         Las etiquetas y personas asignadas sustituyen por completo a las anteriores,
@@ -50,9 +53,13 @@ class RepositorioTareas(Protocol):
         El estado completada no cambia (se ignora ``tarea.completada``): solo lo
         cambia ``cambiar_completada``. El grupo de estados y el estado sí se
         guardan: ``tarea.estado`` debe ser un estado de ``tarea.grupo_estados``.
+        También el workflow (``tarea.workflow``), que debe existir.
 
-        Las subtareas no cambian nunca (se ignora ``tarea.subtareas``), tampoco al
-        cambiar el tipo de la tarea.
+        Las subtareas que ya tiene no cambian (se ignora ``tarea.subtareas``),
+        tampoco al cambiar el tipo de la tarea. ``subtareas_nuevas`` se añaden,
+        pendientes y en ese orden, después de las que ya tiene (su ``asignado``
+        debe existir ya en el catálogo de personas), con sus
+        ``comentarios_iniciales`` como en ``crear``.
 
         Lanza ``EntidadNoEncontradaError`` si otra petición ha borrado la tarea
         mientras tanto.

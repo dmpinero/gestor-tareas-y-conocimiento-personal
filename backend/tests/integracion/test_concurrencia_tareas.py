@@ -24,8 +24,8 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
 )
-from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflow_oportunidades_sqlalchemy import (  # noqa: E501
-    RepositorioWorkflowOportunidadesSqlAlchemy,
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflows_sqlalchemy import (  # noqa: E501
+    RepositorioWorkflowsSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     RepositorioEtiquetasSqlAlchemy,
@@ -45,7 +45,7 @@ def _crear(etiquetas: list[str], asignados: list[str]) -> Tarea:
             RepositorioTareasSqlAlchemy(sesion),
             RepositorioEtiquetasSqlAlchemy(sesion),
             RepositorioPersonasSqlAlchemy(sesion),
-            RepositorioWorkflowOportunidadesSqlAlchemy(sesion),
+            RepositorioWorkflowsSqlAlchemy(sesion),
             RepositorioGruposEstadosSqlAlchemy(sesion),
         ).ejecutar(
             nombre="C",
@@ -66,6 +66,7 @@ def _actualizar(id_tarea: int, etiquetas: list[str], asignados: list[str]) -> Ta
             RepositorioEtiquetasSqlAlchemy(sesion),
             RepositorioPersonasSqlAlchemy(sesion),
             RepositorioGruposEstadosSqlAlchemy(sesion),
+            RepositorioWorkflowsSqlAlchemy(sesion),
         ).ejecutar(
             id_tarea,
             nombre="C",

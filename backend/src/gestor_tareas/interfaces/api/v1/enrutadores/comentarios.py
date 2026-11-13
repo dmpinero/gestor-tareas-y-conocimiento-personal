@@ -7,6 +7,12 @@ from gestor_tareas.aplicacion.comentario.anadir_comentario import AnadirComentar
 from gestor_tareas.aplicacion.comentario.editar_comentario import EditarComentario
 from gestor_tareas.aplicacion.comentario.eliminar_comentario import EliminarComentario
 from gestor_tareas.aplicacion.comentario.listar_comentarios import ListarComentarios
+from gestor_tareas.aplicacion.comentario_paso.casos_uso import (
+    AnadirComentarioPaso,
+    EditarComentarioPaso,
+    EliminarComentarioPaso,
+    ListarComentariosPaso,
+)
 from gestor_tareas.aplicacion.comentario_subtarea.anadir_comentario_subtarea import (
     AnadirComentarioSubtarea,
 )
@@ -19,7 +25,14 @@ from gestor_tareas.aplicacion.comentario_subtarea.eliminar_comentario_subtarea i
 from gestor_tareas.aplicacion.comentario_subtarea.listar_comentarios_subtarea import (
     ListarComentariosSubtarea,
 )
-from gestor_tareas.dominio.comentario.entidades import Comentario, ComentarioSubtarea
+from gestor_tareas.dominio.comentario.entidades import (
+    Comentario,
+    ComentarioPaso,
+    ComentarioSubtarea,
+)
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_comentarios_paso_sqlalchemy import (  # noqa: E501
+    RepositorioComentariosPasoSqlAlchemy,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_comentarios_sqlalchemy import (  # noqa: E501
     RepositorioComentariosSqlAlchemy,
 )
@@ -40,7 +53,9 @@ from gestor_tareas.interfaces.api.v1.esquemas.comentario import (
 enrutador = APIRouter(prefix="/tareas", tags=["Comentarios"])
 
 
-def _a_esquema(comentario: Comentario | ComentarioSubtarea) -> ComentarioSalidaEsquema:
+def _a_esquema(
+    comentario: Comentario | ComentarioSubtarea | ComentarioPaso,
+) -> ComentarioSalidaEsquema:
     return ComentarioSalidaEsquema(**asdict(comentario))
 
 
@@ -200,5 +215,98 @@ def eliminar_de_subtarea(
     (también si es de otra subtarea)."""
     EliminarComentarioSubtarea(RepositorioComentariosSubtareaSqlAlchemy(sesion)).ejecutar(
         id_tarea, id_subtarea, id_comentario
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Comentarios de los pasos de los workflows ---------------------------------------
+# Mismos cuerpos, respuestas y códigos que los de las subtareas. Un paso de otro
+# workflow se trata como si no existiera, y un comentario de otro paso también.
+
+enrutador_pasos = APIRouter(prefix="/workflows", tags=["Comentarios"])
+
+_RUTA_PASO = "/{id_workflow:int}/pasos/{id_paso:int}/comentarios"
+
+
+@enrutador_pasos.get(
+    _RUTA_PASO,
+    response_model=list[ComentarioSalidaEsquema],
+    responses={**RESPUESTA_NO_ENCONTRADO},
+)
+def listar_de_paso(
+    id_workflow: int, id_paso: int, sesion: Session = Depends(obtener_sesion)
+) -> list[ComentarioSalidaEsquema]:
+    """Devuelve el histórico de comentarios del paso en orden cronológico (a igual
+    instante, por orden de alta); 404 si el workflow no existe o no tiene un paso con
+    ese id (también si el paso es de otro workflow)."""
+    comentarios = ListarComentariosPaso(RepositorioComentariosPasoSqlAlchemy(sesion)).ejecutar(
+        id_workflow, id_paso
+    )
+    return [_a_esquema(c) for c in comentarios]
+
+
+@enrutador_pasos.post(
+    _RUTA_PASO,
+    response_model=ComentarioSalidaEsquema,
+    status_code=status.HTTP_201_CREATED,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def anadir_a_paso(
+    id_workflow: int,
+    id_paso: int,
+    datos: ComentarioCrearEsquema,
+    sesion: Session = Depends(obtener_sesion),
+) -> ComentarioSalidaEsquema:
+    """Añade un comentario al histórico del paso y lo devuelve, con las reglas de los
+    comentarios de las tareas (1–500 caracteres tras recortar los extremos, con sus
+    saltos de línea; el servidor pone `creado`, en UTC, y `editado` es `null`). El
+    workflow solo incluye el número de comentarios de cada paso. Al asignar el
+    workflow a una tarea, cada subtarea que nace de un paso recibe una copia de sus
+    comentarios. 404 si el workflow no existe o no tiene un paso con ese id."""
+    comentario = AnadirComentarioPaso(RepositorioComentariosPasoSqlAlchemy(sesion)).ejecutar(
+        id_workflow, id_paso, datos.texto
+    )
+    return _a_esquema(comentario)
+
+
+@enrutador_pasos.put(
+    _RUTA_PASO + "/{id_comentario:int}",
+    response_model=ComentarioSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def editar_de_paso(
+    id_workflow: int,
+    id_paso: int,
+    id_comentario: int,
+    datos: ComentarioEditarEsquema,
+    sesion: Session = Depends(obtener_sesion),
+) -> ComentarioSalidaEsquema:
+    """Sustituye el texto del comentario del paso y lo devuelve, con las reglas del
+    alta. `creado` no cambia; el servidor pone `editado`, en UTC. Las copias ya hechas
+    en las subtareas no cambian. 404 si el workflow no existe, no tiene un paso con ese
+    id o el paso no tiene un comentario con ese id (también si es de otro paso)."""
+    comentario = EditarComentarioPaso(RepositorioComentariosPasoSqlAlchemy(sesion)).ejecutar(
+        id_workflow, id_paso, id_comentario, datos.texto
+    )
+    return _a_esquema(comentario)
+
+
+@enrutador_pasos.delete(
+    _RUTA_PASO + "/{id_comentario:int}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    responses={**RESPUESTA_NO_ENCONTRADO},
+)
+def eliminar_de_paso(
+    id_workflow: int,
+    id_paso: int,
+    id_comentario: int,
+    sesion: Session = Depends(obtener_sesion),
+) -> Response:
+    """Borra el comentario del histórico del paso; las copias ya hechas en las
+    subtareas no cambian. 404 si el workflow no existe, no tiene un paso con ese id o
+    el paso no tiene un comentario con ese id (también si es de otro paso)."""
+    EliminarComentarioPaso(RepositorioComentariosPasoSqlAlchemy(sesion)).ejecutar(
+        id_workflow, id_paso, id_comentario
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

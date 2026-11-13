@@ -1,5 +1,4 @@
-"""Alta de tareas con subtareas (las del workflow de las oportunidades) y borrado de
-tareas sobre MySQL."""
+"""Alta de tareas con subtareas (las de su workflow) y borrado de tareas sobre MySQL."""
 
 from datetime import UTC, datetime
 
@@ -16,9 +15,6 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_comenta
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
-)
-from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflow_oportunidades_sqlalchemy import (  # noqa: E501
-    RepositorioWorkflowOportunidadesSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     RepositorioEtiquetasSqlAlchemy,
@@ -202,18 +198,3 @@ def test_eliminar_devuelve_false_si_la_tarea_no_existe(sesion_bd) -> None:
 
     assert not sesion_bd.in_transaction()
     assert _filas_de_tarea(sesion_bd, conservada.id) == antes
-
-
-def test_leer_pasos_para_copiar_devuelve_el_workflow_por_numero(sesion_bd) -> None:
-    workflow = RepositorioWorkflowOportunidadesSqlAlchemy(sesion_bd)
-    ids = [workflow.anadir_paso(n).id for n in ("Contactar", "Proponer", "Cerrar")]
-    workflow.reordenar_pasos([ids[2], ids[0], ids[1]])
-
-    pasos = workflow.leer_pasos_para_copiar()
-
-    assert [(p.numero, p.nombre) for p in pasos] == [
-        (1, "Cerrar"),
-        (2, "Contactar"),
-        (3, "Proponer"),
-    ]
-    sesion_bd.rollback()

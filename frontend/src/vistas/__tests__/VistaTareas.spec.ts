@@ -39,6 +39,7 @@ const TAREAS = [
     subtareas: [],
     grupo_estados: null,
     estado: null,
+    workflow: null,
   },
   {
     id: 2,
@@ -55,6 +56,7 @@ const TAREAS = [
     subtareas: [],
     grupo_estados: null,
     estado: null,
+    workflow: null,
   },
 ]
 
@@ -75,6 +77,7 @@ const SIN_EXTRAS = {
   tipo: null,
   oportunidad: null,
   grupo_estados_id: null,
+  workflow_id: null,
 }
 
 const OPORTUNIDAD = {
@@ -116,12 +119,17 @@ const SELECTOR_VENCIMIENTO = '#fecha-vencimiento'
 
 let contenedor: VueWrapper | null = null
 
-async function montar(tareas: unknown[] = TAREAS, grupos: unknown[] = []): Promise<VueWrapper> {
+async function montar(
+  tareas: unknown[] = TAREAS,
+  grupos: unknown[] = [],
+  workflows: unknown[] = [],
+): Promise<VueWrapper> {
   // Copia para que los tests que editan no alteren los datos compartidos.
   vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
     if (ruta === '/etiquetas') return Promise.resolve(structuredClone(ETIQUETAS))
     if (ruta === '/personas') return Promise.resolve(structuredClone(PERSONAS))
     if (ruta === '/grupos-estados') return Promise.resolve(structuredClone(grupos))
+    if (ruta === '/workflows') return Promise.resolve(structuredClone(workflows))
     // El detalle carga los comentarios de la tarea abierta.
     if (String(ruta).endsWith('/comentarios')) return Promise.resolve([])
     return Promise.resolve(structuredClone(tareas))
@@ -511,6 +519,7 @@ describe('VistaTareas', () => {
       tipo: null,
       oportunidad: null,
       grupo_estados_id: null,
+      workflow_id: null,
     })
     // Tras guardar se vuelven a pedir los catálogos por si hay nombres nuevos.
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -626,6 +635,7 @@ describe('VistaTareas', () => {
       tipo: null,
       oportunidad: null,
       grupo_estados_id: null,
+      workflow_id: null,
     })
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(filasTabla(envoltorio)).toEqual([
@@ -814,6 +824,7 @@ describe('VistaTareas', () => {
         subtareas: [],
         grupo_estados: null,
         estado: null,
+        workflow: null,
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -852,6 +863,7 @@ describe('VistaTareas', () => {
         subtareas: [],
         grupo_estados: null,
         estado: null,
+        workflow: null,
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -1328,6 +1340,7 @@ describe('VistaTareas', () => {
         subtareas: [],
         grupo_estados: null,
         estado: null,
+        workflow: null,
       },
       {
         id: 2,
@@ -1344,6 +1357,7 @@ describe('VistaTareas', () => {
         subtareas: [],
         grupo_estados: null,
         estado: null,
+        workflow: null,
       },
       {
         id: 3,
@@ -1361,6 +1375,7 @@ describe('VistaTareas', () => {
         subtareas: [],
         grupo_estados: null,
         estado: null,
+        workflow: null,
       },
     ]
 
@@ -1614,6 +1629,7 @@ describe('VistaTareas', () => {
         subtareas: [],
         grupo_estados: null,
         estado: null,
+        workflow: null,
       },
       {
         id: 2,
@@ -1630,6 +1646,7 @@ describe('VistaTareas', () => {
         subtareas: [],
         grupo_estados: null,
         estado: null,
+        workflow: null,
       },
       {
         id: 3,
@@ -1646,6 +1663,7 @@ describe('VistaTareas', () => {
         subtareas: [],
         grupo_estados: null,
         estado: null,
+        workflow: null,
       },
     ]
     const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']
@@ -1938,6 +1956,7 @@ describe('VistaTareas', () => {
         if (ruta === '/etiquetas')
           return Promise.resolve([...ETIQUETAS, { id: 3, nombre: 'Nueva' }])
         if (ruta === '/personas') return Promise.resolve([...PERSONAS, { id: 3, nombre: 'Marta' }])
+        if (ruta === '/grupos-estados' || ruta === '/workflows') return Promise.resolve([])
         if (String(ruta).endsWith('/comentarios')) return Promise.resolve([])
         return Promise.resolve(structuredClone(TAREAS_FILTRO))
       })
@@ -2361,6 +2380,7 @@ describe('VistaTareas', () => {
           ...INFORME,
           grupo_estados: null,
           estado: null,
+          workflow: null,
         })
         const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
 
@@ -2677,6 +2697,120 @@ describe('VistaTareas', () => {
           expect(clienteApi.parchear).not.toHaveBeenCalled()
         })
       })
+    })
+  })
+
+  describe('workflow', () => {
+    const OPORTUNIDADES = {
+      id: 1,
+      nombre: 'Workflow Oportunidades',
+      pasos: [{ id: 10, numero: 1, nombre: 'Contacto', comentarios: 0 }],
+    }
+    const ALTAS = { id: 2, nombre: 'Altas', pasos: [] }
+    const WORKFLOWS = [OPORTUNIDADES, ALTAS]
+
+    async function elegirWorkflow(panel: HTMLElement, valor: string): Promise<void> {
+      const selector = campo<HTMLSelectElement>(panel, '#tarea-workflow')
+      selector.value = valor
+      selector.dispatchEvent(new Event('change'))
+      await flushPromises()
+    }
+
+    async function rellenarObligatorios(panel: HTMLElement): Promise<void> {
+      await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Nueva')
+      await escribir(campo(panel, 'textarea[placeholder="Descripción"]'), 'Detalle')
+    }
+
+    it('carga los workflows y los ofrece en el campo "Workflow" del alta', async () => {
+      const envoltorio = await montar([], [], WORKFLOWS)
+      const panel = await abrirPanel(envoltorio)
+
+      expect(clienteApi.obtener).toHaveBeenCalledWith('/workflows')
+      expect(campo(panel, 'label[for="tarea-workflow"]').textContent?.trim()).toBe('Workflow')
+      const opciones = [...campo<HTMLSelectElement>(panel, '#tarea-workflow').options]
+      expect(opciones.map((o) => o.textContent?.trim())).toEqual([
+        'Sin workflow',
+        'Workflow Oportunidades',
+        'Altas',
+      ])
+    })
+
+    it('al crear envía el workflow elegido en workflow_id', async () => {
+      const envoltorio = await montar([], [], WORKFLOWS)
+      vi.mocked(clienteApi.crear).mockResolvedValue({ ...TAREAS[0], id: 9, nombre: 'Nueva' })
+      const panel = await abrirPanel(envoltorio)
+
+      await rellenarObligatorios(panel)
+      await elegirWorkflow(panel, '2')
+      await enviar(panel)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith(
+        '/tareas',
+        expect.objectContaining({ workflow_id: 2 }),
+      )
+    })
+
+    it('al crear una oportunidad sin workflow preselecciona "Workflow Oportunidades" y lo envía', async () => {
+      const envoltorio = await montar([], [], WORKFLOWS)
+      vi.mocked(clienteApi.crear).mockResolvedValue({ ...TAREAS[0], id: 9, nombre: 'Nueva' })
+      const panel = await abrirPanel(envoltorio)
+
+      await rellenarObligatorios(panel)
+      await elegirTipo(panel, 'oportunidad')
+      expect(campo<HTMLSelectElement>(panel, '#tarea-workflow').value).toBe('1')
+      await escribir(campo(panel, '#oportunidad-codigo'), 'OP-9')
+      await enviar(panel)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith(
+        '/tareas',
+        expect.objectContaining({ tipo: 'oportunidad', workflow_id: 1 }),
+      )
+    })
+
+    it('al editar carga el workflow de la tarea y lo vuelve a enviar', async () => {
+      const conWorkflow = { ...TAREAS[0], workflow: { id: 2, nombre: 'Altas' } }
+      const envoltorio = await montar([conWorkflow], [], WORKFLOWS)
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(conWorkflow)
+      const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+
+      expect(campo<HTMLSelectElement>(panel, '#tarea-workflow').value).toBe('2')
+      await enviar(panel)
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith(
+        '/tareas/1',
+        expect.objectContaining({ workflow_id: 2 }),
+      )
+    })
+
+    it('al editar se puede cambiar o quitar el workflow', async () => {
+      const conWorkflow = { ...TAREAS[0], workflow: { id: 2, nombre: 'Altas' } }
+      const envoltorio = await montar([conWorkflow], [], WORKFLOWS)
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...conWorkflow, workflow: null })
+      const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+
+      await elegirWorkflow(panel, '')
+      await enviar(panel)
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith(
+        '/tareas/1',
+        expect.objectContaining({ workflow_id: null }),
+      )
+    })
+
+    it('al editar y elegir el tipo Oportunidad no preselecciona ningún workflow', async () => {
+      const envoltorio = await montar(TAREAS, [], WORKFLOWS)
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(TAREA_OPORTUNIDAD)
+      const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+
+      await elegirTipo(panel, 'oportunidad')
+      expect(campo<HTMLSelectElement>(panel, '#tarea-workflow').value).toBe('')
+      await escribir(campo(panel, '#oportunidad-codigo'), 'OP-1')
+      await enviar(panel)
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith(
+        '/tareas/1',
+        expect.objectContaining({ tipo: 'oportunidad', workflow_id: null }),
+      )
     })
   })
 

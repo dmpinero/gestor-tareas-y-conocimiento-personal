@@ -15,7 +15,7 @@ from tests.unitarios.aplicacion.dobles import (
     RepositorioGruposEstadosFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
-    RepositorioWorkflowOportunidadesFalso,
+    RepositorioWorkflowsFalso,
 )
 
 _FECHA = datetime(2026, 11, 11, 10, 0, 0)
@@ -35,7 +35,7 @@ class _Repositorios:
             self.tareas,
             RepositorioEtiquetasFalso(),
             RepositorioPersonasFalso(),
-            RepositorioWorkflowOportunidadesFalso(),
+            RepositorioWorkflowsFalso(),
             self.grupos,
         ).ejecutar(nombre="T", descripcion="d", fecha_creacion=_FECHA, grupo_estados_id=id_grupo)
 
@@ -43,7 +43,11 @@ class _Repositorios:
         if grupo is not None:
             id_grupo = self.grupos.id_de(grupo)
         return ActualizarTarea(
-            self.tareas, RepositorioEtiquetasFalso(), RepositorioPersonasFalso(), self.grupos
+            self.tareas,
+            RepositorioEtiquetasFalso(),
+            RepositorioPersonasFalso(),
+            self.grupos,
+            RepositorioWorkflowsFalso(),
         ).ejecutar(
             id_tarea, nombre="T", descripcion="d", fecha_creacion=_FECHA, grupo_estados_id=id_grupo
         )

@@ -29,6 +29,7 @@ const tareaEjemplo = {
   subtareas: [],
   grupo_estados: null,
   estado: null,
+  workflow: null,
 }
 
 const ETIQUETAS = [
@@ -90,6 +91,7 @@ describe('useTiendaTareas', () => {
       tipo: null,
       oportunidad: null,
       grupo_estados_id: null,
+      workflow_id: null,
     }
     await tienda.crear(datos)
 
@@ -115,6 +117,7 @@ describe('useTiendaTareas', () => {
       tipo: 'oportunidad' as const,
       oportunidad,
       grupo_estados_id: null,
+      workflow_id: null,
     }
     await tienda.crear(datos)
 
@@ -138,6 +141,7 @@ describe('useTiendaTareas', () => {
         tipo: null,
         oportunidad: null,
         grupo_estados_id: null,
+        workflow_id: null,
       }),
     ).rejects.toThrow('datos inválidos')
     expect(tienda.tareas).toEqual([])
@@ -162,6 +166,7 @@ describe('useTiendaTareas', () => {
       tipo: null,
       oportunidad: null,
       grupo_estados_id: null,
+      workflow_id: null,
     }
     await tienda.actualizar(1, datos)
 
@@ -187,6 +192,7 @@ describe('useTiendaTareas', () => {
         tipo: null,
         oportunidad: null,
         grupo_estados_id: null,
+        workflow_id: null,
       }),
     ).rejects.toThrow('Tarea no encontrada')
     expect(tienda.tareas).toEqual([tareaEjemplo])
@@ -230,6 +236,7 @@ describe('useTiendaTareas', () => {
       tipo: null,
       oportunidad: null,
       grupo_estados_id: null,
+      workflow_id: null,
     })
 
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -256,6 +263,7 @@ describe('useTiendaTareas', () => {
       tipo: null,
       oportunidad: null,
       grupo_estados_id: null,
+      workflow_id: null,
     })
 
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -279,6 +287,7 @@ describe('useTiendaTareas', () => {
         tipo: null,
         oportunidad: null,
         grupo_estados_id: null,
+        workflow_id: null,
       }),
     ).rejects.toThrow('datos inválidos')
     expect(clienteApi.obtener).not.toHaveBeenCalled()
@@ -621,6 +630,8 @@ describe('useTiendaTareas', () => {
       tipo: null,
       oportunidad: null,
     }
-    expect(await tienda.crear({ ...datos, grupo_estados_id: null })).toEqual(tareaEjemplo)
+    expect(await tienda.crear({ ...datos, grupo_estados_id: null, workflow_id: null })).toEqual(
+      tareaEjemplo,
+    )
   })
 })

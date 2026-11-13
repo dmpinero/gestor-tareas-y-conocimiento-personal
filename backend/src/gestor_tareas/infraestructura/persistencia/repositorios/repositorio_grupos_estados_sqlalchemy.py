@@ -2,14 +2,13 @@
 
 Las altas, bajas, cambios de nombre y reordenaciones de los estados de un grupo, y
 el borrado del grupo, se ponen en fila con el bloqueo exclusivo de la fila del grupo
-(``SELECT ... FOR UPDATE``). Hace el papel del bloqueo con nombre del workflow de las
-oportunidades, pero por grupo y dentro de la transacción: dos altas sobre un grupo
-vacío ya no se quedan solo con bloqueos de hueco compatibles entre sí (que acababan
-en interbloqueo), y el bloqueo se libera al confirmar o deshacer, sin quedar en la
-conexión. Después se leen los estados del grupo con ``FOR UPDATE`` (lo último
-confirmado) y las posiciones se renumeran en dos fases (negativas y después las
-finales), porque la restricción única de (grupo_id, posicion) se comprueba fila a
-fila.
+(``SELECT ... FOR UPDATE``), por grupo y dentro de la transacción (como los pasos de
+los workflows): dos altas sobre un grupo vacío no se quedan solo con bloqueos de
+hueco compatibles entre sí (que acabarían en interbloqueo), y el bloqueo se libera
+al confirmar o deshacer, sin quedar en la conexión. Después se leen los estados del
+grupo con ``FOR UPDATE`` (lo último confirmado) y las posiciones se renumeran en dos
+fases (negativas y después las finales), porque la restricción única de (grupo_id,
+posicion) se comprueba fila a fila.
 
 Quien asigna un grupo a una tarea o la mueve de estado lee el grupo y sus estados
 con ``FOR SHARE`` (``leer_para_asignar``): espera a que termine el cambio en curso
@@ -23,14 +22,11 @@ simultánea se cruza y MySQL detecta un interbloqueo, se traduce en
 ``ConflictoDeConcurrenciaError`` y el caso de uso repite la operación entera.
 """
 
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Sequence
 
 from sqlalchemy import case, delete, func, select, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from gestor_tareas.dominio.excepciones import NombreDuplicadoError
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.grupo_estados.errores import (
     estado_duplicado,
@@ -49,32 +45,10 @@ from gestor_tareas.infraestructura.persistencia.modelos import (
     TareaModelo,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import traducir_conflictos
+from gestor_tareas.infraestructura.persistencia.repositorios.nombres_unicos import nombre_unico
 
 _Grupo = GrupoEstadosModelo
 _Estado = EstadoGrupoModelo
-
-# Error de MySQL por una clave única repetida.
-_CLAVE_DUPLICADA = 1062
-
-
-def _es_clave_duplicada(error: IntegrityError) -> bool:
-    argumentos = getattr(error.orig, "args", ())
-    return bool(argumentos) and argumentos[0] == _CLAVE_DUPLICADA
-
-
-@contextmanager
-def _nombre_unico(error_si_repetido: Callable[[], NombreDuplicadoError]) -> Iterator[None]:
-    """Traduce la clave única de nombre repetida en ``NombreDuplicadoError``.
-
-    Los nombres son las únicas claves únicas que puede repetir una petición: las
-    posiciones las asigna el repositorio con el grupo bloqueado.
-    """
-    try:
-        yield
-    except IntegrityError as error:
-        if not _es_clave_duplicada(error):
-            raise
-        raise error_si_repetido() from error
 
 
 class RepositorioGruposEstadosSqlAlchemy:
@@ -191,7 +165,7 @@ class RepositorioGruposEstadosSqlAlchemy:
     def crear(self, nombre: str) -> GrupoEstados:
         with traducir_conflictos(self._sesion):
             try:
-                with _nombre_unico(lambda: grupo_duplicado(nombre)):
+                with nombre_unico(lambda: grupo_duplicado(nombre)):
                     grupo = _Grupo(nombre=nombre)
                     self._sesion.add(grupo)
                     self._sesion.flush()
@@ -204,7 +178,7 @@ class RepositorioGruposEstadosSqlAlchemy:
 
     def renombrar(self, id_grupo: int, nombre: str) -> GrupoEstados:
         def renombrar(grupo: GrupoEstadosModelo, _: list[EstadoGrupoModelo]) -> None:
-            with _nombre_unico(lambda: grupo_duplicado(nombre)):
+            with nombre_unico(lambda: grupo_duplicado(nombre)):
                 grupo.nombre = nombre
                 self._sesion.flush()
 
@@ -236,7 +210,7 @@ class RepositorioGruposEstadosSqlAlchemy:
             posicion = (estados[-1].posicion if estados else 0) + 1
             # El nombre del grupo se lee antes: tras el error, la sesión ya no lee.
             nombre_grupo = grupo.nombre
-            with _nombre_unico(lambda: estado_duplicado(nombre, nombre_grupo)):
+            with nombre_unico(lambda: estado_duplicado(nombre, nombre_grupo)):
                 self._sesion.add(_Estado(grupo_id=grupo.id, nombre=nombre, posicion=posicion))
                 self._sesion.flush()
 
@@ -255,7 +229,7 @@ class RepositorioGruposEstadosSqlAlchemy:
         def renombrar(grupo: GrupoEstadosModelo, estados: list[EstadoGrupoModelo]) -> None:
             estado = self._estado_del_grupo(grupo, estados, id_estado)
             nombre_grupo = grupo.nombre
-            with _nombre_unico(lambda: estado_duplicado(nombre, nombre_grupo)):
+            with nombre_unico(lambda: estado_duplicado(nombre, nombre_grupo)):
                 estado.nombre = nombre
                 self._sesion.flush()
 

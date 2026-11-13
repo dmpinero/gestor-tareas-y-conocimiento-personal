@@ -58,6 +58,7 @@ _OPCIONALES_POR_DEFECTO = {
     "subtareas": [],
     "grupo_estados": None,
     "estado": None,
+    "workflow": None,
 }
 
 

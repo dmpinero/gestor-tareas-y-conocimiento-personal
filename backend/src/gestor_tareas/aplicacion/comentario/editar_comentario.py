@@ -1,7 +1,10 @@
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 
-from gestor_tareas.aplicacion.comentario.anadir_comentario import ahora_en_utc
+from gestor_tareas.aplicacion.comentario.anadir_comentario import (
+    ahora_en_utc,
+    instante_de_comentario,
+)
 from gestor_tareas.aplicacion.comentario.errores_comentario import comentario_no_encontrado
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.dominio.comentario.entidades import Comentario
@@ -25,7 +28,7 @@ class EditarComentario:
 
     def ejecutar(self, id_tarea: int, id_comentario: int, texto: str) -> Comentario:
         def guardar() -> Comentario:
-            editado = self._reloj().astimezone(UTC).replace(microsecond=0)
+            editado = instante_de_comentario(self._reloj)
             comentario = self._repositorio.editar(id_tarea, id_comentario, texto, editado)
             if comentario is None:
                 raise comentario_no_encontrado(self._repositorio, id_tarea, id_comentario)
