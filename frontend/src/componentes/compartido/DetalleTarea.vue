@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Trash } from '@lucide/vue'
+import { Pencil, Trash } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
 import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
@@ -22,9 +22,12 @@ import {
 // sea `null`; al cerrarla (botón, Escape o clic fuera) emite `cerrar`. El botón
 // de la papelera emite `eliminar`: la confirmación, el borrado y el cierre son
 // cosa de quien la usa. `error` se muestra dentro de la modal porque, mientras
-// está abierta, el resto de la página queda oculto.
-const props = defineProps<{ tarea: Tarea | null; error?: string | null }>()
-const emit = defineEmits<{ cerrar: []; eliminar: [] }>()
+// está abierta, el resto de la página queda oculto. "Editar" emite `editar`;
+// mientras `editando` sea cierto, la columna de los datos muestra el slot
+// `edicion` (el formulario, que pone quien la usa) y los comentarios siguen a
+// la vista.
+const props = defineProps<{ tarea: Tarea | null; error?: string | null; editando?: boolean }>()
+const emit = defineEmits<{ cerrar: []; eliminar: []; editar: [] }>()
 
 // Se conserva la última tarea mostrada para que el contenido no desaparezca
 // mientras dura la animación de cierre.
@@ -115,6 +118,16 @@ function alCambiarApertura(abierta: boolean): void {
         class="grid min-h-0 flex-1 gap-6 overflow-y-auto md:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)] md:overflow-hidden"
       >
         <div
+          v-if="props.editando"
+          data-testid="detalle-edicion"
+          class="flex min-h-0 flex-col"
+          role="region"
+          aria-label="Edición de la tarea"
+        >
+          <slot name="edicion" />
+        </div>
+        <div
+          v-else
           data-testid="detalle-contenido"
           class="min-h-0 overflow-y-auto pr-2"
           role="region"
@@ -186,6 +199,16 @@ function alCambiarApertura(abierta: boolean): void {
         >
           <Trash aria-hidden="true" />
           Eliminar
+        </Button>
+        <Button
+          v-if="!props.editando"
+          type="button"
+          variant="outline"
+          :aria-label="`Editar la tarea ${tareaMostrada?.nombre ?? ''}`"
+          @click="emit('editar')"
+        >
+          <Pencil aria-hidden="true" />
+          Editar
         </Button>
         <DialogClose as-child>
           <Button type="button" variant="secondary">Cerrar</Button>
