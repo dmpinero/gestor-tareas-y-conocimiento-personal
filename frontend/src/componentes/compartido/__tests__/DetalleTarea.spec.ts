@@ -325,4 +325,39 @@ describe('DetalleTarea', () => {
       ).toBeTruthy()
     })
   })
+
+  describe('edición', () => {
+    it('"Editar" emite `editar` y no cambia nada por sí solo', async () => {
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+
+      const editar = [...modal().querySelectorAll('button')].find(
+        (boton) => boton.textContent?.trim() === 'Editar',
+      )!
+      expect(editar.getAttribute('aria-label')).toBe('Editar la tarea Leer artículo')
+      editar.click()
+      await flushPromises()
+
+      expect(envoltorio.emitted('editar')).toHaveLength(1)
+      expect(modal().querySelector('[data-testid="campos-tarea"]')).not.toBeNull()
+    })
+
+    it('con `editando` muestra el slot `edicion` en lugar de los datos y oculta "Editar"', async () => {
+      const pinia = createPinia()
+      setActivePinia(pinia)
+      contenedor = mount(DetalleTarea, {
+        props: { tarea: TAREA_SIN_TIPO, editando: true },
+        slots: { edicion: '<form data-testid="formulario-de-prueba" />' },
+        attachTo: document.body,
+        global: { plugins: [pinia] },
+      })
+      await flushPromises()
+
+      expect(modal().querySelector('[data-testid="formulario-de-prueba"]')).not.toBeNull()
+      expect(modal().querySelector('[data-testid="campos-tarea"]')).toBeNull()
+      expect(modal().querySelector('[data-testid="columna-comentarios"]')).not.toBeNull()
+      expect(
+        [...modal().querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Editar'),
+      ).toBe(false)
+    })
+  })
 })

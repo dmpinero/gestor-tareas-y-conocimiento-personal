@@ -3069,4 +3069,187 @@ describe('VistaTareas', () => {
       expect(document.body.querySelector('[data-agenda]')).toBeNull()
     })
   })
+
+  describe('editar desde el detalle', () => {
+    const GRUPO = {
+      id: 1,
+      nombre: 'Desarrollo',
+      tareas: 1,
+      estados: [
+        { id: 10, nombre: 'Pendiente', posicion: 1, tareas: 1 },
+        { id: 11, nombre: 'En curso', posicion: 2, tareas: 0 },
+      ],
+    }
+    const EN_GRUPO = {
+      ...TAREAS[0],
+      grupo_estados: { id: 1, nombre: 'Desarrollo' },
+      estado: { id: 10, nombre: 'Pendiente' },
+    }
+
+    async function abrirDetalle(envoltorio: VueWrapper, nombre: string): Promise<HTMLElement> {
+      await envoltorio
+        .find(`button[aria-label="Ver detalle de la tarea ${nombre}"]`)
+        .trigger('click')
+      await flushPromises()
+      return panelActual()
+    }
+
+    function boton(modal: HTMLElement, texto: string): HTMLButtonElement {
+      const encontrado = [...modal.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === texto,
+      )
+      if (!encontrado) throw new Error(`No se encontró el botón "${texto}"`)
+      return encontrado
+    }
+
+    async function pulsar(modal: HTMLElement, texto: string): Promise<void> {
+      boton(modal, texto).click()
+      await flushPromises()
+    }
+
+    it('"Editar" cambia los datos por el formulario cargado, sin cerrar el detalle', async () => {
+      const modal = await abrirDetalle(await montar(), 'Escribir informe')
+      expect(modal.querySelector('[data-testid="campos-tarea"]')).not.toBeNull()
+
+      await pulsar(modal, 'Editar')
+
+      const editando = panelActual()
+      expect(editando.querySelector('h2')?.textContent?.trim()).toBe('Escribir informe')
+      expect(editando.querySelector('[data-testid="campos-tarea"]')).toBeNull()
+      expect(campo<HTMLInputElement>(editando, 'input[placeholder="Nombre"]').value).toBe(
+        'Escribir informe',
+      )
+      expect(campo<HTMLInputElement>(editando, 'input[placeholder="Prioridad"]').value).toBe('2')
+      expect(campo<HTMLInputElement>(editando, SELECTOR_FECHA).value).toBe('10/11/2026 09:30:00')
+      expect(chipsDe(editando, 'Etiquetas')).toEqual(['Backend', 'Urgente'])
+      // Los comentarios siguen a la vista mientras se edita.
+      expect(editando.querySelector('[data-testid="columna-comentarios"]')).not.toBeNull()
+      // Mientras se edita, el pie no ofrece "Editar" otra vez.
+      expect(
+        [...editando.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Editar'),
+      ).toBe(false)
+    })
+
+    it('"Cancelar" vuelve a los datos sin guardar', async () => {
+      const modal = await abrirDetalle(await montar(), 'Escribir informe')
+      await pulsar(modal, 'Editar')
+      await escribir(campo(panelActual(), 'input[placeholder="Nombre"]'), 'Otro nombre')
+
+      await pulsar(panelActual(), 'Cancelar')
+
+      expect(clienteApi.actualizar).not.toHaveBeenCalled()
+      expect(panelActual().querySelector('[data-testid="campos-tarea"]')?.textContent).toContain(
+        'Escribir informe',
+      )
+    })
+
+    it('"Guardar" actualiza la tarea y vuelve a los datos ya cambiados', async () => {
+      const envoltorio = await montar()
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...TAREAS[0], nombre: 'Informe final' })
+      const modal = await abrirDetalle(envoltorio, 'Escribir informe')
+      await pulsar(modal, 'Editar')
+
+      await escribir(campo(panelActual(), 'input[placeholder="Nombre"]'), 'Informe final')
+      await enviar(panelActual())
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith('/tareas/1', {
+        nombre: 'Informe final',
+        prioridad: 2,
+        descripcion: 'Informe trimestral',
+        fecha_creacion: '2026-11-10T09:30:00',
+        fecha_vencimiento: '2026-11-20T18:00:00',
+        etiquetas: ['Backend', 'Urgente'],
+        asignados: ['Ana'],
+        tipo: null,
+        oportunidad: null,
+        grupo_estados_id: null,
+        workflow_id: null,
+      })
+      expect(clienteApi.parchear).not.toHaveBeenCalled()
+      const despues = panelActual()
+      expect(despues.querySelector('h2')?.textContent?.trim()).toBe('Informe final')
+      expect(despues.querySelector('[data-testid="campos-tarea"]')).not.toBeNull()
+    })
+
+    it('si falla al guardar, sigue editando y muestra el error', async () => {
+      const envoltorio = await montar()
+      vi.mocked(clienteApi.actualizar).mockRejectedValue(new Error('Tarea no encontrada'))
+      const modal = await abrirDetalle(envoltorio, 'Escribir informe')
+      await pulsar(modal, 'Editar')
+
+      await enviar(panelActual())
+
+      expect(panelActual().querySelector('input[placeholder="Nombre"]')).not.toBeNull()
+      expect(panelActual().textContent).toContain('Tarea no encontrada')
+    })
+
+    it('también edita si está completada y el estado del grupo', async () => {
+      const envoltorio = await montar([EN_GRUPO, TAREAS[1]], [GRUPO])
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(structuredClone(EN_GRUPO))
+      vi.mocked(clienteApi.parchear).mockImplementation((ruta, cuerpo) =>
+        Promise.resolve(
+          String(ruta).endsWith('/estado')
+            ? { ...EN_GRUPO, estado: { id: 11, nombre: 'En curso' } }
+            : { ...EN_GRUPO, ...(cuerpo as object) },
+        ),
+      )
+      const modal = await abrirDetalle(envoltorio, 'Escribir informe')
+      await pulsar(modal, 'Editar')
+      const editando = panelActual()
+
+      const completada = campo<HTMLInputElement>(editando, '#tarea-completada')
+      expect(completada.checked).toBe(false)
+      completada.click()
+      const estado = campo<HTMLSelectElement>(editando, '#tarea-estado')
+      expect(estado.value).toBe('10')
+      expect([...estado.options].map((o) => o.text)).toEqual(['Pendiente', 'En curso'])
+      estado.value = '11'
+      estado.dispatchEvent(new Event('change'))
+      await flushPromises()
+      await enviar(editando)
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith(
+        '/tareas/1',
+        expect.objectContaining({ grupo_estados_id: 1 }),
+      )
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/completada', {
+        completada: true,
+      })
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/estado', { estado_id: 11 })
+      expect(panelActual().querySelector('[data-testid="campos-tarea"]')).not.toBeNull()
+    })
+
+    it('al cambiar de grupo, el estado pasa al primero del grupo nuevo', async () => {
+      const OTRO = {
+        id: 2,
+        nombre: 'Soporte',
+        tareas: 0,
+        estados: [
+          { id: 20, nombre: 'Abierta', posicion: 1, tareas: 0 },
+          { id: 21, nombre: 'Cerrada', posicion: 2, tareas: 0 },
+        ],
+      }
+      const envoltorio = await montar([EN_GRUPO], [GRUPO, OTRO])
+      const modal = await abrirDetalle(envoltorio, 'Escribir informe')
+      await pulsar(modal, 'Editar')
+      const editando = panelActual()
+
+      const grupo = campo<HTMLSelectElement>(editando, '#tarea-grupo-estados')
+      grupo.value = '2'
+      grupo.dispatchEvent(new Event('change'))
+      await flushPromises()
+
+      const estado = campo<HTMLSelectElement>(editando, '#tarea-estado')
+      expect(estado.value).toBe('20')
+      expect([...estado.options].map((o) => o.text)).toEqual(['Abierta', 'Cerrada'])
+    })
+
+    it('sin grupo de estados no muestra el estado del grupo', async () => {
+      const modal = await abrirDetalle(await montar(), 'Escribir informe')
+      await pulsar(modal, 'Editar')
+
+      expect(panelActual().querySelector('#tarea-estado')).toBeNull()
+      expect(panelActual().querySelector('#tarea-completada')).not.toBeNull()
+    })
+  })
 })

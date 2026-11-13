@@ -18,7 +18,8 @@ import { useTiendaWorkflows } from '@/stores/workflows'
 // `guardar` y quien lo usa valida y guarda, y devuelve el fallo por `error`.
 // "Cancelar" emite `cancelar`. El cuerpo desplaza y el pie con los botones
 // queda fijo, para que en pantallas bajas se vea que hay más campos. `alta`
-// indica que el formulario es el de crear una tarea.
+// indica que el formulario es el de crear una tarea. El slot `extra` añade
+// campos tras el grupo de estados.
 const valores = defineModel<ValoresFormularioTarea>('valores', { required: true })
 const props = defineProps<{ error: string | null; alta?: boolean }>()
 const emit = defineEmits<{ guardar: []; cancelar: [] }>()
@@ -176,6 +177,9 @@ watch(
           </option>
         </select>
       </div>
+      <!-- Campos que añade quien usa el formulario (p. ej. el detalle, que también
+           edita si está completada y el estado del grupo). -->
+      <slot name="extra" />
       <div class="campo-opcional flex flex-col gap-1.5">
         <Label for="tarea-workflow">Workflow</Label>
         <select

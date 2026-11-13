@@ -83,6 +83,14 @@ const idEnDetalle = ref<number | null>(null)
 const tareaEnDetalle = computed<Tarea | null>(
   () => tienda.tareas.find((tarea) => tarea.id === idEnDetalle.value) ?? null,
 )
+// La modal de detalle también edita la tarea, con el mismo formulario que la
+// modal de edición más dos campos que esta no tiene: si está completada y el
+// estado dentro de su grupo. Se guardan con sus propias llamadas tras el resto.
+const editandoEnDetalle = ref(false)
+const extrasDetalle = reactive<{ completada: boolean; estadoId: number | '' }>({
+  completada: false,
+  estadoId: '',
+})
 
 // Texto del tipo en la tabla; en una oportunidad con subtareas (p. ej. los pasos
 // de su workflow), con su avance: resueltas / total
@@ -573,9 +581,63 @@ function abrirParaCrear(): void {
 function cerrarFormulario(): void {
   modalAltaAbierta.value = false
   panelEdicionAbierto.value = false
+  editandoEnDetalle.value = false
 }
 
 function abrirParaEditar(tarea: Tarea): void {
+  cargarFormulario(tarea)
+  panelEdicionAbierto.value = true
+}
+
+function editarEnDetalle(): void {
+  const tarea = tareaEnDetalle.value
+  if (tarea === null) return
+  cargarFormulario(tarea)
+  extrasDetalle.completada = tarea.completada
+  extrasDetalle.estadoId = tarea.estado?.id ?? ''
+  editandoEnDetalle.value = true
+}
+
+function cerrarDetalle(): void {
+  idEnDetalle.value = null
+  editandoEnDetalle.value = false
+}
+
+// Estados del grupo elegido en el formulario del detalle.
+const estadosGrupoElegido = computed(
+  () => tiendaGrupos.grupos.find((grupo) => grupo.id === formulario.grupoEstadosId)?.estados ?? [],
+)
+
+// Al cambiar de grupo en el detalle, el estado pasa al que tiene la tarea si
+// vuelve a su grupo, o al primero del grupo nuevo (como hace la API).
+watch(
+  () => formulario.grupoEstadosId,
+  (idGrupo) => {
+    if (!editandoEnDetalle.value) return
+    const tarea = tareaEnDetalle.value
+    extrasDetalle.estadoId =
+      tarea?.grupo_estados?.id === idGrupo && tarea.estado
+        ? tarea.estado.id
+        : (estadosGrupoElegido.value[0]?.id ?? '')
+  },
+)
+
+/**
+ * Guarda los campos del detalle que la edición no envía: si está completada
+ * y el estado del grupo. Los fallos quedan en el error de la tienda.
+ */
+async function guardarExtrasDetalle(id: number): Promise<void> {
+  const tarea = tienda.tareas.find((candidata) => candidata.id === id)
+  if (!tarea) return
+  if (tarea.completada !== extrasDetalle.completada) await tienda.alternarCompletada(id)
+  const estadoId = extrasDetalle.estadoId
+  if (estadoId !== '' && tarea.estado?.id !== estadoId) {
+    await tienda.cambiarEstadoTarea(id, estadoId)
+  }
+}
+
+/** Pone en el formulario los datos de la tarea que se va a editar. */
+function cargarFormulario(tarea: Tarea): void {
   limpiarFormulario()
   idEnEdicion.value = tarea.id
   formulario.nombre = tarea.nombre
@@ -598,7 +660,6 @@ function abrirParaEditar(tarea: Tarea): void {
       observaciones: tarea.oportunidad.observaciones ?? '',
     }
   }
-  panelEdicionAbierto.value = true
 }
 
 function aPrioridad(valor: string | number | null): number | null {
@@ -670,7 +731,9 @@ async function guardar(): Promise<void> {
         await tienda.cambiarEstadoTarea(creada.id, destino.idEstado)
       }
     } else {
-      await tienda.actualizar(idEnEdicion.value, datos)
+      const id = idEnEdicion.value
+      await tienda.actualizar(id, datos)
+      if (editandoEnDetalle.value) await guardarExtrasDetalle(id)
     }
     cerrarFormulario()
     limpiarFormulario()
@@ -1097,9 +1160,47 @@ async function guardar(): Promise<void> {
     <DetalleTarea
       :tarea="tareaEnDetalle"
       :error="tienda.error"
-      @cerrar="idEnDetalle = null"
+      :editando="editandoEnDetalle"
+      @cerrar="cerrarDetalle"
+      @editar="editarEnDetalle"
       @eliminar="tareaEnDetalle && pedirEliminar(tareaEnDetalle)"
-    />
+    >
+      <template #edicion>
+        <FormularioTarea
+          v-model:valores="formulario"
+          :error="errorFormulario"
+          @guardar="guardar"
+          @cancelar="cerrarFormulario"
+        >
+          <template #extra>
+            <div class="campo-opcional flex items-center gap-2">
+              <input
+                id="tarea-completada"
+                v-model="extrasDetalle.completada"
+                type="checkbox"
+                class="accent-primary size-4"
+              />
+              <Label for="tarea-completada">Completada</Label>
+            </div>
+            <div
+              v-if="formulario.grupoEstadosId !== ''"
+              class="campo-opcional flex flex-col gap-1.5"
+            >
+              <Label for="tarea-estado">Estado del grupo</Label>
+              <select
+                id="tarea-estado"
+                v-model="extrasDetalle.estadoId"
+                class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
+              >
+                <option v-for="estado in estadosGrupoElegido" :key="estado.id" :value="estado.id">
+                  {{ estado.nombre }}
+                </option>
+              </select>
+            </div>
+          </template>
+        </FormularioTarea>
+      </template>
+    </DetalleTarea>
 
     <DialogoConfirmacion
       :abierto="tareaAEliminar !== null"
