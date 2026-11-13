@@ -2,6 +2,13 @@ import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { activarModoOscuro } from './utilidades'
 
+// Las acciones de cada fila de la lista (Editar, Ver detalle, Eliminar) están en
+// su menú "⋯", con el mismo nombre accesible que tenían como botones sueltos.
+async function accionDeFila(page: Page, nombre: string, accion: string): Promise<void> {
+  await page.getByRole('button', { name: `Acciones de la tarea ${nombre}`, exact: true }).click()
+  await page.getByRole('button', { name: `${accion} ${nombre}`, exact: true }).click()
+}
+
 test('crea una tarea desde la ventana modal y aparece en el listado', async ({ page }) => {
   // Nombre único: la base de datos de la pila local no se vacía entre ejecuciones.
   const nombre = `Tarea e2e ${Date.now()}`
@@ -86,7 +93,7 @@ test('la fecha de creación se rellena con la actual y se puede editar una tarea
   await expect(panel).toBeHidden()
   await expect(page.locator('tr', { hasText: nombre })).toContainText('09/11/2026 08:30:15')
 
-  await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Editar tarea')
   await expect(panel.getByRole('heading', { name: 'Editar tarea' })).toBeVisible()
   await expect(panel.getByPlaceholder('Nombre')).toHaveValue(nombre)
   await expect(panel.locator('#fecha-creacion')).toHaveValue('09/11/2026 08:30:15')
@@ -191,7 +198,7 @@ test('asigna etiquetas y personas creadas al vuelo y una fecha de vencimiento co
   await expect(fila).toContainText(/15\/\d{2}\/\d{4}/)
 
   // La etiqueta creada queda en el catálogo y se sugiere en otra tarea.
-  await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Editar tarea')
   await expect(panel.getByRole('button', { name: `Quitar ${etiqueta}` })).toBeVisible()
   await panel.getByRole('button', { name: `Quitar ${persona}` }).click()
   await panel.getByRole('button', { name: 'Borrar fecha' }).click()
@@ -235,6 +242,9 @@ test('filtra la tabla por texto, prioridad y fecha de creación, y limpia los fi
   await page.screenshot({ path: 'e2e/capturas/tareas-06-filtros.png' })
   await page.locator('#filtro-buscar').fill(marca)
   await expect(filas).toHaveCount(2)
+
+  // El resto de filtros está en el panel que despliega "Filtrar".
+  await page.getByRole('button', { name: 'Filtrar', exact: true }).click()
 
   // Prioridad: se desmarca "Sin prioridad".
   await page.getByRole('button', { name: 'Filtrar por prioridad' }).click()
@@ -289,7 +299,7 @@ test('crea una oportunidad, muestra su tipo en la tabla y todos sus campos en el
   await expect(fila).not.toContainText('Cliente interesado')
 
   // El detalle muestra todos los campos en una modal del 90 % del viewport.
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: nombre })
   await expect(detalle).toBeVisible()
   await expect(detalle).toContainText('Tarea de tipo oportunidad')
@@ -309,13 +319,13 @@ test('crea una oportunidad, muestra su tipo en la tabla y todos sus campos en el
   await expect(detalle).toBeHidden()
 
   // Al quitar el tipo, la tarea deja de ser una oportunidad.
-  await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Editar tarea')
   await expect(panel.getByLabel('Código de la oportunidad')).toHaveValue(codigo)
   await panel.getByLabel('Tipo de tarea').selectOption({ label: 'Sin tipo' })
   await expect(panel.getByLabel('Código de la oportunidad')).toBeHidden()
   await panel.getByRole('button', { name: 'Guardar' }).click()
   await expect(panel).toBeHidden()
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   await expect(detalle).not.toContainText(codigo)
   await page.keyboard.press('Escape')
   await expect(detalle).toBeHidden()
@@ -412,7 +422,7 @@ test('muestra una cuenta atrás hasta el vencimiento que avanza sola, y "Vencida
   await page.screenshot({ path: 'e2e/capturas/tareas-08-cuenta-atras.png' })
 
   // En el detalle también aparece la cuenta atrás.
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${tareas[0].nombre}` }).click()
+  await accionDeFila(page, tareas[0].nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: tareas[0].nombre })
   await expect(detalle.getByRole('timer')).toHaveText(/^Vence en /)
   await page.keyboard.press('Escape')
@@ -458,13 +468,15 @@ test('marca una tarea como completada, la tacha, se conserva al recargar y se de
   await expect(panel).toBeHidden()
 
   const fila = page.locator('tr', { hasText: nombre })
-  const conmutador = fila.getByRole('button', { name: `Marcar como completada la tarea ${nombre}` })
+  const conmutador = fila.getByRole('checkbox', {
+    name: `Marcar como completada la tarea ${nombre}`,
+  })
   const celdaNombre = fila.locator('td').first()
-  await expect(conmutador).toHaveAttribute('aria-pressed', 'false')
+  await expect(conmutador).not.toBeChecked()
   await expect(celdaNombre).toHaveCSS('text-decoration-line', 'none')
 
   await conmutador.click()
-  await expect(conmutador).toHaveAttribute('aria-pressed', 'true')
+  await expect(conmutador).toBeChecked()
   await expect(conmutador).toHaveAttribute('title', 'Completada')
   await expect(celdaNombre).toHaveCSS('text-decoration-line', 'line-through')
   await expect(fila.locator('td').last()).toHaveCSS('text-decoration-line', 'none')
@@ -472,19 +484,19 @@ test('marca una tarea como completada, la tacha, se conserva al recargar y se de
 
   // El estado se guarda: sigue tachada al recargar y en el detalle.
   await page.reload()
-  await expect(conmutador).toHaveAttribute('aria-pressed', 'true')
+  await expect(conmutador).toBeChecked()
   await expect(celdaNombre).toHaveCSS('text-decoration-line', 'line-through')
-  await fila.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: nombre })
   await expect(detalle).toContainText('Completada')
   await page.keyboard.press('Escape')
   await expect(detalle).toBeHidden()
 
   await conmutador.click()
-  await expect(conmutador).toHaveAttribute('aria-pressed', 'false')
+  await expect(conmutador).not.toBeChecked()
   await expect(celdaNombre).toHaveCSS('text-decoration-line', 'none')
   await page.reload()
-  await expect(conmutador).toHaveAttribute('aria-pressed', 'false')
+  await expect(conmutador).not.toBeChecked()
 })
 
 test('crea subtareas y comentarios desde el detalle de la tarea', async ({ page }) => {
@@ -498,7 +510,7 @@ test('crea subtareas y comentarios desde el detalle de la tarea', async ({ page 
   await panel.getByRole('button', { name: 'Guardar' }).click()
   await expect(panel).toBeHidden()
 
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: nombre })
   await expect(detalle.getByText('Esta tarea no tiene subtareas.')).toBeVisible()
   await expect(detalle.getByText('Todavía no hay comentarios.')).toBeVisible()
@@ -546,7 +558,7 @@ test('crea subtareas y comentarios desde el detalle de la tarea', async ({ page 
   await page.keyboard.press('Escape')
   await expect(detalle).toBeHidden()
   await page.reload()
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   await expect(detalle.getByTestId('contador-subtareas')).toHaveText('0 sin resolver')
   await expect(
     detalle.getByRole('button', { name: 'Marcar como resuelta la subtarea Subtarea 1' }),
@@ -575,7 +587,7 @@ test('el historial de comentarios largo es accesible y enviar con el botón mant
   }
 
   await page.goto('/tareas')
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: nombre })
   await expect(detalle.getByText('Comentario número 17')).toBeVisible()
   await detalle.evaluate((elemento) =>
@@ -608,7 +620,7 @@ test('aplica negrita con la barra del editor y el comentario se muestra con form
   const { id } = (await creada.json()) as { id: number }
 
   await page.goto('/tareas')
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: nombre })
   const campo = detalle.getByRole('textbox', { name: 'Escribe un comentario' })
   await campo.fill('Importante')
@@ -650,7 +662,7 @@ test('edita y borra subtareas y comentarios pidiendo confirmación', async ({ pa
   ).toBe(201)
 
   await page.goto('/tareas')
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: nombre })
 
   // Subtarea: editar exige confirmar; cancelar la confirmación no guarda.
@@ -705,7 +717,7 @@ test('edita y borra subtareas y comentarios pidiendo confirmación', async ({ pa
   // Se guarda: tras recargar sigue igual.
   await page.keyboard.press('Escape')
   await page.reload()
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   await expect(detalle.getByText('Esta tarea no tiene subtareas.')).toBeVisible()
   await expect(detalle.getByText('Todavía no hay comentarios.')).toBeVisible()
 })
@@ -729,7 +741,7 @@ test('en pantallas estrechas muestra las subtareas como tarjetas sin desbordar',
   ).toBe(201)
 
   await page.goto('/tareas')
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: nombre })
   const tarjetas = detalle.getByTestId('tarjetas-subtareas')
   await expect(tarjetas).toBeVisible()
@@ -773,7 +785,7 @@ test('comenta una subtarea y borra la tarea pidiendo confirmación', async ({ pa
   ).toBe(201)
 
   await page.goto('/tareas')
-  await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: nombre })
 
   // Comentarios de la subtarea, con su contador.
@@ -819,7 +831,7 @@ test('crea la tarea en una ventana modal y la borra desde la lista', async ({ pa
   await expect(ventana).toBeHidden()
 
   const fila = page.locator('tr', { hasText: nombre })
-  await fila.getByRole('button', { name: `Eliminar la tarea ${nombre}` }).click()
+  await accionDeFila(page, nombre, 'Eliminar la tarea')
   await page
     .getByRole('alertdialog', { name: `¿Eliminar la tarea ${nombre}?` })
     .getByRole('button', { name: 'Eliminar' })
@@ -846,6 +858,7 @@ test('filtra por estado: todas, completadas o no completadas', async ({ page, re
 
   await page.goto('/tareas')
   await page.getByLabel('Buscar').fill(String(marca))
+  await page.getByRole('button', { name: 'Filtrar', exact: true }).click()
   const estado = page.getByRole('radiogroup', { name: 'Estado' })
   const fila = (nombre: string) => page.locator('tr', { hasText: nombre })
   await expect(estado.getByRole('radio', { name: 'Todas', exact: true })).toBeChecked()
@@ -919,7 +932,7 @@ for (const { modo, preparar } of MODOS_BORDES) {
 
     await page.goto('/tareas')
     await preparar(page)
-    await page.getByRole('button', { name: `Editar tarea ${nombre}` }).click()
+    await accionDeFila(page, nombre, 'Editar tarea')
     const ventana = page.getByRole('dialog', { name: 'Editar tarea' })
     await expect(ventana).toHaveAttribute('data-slot', 'dialog-content')
     await expect(ventana.getByText('Los campos con * (borde rojo) son obligatorios')).toBeVisible()

@@ -32,6 +32,32 @@ export function formatearFechaHora(valor: Date | string): string {
   return `${fecha} ${hora}`
 }
 
+const MESES_CORTOS = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+] as const
+
+/**
+ * Formatea una cadena ISO sin zona horaria como día y mes abreviado
+ * (`13 nov`), p. ej. para el vencimiento en la tabla. Una cadena que no sea ISO
+ * se devuelve sin cambios.
+ */
+export function formatearFechaCorta(valor: string): string {
+  const partes = EXPRESION_ISO.exec(valor)
+  if (!partes) return valor
+  return `${Number(partes[3])} ${MESES_CORTOS[Number(partes[2]) - 1]}`
+}
+
 /**
  * Lee una cadena ISO sin zona horaria (`YYYY-MM-DDTHH:MM:SS`) como un `Date`
  * en hora local, sin convertir de zona. Devuelve `null` si no es ISO.

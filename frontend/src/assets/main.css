@@ -108,3 +108,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Menú "⋯" de las filas de tareas: en pantallas anchas con ratón solo se ve al
+   pasar por la fila, al enfocarla o con el menú abierto. Sigue recibiendo el foco
+   aunque esté transparente, y en pantallas táctiles o estrechas se ve siempre. */
+@layer components {
+  @media (hover: hover) and (width >= 48rem) {
+    [data-acciones-fila]:not([data-state='open']) {
+      opacity: 0;
+    }
+    tr:hover [data-acciones-fila],
+    tr:focus-within [data-acciones-fila] {
+      opacity: 1;
+    }
+  }
+}

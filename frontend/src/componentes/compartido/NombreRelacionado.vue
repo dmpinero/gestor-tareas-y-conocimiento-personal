@@ -4,6 +4,8 @@ import { useAbrirTareasRelacionadas, type TipoRelacion } from '@/composables/use
 
 // Nombre de una etiqueta o persona que, dentro de una vista que ofrece el modal
 // de tareas relacionadas, se pulsa para abrirlo. Fuera de ella es solo texto.
+// El contenido visible puede cambiarse por la ranura (p. ej. un avatar); el
+// nombre accesible es siempre el mismo.
 const props = defineProps<{
   tipo: TipoRelacion
   nombre: string
@@ -28,7 +30,9 @@ const etiquetaAccesible = computed(() =>
     class="focus-visible:ring-ring/50 cursor-pointer rounded-sm text-left outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px]"
     @click.stop="abrir(props.tipo, props.nombre)"
   >
-    {{ props.nombre }}
+    <slot>{{ props.nombre }}</slot>
   </button>
-  <span v-else>{{ props.nombre }}</span>
+  <span v-else
+    ><slot>{{ props.nombre }}</slot></span
+  >
 </template>

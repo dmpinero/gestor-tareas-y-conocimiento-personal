@@ -2,6 +2,13 @@ import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { activarModoOscuro, SECCIONES } from './utilidades'
 
+// Las acciones de cada fila de la lista (Editar, Ver detalle, Eliminar) están en
+// su menú "⋯", con el mismo nombre accesible que tenían como botones sueltos.
+async function accionDeFila(page: Page, nombre: string, accion: string): Promise<void> {
+  await page.getByRole('button', { name: `Acciones de la tarea ${nombre}`, exact: true }).click()
+  await page.getByRole('button', { name: `${accion} ${nombre}`, exact: true }).click()
+}
+
 async function auditarPagina(page: Page) {
   return (
     new AxeBuilder({ page })
@@ -146,7 +153,7 @@ for (const { modo, preparar } of MODOS) {
 
     await page.goto('/tareas')
     await preparar(page)
-    await page.getByRole('button', { name: `Ver detalle de la tarea ${nombre}` }).click()
+    await accionDeFila(page, nombre, 'Ver detalle de la tarea')
     const detalle = page.getByRole('dialog', { name: nombre })
     const boton = detalle.getByRole('button', { name: 'Comentarios de la subtarea Auditar: 1' })
     await expect(boton).toBeVisible()
@@ -167,13 +174,14 @@ for (const { modo, preparar } of MODOS) {
   })
 }
 
-// Regresión: el contador de filtros activos estaba dentro del botón "Contraer
-// filtros" y su texto no formaba parte del nombre (WCAG 2.5.3).
+// Regresión: el contador de filtros activos estaba dentro del botón que pliega
+// los filtros y su texto no formaba parte del nombre (WCAG 2.5.3).
 test('el panel de filtros con filtros activos no tiene violaciones de accesibilidad (WCAG 2.1 AA)', async ({
   page,
 }) => {
   await page.goto('/tareas')
   await page.getByLabel('Buscar').fill('zzz')
+  await page.getByRole('button', { name: 'Filtrar', exact: true }).click()
   await page.getByRole('radio', { name: 'Completadas', exact: true }).check()
   await expect(page.getByTestId('filtros-activos')).toHaveText('2 activos')
   const resultado = await auditarPagina(page)

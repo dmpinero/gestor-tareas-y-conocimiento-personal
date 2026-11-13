@@ -27,4 +27,17 @@ describe('NombreRelacionado', () => {
     await boton.trigger('click')
     expect(proveedor!.seleccion.value).toEqual({ tipo: 'persona', nombre: 'Ana' })
   })
+
+  it('admite otro contenido (p. ej. un avatar) sin cambiar su nombre accesible', () => {
+    const vista = defineComponent({
+      setup() {
+        useProveedorTareasRelacionadas()
+        return () =>
+          h(NombreRelacionado, { tipo: 'persona', nombre: 'Ana' }, { default: () => 'AN' })
+      },
+    })
+    const boton = mount(vista).get('button')
+    expect(boton.text()).toBe('AN')
+    expect(boton.attributes('aria-label')).toBe('Ver tareas y subtareas de Ana')
+  })
 })
