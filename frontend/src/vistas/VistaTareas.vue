@@ -699,7 +699,7 @@ async function guardar(): Promise<void> {
 
     <div class="bg-muted/40 mt-4 rounded-lg border p-4">
       <Collapsible v-model:open="filtrosAbiertos">
-        <!-- Barra siempre visible: plegar, buscar y limpiar. -->
+        <!-- Barra siempre visible: plegar y limpiar. -->
         <div class="flex flex-wrap items-end gap-3">
           <CollapsibleTrigger
             class="text-muted-foreground hover:text-foreground flex h-9 items-center gap-1 text-sm font-medium"
@@ -719,20 +719,6 @@ async function guardar(): Promise<void> {
             class="bg-primary text-primary-foreground mb-2 rounded-full px-2 py-0.5 text-xs"
             >{{ numeroFiltrosActivos === 1 ? '1 activo' : `${numeroFiltrosActivos} activos` }}</span
           >
-          <div class="flex min-w-48 flex-1 flex-col gap-1.5 sm:max-w-md">
-            <Label for="filtro-buscar">Buscar</Label>
-            <div class="relative">
-              <Search
-                class="text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4"
-              />
-              <Input
-                id="filtro-buscar"
-                v-model="busqueda"
-                placeholder="Buscar tareas…"
-                class="pl-8"
-              />
-            </div>
-          </div>
           <Button type="button" variant="secondary" class="ml-auto" @click="limpiarFiltros"
             >Limpiar filtros</Button
           >
@@ -845,6 +831,22 @@ async function guardar(): Promise<void> {
                 </div>
               </div>
             </fieldset>
+          </div>
+
+          <!-- Buscador, en su propia línea bajo el Estado. -->
+          <div data-fila="buscar" class="flex min-w-0 flex-col gap-1.5 sm:max-w-md">
+            <Label for="filtro-buscar">Buscar</Label>
+            <div class="relative">
+              <Search
+                class="text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4"
+              />
+              <Input
+                id="filtro-buscar"
+                v-model="busqueda"
+                placeholder="Buscar tareas…"
+                class="pl-8"
+              />
+            </div>
           </div>
         </CollapsibleContent>
       </Collapsible>
