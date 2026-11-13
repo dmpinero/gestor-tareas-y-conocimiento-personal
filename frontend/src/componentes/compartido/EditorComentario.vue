@@ -110,7 +110,14 @@ const editor = useEditor({
     TextStyle,
     Color,
     Highlight.configure({ multicolor: true }),
-    CharacterCount.configure({ limit: props.limite }),
+    // Cuenta como la API: puntos de código, no unidades UTF-16 (un emoji es
+    // uno). Sin autoTrim: un comentario guardado que ya pasa del límite no se
+    // recorta al abrirlo; solo no deja escribir más.
+    CharacterCount.configure({
+      limit: props.limite,
+      autoTrim: false,
+      textCounter: (texto) => [...texto].length,
+    }),
     Placeholder.configure({ placeholder: props.placeholder ?? '' }),
   ],
   editorProps: {

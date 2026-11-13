@@ -6,7 +6,7 @@ import EditorComentario from '../EditorComentario.vue'
 let contenedor: VueWrapper | null = null
 
 async function montar(
-  props: Partial<{ modelValue: string; soloLectura: boolean }> = {},
+  props: Partial<{ modelValue: string; soloLectura: boolean; autoenfoque: boolean }> = {},
 ): Promise<VueWrapper> {
   contenedor = mount(EditorComentario, {
     props: {
@@ -261,5 +261,18 @@ describe('EditorComentario', () => {
     }
 
     expect(recibidos).toEqual([false])
+  })
+
+  it('no recorta un comentario guardado que ya pasa del límite al abrirlo para editar', async () => {
+    // 300 emoji son 300 caracteres para la API, pero 600 unidades UTF-16.
+    const guardado = `<p>${'😀'.repeat(300)}</p>`
+    const envoltorio = await montar({ modelValue: guardado, autoenfoque: true })
+    // El enfoque inicial llega tras un instante y es la transacción que recortaba.
+    await new Promise((resolver) => setTimeout(resolver, 50))
+    await flushPromises()
+
+    expect(editable(envoltorio).text()).toBe('😀'.repeat(300))
+    const emitidos = (envoltorio.emitted('update:modelValue') ?? []).map((e) => e[0])
+    expect(emitidos.every((valor) => valor === guardado)).toBe(true)
   })
 })

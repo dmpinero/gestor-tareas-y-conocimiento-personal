@@ -61,7 +61,8 @@ const anuncio = ref('')
 const contenedorHistorial = useTemplateRef<HTMLElement>('contenedorHistorial')
 
 const grupos = computed(() => agruparComentariosPorDia(comentarios.value))
-const longitudTexto = computed(() => textoVisible(texto.value).length)
+// En puntos de código, como cuenta la API (un emoji es un carácter).
+const longitudTexto = computed(() => [...textoVisible(texto.value)].length)
 const puedeEnviar = computed(() => longitudTexto.value > 0 && !enviando.value)
 
 function mensajeDe(error: unknown): string {
@@ -136,7 +137,7 @@ async function enviar(): Promise<void> {
 // abierta a la vez; abrir otra descarta la anterior.
 const idEditando = ref<number | null>(null)
 const textoEdicion = ref('')
-const longitudEdicion = computed(() => textoVisible(textoEdicion.value).length)
+const longitudEdicion = computed(() => [...textoVisible(textoEdicion.value)].length)
 const confirmandoEdicion = ref(false)
 const idConfirmandoEliminar = ref<number | null>(null)
 const procesando = ref(false)

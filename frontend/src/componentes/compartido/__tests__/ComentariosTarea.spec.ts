@@ -325,6 +325,15 @@ describe('ComentariosTarea: envío', () => {
     expect(envoltorio.text()).toContain('7/500')
   })
 
+  it('el contador cuenta cada emoji como un carácter, como la API', async () => {
+    obtener.mockResolvedValue([])
+    const envoltorio = await montar()
+
+    await escribir(envoltorio, '<p>😀😀a</p>')
+
+    expect(envoltorio.text()).toContain('3/500')
+  })
+
   it('el límite de 500 se aplica al texto visible, no al HTML', async () => {
     obtener.mockResolvedValue([])
     const envoltorio = await montar()
