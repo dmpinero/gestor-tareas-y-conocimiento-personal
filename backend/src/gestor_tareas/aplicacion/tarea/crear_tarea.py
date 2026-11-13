@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from datetime import datetime
 
+from gestor_tareas.aplicacion.comentario.anadir_comentario import ahora_en_utc
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.asignar_grupo_estados import GrupoPedido
 from gestor_tareas.aplicacion.tarea.asignar_workflow import WorkflowPedido
@@ -27,11 +29,13 @@ class CrearTarea:
         repositorio_personas: RepositorioPersonas,
         repositorio_workflows: RepositorioWorkflows,
         repositorio_grupos: RepositorioGruposEstados,
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ) -> None:
         self._repositorio = repositorio
         self._repositorio_etiquetas = repositorio_etiquetas
         self._repositorio_personas = repositorio_personas
         self._repositorio_workflows = repositorio_workflows
+        self._reloj = reloj
         self._repositorio_grupos = repositorio_grupos
 
     def ejecutar(
@@ -51,7 +55,7 @@ class CrearTarea:
         def guardar() -> Tarea:
             # Lo primero, para bloquear el workflow y el grupo antes que nada, en ese
             # orden (ver WorkflowPedido y GrupoPedido).
-            workflow = WorkflowPedido(self._repositorio_workflows, workflow_id)
+            workflow = WorkflowPedido(self._repositorio_workflows, workflow_id, self._reloj)
             grupo = GrupoPedido(self._repositorio_grupos, grupo_estados_id)
             tarea = Tarea(
                 nombre=nombre,

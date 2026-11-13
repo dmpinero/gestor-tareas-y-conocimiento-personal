@@ -66,6 +66,7 @@ class PasoWorkflowSalidaEsquema(BaseModel):
     id: int
     numero: int
     nombre: str
+    comentarios: int = Field(description="Número de comentarios del paso.")
 
 
 class WorkflowSalidaEsquema(BaseModel):

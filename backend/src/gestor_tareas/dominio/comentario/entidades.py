@@ -32,3 +32,21 @@ class ComentarioSubtarea:
     creado: datetime
     editado: datetime | None = None
     id: int | None = None
+
+
+@dataclass
+class ComentarioPaso:
+    """Comentario del histórico de un paso de un workflow, con las mismas reglas que
+    ``Comentario``. Se borra con el paso (y con su workflow).
+
+    Al asignar el workflow a una tarea, la subtarea que nace del paso recibe una
+    copia de sus comentarios (ver ``WorkflowPedido``); la copia es independiente:
+    cambiar uno no cambia el otro.
+    """
+
+    id_workflow: int
+    id_paso: int
+    texto: str
+    creado: datetime
+    editado: datetime | None = None
+    id: int | None = None

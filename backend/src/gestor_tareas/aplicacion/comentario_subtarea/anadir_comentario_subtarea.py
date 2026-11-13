@@ -1,7 +1,10 @@
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 
-from gestor_tareas.aplicacion.comentario.anadir_comentario import ahora_en_utc
+from gestor_tareas.aplicacion.comentario.anadir_comentario import (
+    ahora_en_utc,
+    instante_de_comentario,
+)
 from gestor_tareas.aplicacion.comentario_subtarea.errores_comentario_subtarea import (
     subtarea_no_encontrada,
 )
@@ -27,7 +30,7 @@ class AnadirComentarioSubtarea:
 
     def ejecutar(self, id_tarea: int, id_subtarea: int, texto: str) -> ComentarioSubtarea:
         def guardar() -> ComentarioSubtarea:
-            creado = self._reloj().astimezone(UTC).replace(microsecond=0)
+            creado = instante_de_comentario(self._reloj)
             comentario = self._repositorio.crear(
                 ComentarioSubtarea(
                     id_tarea=id_tarea, id_subtarea=id_subtarea, texto=texto, creado=creado

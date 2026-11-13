@@ -15,7 +15,12 @@ con ``FOR SHARE`` (``leer_para_copiar``), siempre antes que el grupo de estados 
 tarea: espera a que termine el cambio en curso del workflow, así que nunca ve una
 reordenación a medias, y lo impide (también su borrado) hasta que guarde la tarea.
 Las lecturas compartidas son compatibles entre sí, así que las tareas de un mismo
-workflow no se ponen en fila.
+workflow no se ponen en fila. Después, con todos los pasos ya bloqueados, lee sus
+comentarios con ``FOR SHARE``: quien da de alta, edita o borra un comentario de un
+paso bloquea antes la fila del paso en exclusiva (ver
+``RepositorioComentariosPasoSqlAlchemy``), así que la copia espera a que termine y
+lo impide hasta que se guarde la tarea; nunca copia los comentarios de un paso a
+medias.
 
 Las tareas apuntan a su workflow con una clave ajena sin acción: al borrar el
 workflow se dejan antes sus tareas sin workflow en la misma transacción. Sus pasos
@@ -24,6 +29,7 @@ detecta un interbloqueo, se traduce en ``ConflictoDeConcurrenciaError`` y el cas
 uso repite la operación entera.
 """
 
+from collections import defaultdict
 from collections.abc import Callable, Sequence
 
 from sqlalchemy import case, delete, select, update
@@ -38,6 +44,7 @@ from gestor_tareas.dominio.workflow.errores import (
 )
 from gestor_tareas.dominio.workflow.orden import comprobar_nuevo_orden
 from gestor_tareas.infraestructura.persistencia.modelos import (
+    ComentarioPasoModelo,
     PasoWorkflowModelo,
     TareaModelo,
     WorkflowModelo,
@@ -50,7 +57,12 @@ _Paso = PasoWorkflowModelo
 
 
 def _a_paso(modelo: PasoWorkflowModelo) -> PasoWorkflow:
-    return PasoWorkflow(id=modelo.id, numero=modelo.numero, nombre=modelo.nombre)
+    return PasoWorkflow(
+        id=modelo.id,
+        numero=modelo.numero,
+        nombre=modelo.nombre,
+        comentarios=modelo.numero_comentarios,
+    )
 
 
 def _a_entidad(workflow: WorkflowModelo, pasos: Sequence[PasoWorkflowModelo]) -> Workflow:
@@ -257,4 +269,29 @@ class RepositorioWorkflowsSqlAlchemy:
             workflow = self._workflow_bloqueado_o_nada(id_workflow, compartido=True)
             if workflow is None:
                 return None
-            return _a_entidad(workflow, self._pasos_bloqueados(id_workflow, compartido=True))
+            entidad = _a_entidad(workflow, self._pasos_bloqueados(id_workflow, compartido=True))
+            textos = self._comentarios_bloqueados([p.id for p in entidad.pasos])
+            for paso in entidad.pasos:
+                paso.comentarios_para_copiar = textos[paso.id]
+                paso.comentarios = len(paso.comentarios_para_copiar)
+            return entidad
+
+    def _comentarios_bloqueados(self, ids_pasos: list[int]) -> dict[int, list[str]]:
+        """Los textos de los comentarios de esos pasos, por paso y en orden
+        cronológico (``creado`` y, a igual instante, por orden de alta), leídos con
+        bloqueo compartido (lo último confirmado) en una sola consulta, después de
+        bloquear todos los pasos."""
+        textos: dict[int, list[str]] = defaultdict(list)
+        if not ids_pasos:
+            return textos
+        consulta = (
+            select(ComentarioPasoModelo.paso_id, ComentarioPasoModelo.texto)
+            .where(ComentarioPasoModelo.paso_id.in_(ids_pasos))
+            .order_by(
+                ComentarioPasoModelo.paso_id, ComentarioPasoModelo.creado, ComentarioPasoModelo.id
+            )
+            .with_for_update(read=True)
+        )
+        for id_paso, texto in self._sesion.execute(consulta):
+            textos[id_paso].append(texto)
+        return textos

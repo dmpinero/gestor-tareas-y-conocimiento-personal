@@ -22,6 +22,9 @@ from gestor_tareas.infraestructura.persistencia.modelos import (
     TareaModelo,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import traducir_conflictos
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_comentarios_subtarea_sqlalchemy import (  # noqa: E501
+    nuevo_comentario_subtarea,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     filas_obtenidas,
 )
@@ -136,11 +139,16 @@ class RepositorioTareasSqlAlchemy:
         persona = None
         if subtarea.asignado is not None:
             (persona,) = self._filas_catalogo(PersonaModelo, [subtarea.asignado])
+        # Sus comentarios iniciales se insertan con ella, en la misma transacción y en
+        # el orden de la lista (sus ids siguen ese orden).
         return SubtareaModelo(
             nombre=subtarea.nombre,
             asignado=persona,
             prioridad=subtarea.prioridad,
             resuelta=subtarea.resuelta,
+            comentarios=[
+                nuevo_comentario_subtarea(c.texto, c.creado) for c in subtarea.comentarios_iniciales
+            ],
         )
 
     def crear(self, tarea: Tarea) -> Tarea:
