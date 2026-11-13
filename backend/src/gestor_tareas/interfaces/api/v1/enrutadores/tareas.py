@@ -15,7 +15,10 @@ from gestor_tareas.aplicacion.tarea.eliminar_tarea import EliminarTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
 from gestor_tareas.aplicacion.tarea.marcar_subtarea_resuelta import MarcarSubtareaResuelta
-from gestor_tareas.dominio.excepciones import AsignacionDeEstadoInvalidaError
+from gestor_tareas.dominio.excepciones import (
+    AsignacionDeEstadoInvalidaError,
+    AsignacionDeWorkflowInvalidaError,
+)
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
     RepositorioGruposEstadosSqlAlchemy,
@@ -23,8 +26,8 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
 )
-from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflow_oportunidades_sqlalchemy import (  # noqa: E501
-    RepositorioWorkflowOportunidadesSqlAlchemy,
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflows_sqlalchemy import (  # noqa: E501
+    RepositorioWorkflowsSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     RepositorioEtiquetasSqlAlchemy,
@@ -61,6 +64,12 @@ def _argumentos(datos: TareaCrearEsquema) -> dict:
     return argumentos
 
 
+def _error_de_validacion(campo: str, valor: object, error: Exception) -> RequestValidationError:
+    return RequestValidationError(
+        [{"type": "value_error", "loc": ("body", campo), "msg": str(error), "input": valor}]
+    )
+
+
 def _validando_estado(campo: str, valor: object, operacion: Callable[[], Tarea]) -> Tarea:
     """Ejecuta la operación y publica un grupo o un estado que la tarea no admite como
     un error de validación del campo del cuerpo (422), con el mismo formato que el
@@ -68,9 +77,16 @@ def _validando_estado(campo: str, valor: object, operacion: Callable[[], Tarea])
     try:
         return operacion()
     except AsignacionDeEstadoInvalidaError as error:
-        raise RequestValidationError(
-            [{"type": "value_error", "loc": ("body", campo), "msg": str(error), "input": valor}]
-        ) from error
+        raise _error_de_validacion(campo, valor, error) from error
+
+
+def _validando_grupo_y_workflow(datos: TareaCrearEsquema, operacion: Callable[[], Tarea]) -> Tarea:
+    """Como ``_validando_estado`` para el grupo de estados, y un workflow que no existe
+    como error de validación de ``workflow_id`` (422)."""
+    try:
+        return _validando_estado("grupo_estados_id", datos.grupo_estados_id, operacion)
+    except AsignacionDeWorkflowInvalidaError as error:
+        raise _error_de_validacion("workflow_id", datos.workflow_id, error) from error
 
 
 @enrutador.get("", response_model=list[TareaSalidaEsquema])
@@ -97,10 +113,10 @@ def crear(
     Las etiquetas y personas se buscan en su catálogo sin distinguir mayúsculas
     (se conserva la grafía guardada) y se dan de alta si no existen.
 
-    Una oportunidad recibe en `subtareas` una subtarea por cada paso vigente del
-    workflow de las oportunidades, en su orden, pendiente y sin persona ni
-    prioridad; son subtareas como cualquier otra, y cambiar el workflow después no
-    las altera.
+    Con `workflow_id`, la tarea recibe en `subtareas` una subtarea por cada paso
+    vigente del workflow, en su orden, pendiente y sin persona ni prioridad; son
+    subtareas como cualquier otra, y cambiar el workflow después no las altera. 422
+    si el workflow no existe. El tipo de la tarea no le añade subtareas.
 
     Con `grupo_estados_id`, la tarea queda en el primer estado del grupo; 422 si el
     grupo no existe o no tiene estados. Sin él, no tiene grupo ni estado.
@@ -109,14 +125,10 @@ def crear(
         RepositorioTareasSqlAlchemy(sesion),
         RepositorioEtiquetasSqlAlchemy(sesion),
         RepositorioPersonasSqlAlchemy(sesion),
-        RepositorioWorkflowOportunidadesSqlAlchemy(sesion),
+        RepositorioWorkflowsSqlAlchemy(sesion),
         RepositorioGruposEstadosSqlAlchemy(sesion),
     )
-    tarea = _validando_estado(
-        "grupo_estados_id",
-        datos.grupo_estados_id,
-        lambda: caso_de_uso.ejecutar(**_argumentos(datos)),
-    )
+    tarea = _validando_grupo_y_workflow(datos, lambda: caso_de_uso.ejecutar(**_argumentos(datos)))
     return _a_esquema(tarea)
 
 
@@ -133,8 +145,13 @@ def actualizar(
     los datos de oportunidad); 404 si el id no existe y 422 si la fecha de
     vencimiento es anterior a la de creación o el tipo no casa con sus datos.
     El estado completada no cambia (solo lo cambia `PATCH .../completada`), ni las
-    subtareas, tampoco al cambiar el tipo: una tarea que pasa a ser oportunidad no
-    recibe las del workflow (solo se crean al dar de alta la oportunidad).
+    subtareas que ya tiene, tampoco al cambiar el tipo.
+
+    `workflow_id` también se sustituye: con un workflow distinto del que tenía
+    (también si no tenía ninguno), la tarea recibe una subtarea nueva por cada paso
+    del workflow, en su orden, después de las que ya tiene; con el mismo workflow, o
+    si falta o es null (la tarea queda sin workflow), sus subtareas no cambian. 422
+    si el workflow no existe.
 
     `grupo_estados_id` también se sustituye: con el mismo grupo que ya tenía, la tarea
     conserva su estado; con otro, queda en su primer estado, y si falta o es null,
@@ -144,11 +161,10 @@ def actualizar(
         RepositorioEtiquetasSqlAlchemy(sesion),
         RepositorioPersonasSqlAlchemy(sesion),
         RepositorioGruposEstadosSqlAlchemy(sesion),
+        RepositorioWorkflowsSqlAlchemy(sesion),
     )
-    tarea = _validando_estado(
-        "grupo_estados_id",
-        datos.grupo_estados_id,
-        lambda: caso_de_uso.ejecutar(id_tarea, **_argumentos(datos)),
+    tarea = _validando_grupo_y_workflow(
+        datos, lambda: caso_de_uso.ejecutar(id_tarea, **_argumentos(datos))
     )
     return _a_esquema(tarea)
 

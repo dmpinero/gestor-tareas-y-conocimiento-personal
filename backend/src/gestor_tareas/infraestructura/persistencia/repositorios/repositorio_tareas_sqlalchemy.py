@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -7,6 +9,7 @@ from gestor_tareas.dominio.tarea.entidades import (
     Oportunidad,
     ReferenciaEstado,
     ReferenciaGrupoEstados,
+    ReferenciaWorkflow,
     Subtarea,
     Tarea,
     TipoTarea,
@@ -54,6 +57,11 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         estado=(
             ReferenciaEstado(id=modelo.estado.id, nombre=modelo.estado.nombre)
             if modelo.estado is not None
+            else None
+        ),
+        workflow=(
+            ReferenciaWorkflow(id=modelo.workflow.id, nombre=modelo.workflow.nombre)
+            if modelo.workflow is not None
             else None
         ),
     )
@@ -106,6 +114,7 @@ class RepositorioTareasSqlAlchemy:
         self._asignar_oportunidad(modelo, tarea.oportunidad)
         modelo.grupo_estados_id = tarea.grupo_estados.id if tarea.grupo_estados else None
         modelo.estado_id = tarea.estado.id if tarea.estado else None
+        modelo.workflow_id = tarea.workflow.id if tarea.workflow else None
 
     @staticmethod
     def _asignar_oportunidad(modelo: TareaModelo, oportunidad: Oportunidad | None) -> None:
@@ -176,13 +185,16 @@ class RepositorioTareasSqlAlchemy:
             modelo = self._tarea_bloqueada(id_tarea)
             return _a_entidad(modelo) if modelo is not None else None
 
-    def actualizar(self, tarea: Tarea) -> Tarea:
+    def actualizar(self, tarea: Tarea, subtareas_nuevas: Sequence[Subtarea] = ()) -> Tarea:
         with traducir_conflictos(self._sesion):
             modelo = self._tarea_bloqueada(tarea.id)
             if modelo is None:
                 self._sesion.rollback()
                 raise EntidadNoEncontradaError(f"No existe la tarea con id {tarea.id}")
             self._asignar_datos(modelo, tarea)
+            # Al final de las que ya tiene, en el orden de la lista: se insertan en ese
+            # orden, así que sus ids (y su orden de alta) lo siguen.
+            modelo.subtareas.extend(self._subtarea_nueva(s) for s in subtareas_nuevas)
             self._sesion.commit()
         return _a_entidad(modelo)
 

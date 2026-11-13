@@ -12,7 +12,7 @@ def comprobar_nuevo_orden(ids_actuales: Iterable[int], ids_nuevos: Sequence[int]
     """Comprueba que el nuevo orden incluye cada paso actual exactamente una vez.
 
     Lanza ``OrdenDePasosInvalidoError`` indicando los ids repetidos, los que faltan
-    y los que no existen.
+    y los que no son del workflow.
     """
     actuales = set(ids_actuales)
     repetidos = {i for i, veces in Counter(ids_nuevos).items() if veces > 1}
@@ -23,7 +23,7 @@ def comprobar_nuevo_orden(ids_actuales: Iterable[int], ids_nuevos: Sequence[int]
         for etiqueta, ids in (
             ("repetidos", repetidos),
             ("faltan", faltan),
-            ("no existen", desconocidos),
+            ("no son del workflow", desconocidos),
         )
         if ids
     ]

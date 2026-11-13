@@ -24,6 +24,7 @@ from gestor_tareas.interfaces.api.v1.esquemas.texto import (
     TextoObligatorio,
     recortar_espacios,
 )
+from gestor_tareas.interfaces.api.v1.esquemas.workflows import WorkflowDeTareaEsquema
 
 # Fecha y hora local en ISO 8601 sin zona horaria: "YYYY-MM-DDTHH:MM:SS", con una
 # fracción de segundo opcional que se descarta. El patrón solo admite fechas reales
@@ -223,6 +224,16 @@ class TareaCrearEsquema(BaseModel):
             "queda sin grupo ni estado. 422 si el grupo no existe o no tiene estados."
         ),
     )
+    workflow_id: IdEntero | None = Field(
+        default=None,
+        description=(
+            "Opcional. Workflow de la tarea: si es distinto del que tenía (también si no "
+            "tenía ninguno), la tarea recibe al final una subtarea pendiente por cada paso "
+            "del workflow, en su orden; con el mismo workflow, o sin él (o null), sus "
+            "subtareas no cambian. Sin él, la tarea queda sin workflow. 422 si el "
+            "workflow no existe."
+        ),
+    )
 
     @model_validator(mode="after")
     def _datos_segun_el_tipo(self) -> Self:
@@ -314,12 +325,16 @@ class TareaSalidaEsquema(BaseModel):
     oportunidad: OportunidadSalidaEsquema | None
     completada: bool
     subtareas: list[SubtareaSalidaEsquema] = Field(
-        description="Subtareas por orden de alta; vacía si no tiene. Una oportunidad "
-        "recibe al crearla una subtarea por cada paso del workflow, en su orden."
+        description="Subtareas por orden de alta; vacía si no tiene. Al asignarle un "
+        "workflow distinto del que tenía, la tarea recibe al final una subtarea por "
+        "cada paso del workflow, en su orden."
     )
     grupo_estados: GrupoEstadosDeTareaEsquema | None = Field(
         description="Grupo de estados de la tarea, o null si no tiene."
     )
     estado: EstadoDeTareaEsquema | None = Field(
         description="Estado de su grupo en el que está la tarea, o null si no tiene grupo."
+    )
+    workflow: WorkflowDeTareaEsquema | None = Field(
+        description="Workflow de la tarea, o null si no tiene."
     )

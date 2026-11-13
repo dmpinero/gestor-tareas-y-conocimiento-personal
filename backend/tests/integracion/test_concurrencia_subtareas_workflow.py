@@ -1,9 +1,8 @@
-"""Altas de oportunidades simultáneas con reordenaciones del workflow.
+"""Altas de tareas con workflow simultáneas con reordenaciones de ese workflow.
 
 Cada hilo simula una petición: su propia sesión y su propia transacción, con los
 casos de uso y los repositorios reales sobre MySQL. Las subtareas que recibe cada
-oportunidad deben seguir uno de los órdenes completos del workflow, nunca uno a
-medias.
+tarea deben seguir uno de los órdenes completos del workflow, nunca uno a medias.
 """
 
 import random
@@ -15,8 +14,7 @@ from datetime import datetime
 import pytest
 
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
-from gestor_tareas.aplicacion.workflow_oportunidades.anadir_paso import AnadirPaso
-from gestor_tareas.aplicacion.workflow_oportunidades.reordenar_pasos import ReordenarPasos
+from gestor_tareas.aplicacion.workflow.casos_uso import AnadirPaso, CrearWorkflow, ReordenarPasos
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
     RepositorioGruposEstadosSqlAlchemy,
@@ -24,8 +22,8 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
 )
-from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflow_oportunidades_sqlalchemy import (  # noqa: E501
-    RepositorioWorkflowOportunidadesSqlAlchemy,
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflows_sqlalchemy import (  # noqa: E501
+    RepositorioWorkflowsSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     RepositorioEtiquetasSqlAlchemy,
@@ -39,14 +37,36 @@ _REORDENACIONES = 4
 _RONDAS = 4
 
 
-def _crear_oportunidad(i: int) -> Tarea:
+def _crear_workflow_con_pasos(nombre: str, pasos: list[str]) -> int:
+    sesion = FabricaSesiones()
+    try:
+        repositorio = RepositorioWorkflowsSqlAlchemy(sesion)
+        id_workflow = CrearWorkflow(repositorio).ejecutar(nombre).id
+        for paso in pasos:
+            AnadirPaso(repositorio).ejecutar(id_workflow, paso)
+        return id_workflow
+    finally:
+        sesion.close()
+
+
+def _pasos_guardados(id_workflow: int) -> list[tuple[int, str]]:
+    sesion = FabricaSesiones()
+    try:
+        workflows = RepositorioWorkflowsSqlAlchemy(sesion).listar()
+        workflow = next(w for w in workflows if w.id == id_workflow)
+        return [(p.id, p.nombre) for p in workflow.pasos]
+    finally:
+        sesion.close()
+
+
+def _crear_oportunidad(i: int, id_workflow: int) -> Tarea:
     sesion = FabricaSesiones()
     try:
         return CrearTarea(
             RepositorioTareasSqlAlchemy(sesion),
             RepositorioEtiquetasSqlAlchemy(sesion),
             RepositorioPersonasSqlAlchemy(sesion),
-            RepositorioWorkflowOportunidadesSqlAlchemy(sesion),
+            RepositorioWorkflowsSqlAlchemy(sesion),
             RepositorioGruposEstadosSqlAlchemy(sesion),
         ).ejecutar(
             nombre=f"Oportunidad {i}",
@@ -55,16 +75,17 @@ def _crear_oportunidad(i: int) -> Tarea:
             etiquetas=[f"etiqueta {i % 2}"],
             tipo=TipoTarea.OPORTUNIDAD,
             oportunidad=Oportunidad(codigo=f"OP-{i}"),
+            workflow_id=id_workflow,
         )
     finally:
         sesion.close()
 
 
-def _reordenar(ids: list[int]) -> list[str]:
+def _reordenar(id_workflow: int, ids: list[int]) -> list[str]:
     sesion = FabricaSesiones()
     try:
-        pasos = ReordenarPasos(RepositorioWorkflowOportunidadesSqlAlchemy(sesion)).ejecutar(ids)
-        return [p.nombre for p in pasos]
+        workflow = ReordenarPasos(RepositorioWorkflowsSqlAlchemy(sesion)).ejecutar(id_workflow, ids)
+        return [p.nombre for p in workflow.pasos]
     finally:
         sesion.close()
 
@@ -94,13 +115,10 @@ def _a_la_vez(operaciones: list[Callable[[], object]]) -> list[object]:
 def test_las_altas_crean_las_subtareas_en_un_orden_completo_aunque_se_reordene_a_la_vez(
     ronda,
 ) -> None:
-    sesion = FabricaSesiones()
-    try:
-        workflow = RepositorioWorkflowOportunidadesSqlAlchemy(sesion)
-        iniciales = [AnadirPaso(workflow).ejecutar(f"Paso {i}") for i in range(_PASOS)]
-    finally:
-        sesion.close()
-    por_id = {p.id: p.nombre for p in iniciales}
+    id_workflow = _crear_workflow_con_pasos(
+        f"Workflow {ronda}", [f"Paso {i}" for i in range(_PASOS)]
+    )
+    por_id = dict(_pasos_guardados(id_workflow))
     ordenes = [list(por_id)]
     for semilla in range(_REORDENACIONES):
         orden = list(por_id)
@@ -109,8 +127,8 @@ def test_las_altas_crean_las_subtareas_en_un_orden_completo_aunque_se_reordene_a
     nombres_validos = [[por_id[i] for i in orden] for orden in ordenes]
 
     operaciones: list[Callable[[], object]] = [
-        *[lambda i=i: _crear_oportunidad(i) for i in range(_ALTAS)],
-        *[lambda o=o: _reordenar(o) for o in ordenes[1:]],
+        *[lambda i=i: _crear_oportunidad(i, id_workflow) for i in range(_ALTAS)],
+        *[lambda o=o: _reordenar(id_workflow, o) for o in ordenes[1:]],
     ]
     resultados = _a_la_vez(operaciones)
 
@@ -129,18 +147,15 @@ def test_las_altas_crean_las_subtareas_en_un_orden_completo_aunque_se_reordene_a
 def test_una_reordenacion_espera_a_que_termine_la_copia_en_curso() -> None:
     """Mientras una transacción ha leído el workflow para copiarlo, una reordenación
     no puede confirmarse: espera a que esa transacción termine."""
-    sesion = FabricaSesiones()
-    try:
-        workflow = RepositorioWorkflowOportunidadesSqlAlchemy(sesion)
-        ids = [AnadirPaso(workflow).ejecutar(n).id for n in ("A", "B", "C")]
-    finally:
-        sesion.close()
+    id_workflow = _crear_workflow_con_pasos("Workflow de la copia", ["A", "B", "C"])
+    ids = [id_paso for id_paso, _ in _pasos_guardados(id_workflow)]
 
     lectora = FabricaSesiones()
     try:
-        leidos = RepositorioWorkflowOportunidadesSqlAlchemy(lectora).leer_pasos_para_copiar()
-        assert [p.nombre for p in leidos] == ["A", "B", "C"]
-        hilo = threading.Thread(target=_reordenar, args=(ids[::-1],))
+        leido = RepositorioWorkflowsSqlAlchemy(lectora).leer_para_copiar(id_workflow)
+        assert leido is not None
+        assert [p.nombre for p in leido.pasos] == ["A", "B", "C"]
+        hilo = threading.Thread(target=_reordenar, args=(id_workflow, ids[::-1]))
         hilo.start()
         hilo.join(timeout=1.5)
         assert hilo.is_alive(), "La reordenación no esperó a la copia en curso"
@@ -150,9 +165,4 @@ def test_una_reordenacion_espera_a_que_termine_la_copia_en_curso() -> None:
     finally:
         lectora.close()
 
-    sesion = FabricaSesiones()
-    try:
-        repositorio = RepositorioWorkflowOportunidadesSqlAlchemy(sesion)
-        assert [p.nombre for p in repositorio.listar_pasos()] == ["C", "B", "A"]
-    finally:
-        sesion.close()
+    assert [nombre for _, nombre in _pasos_guardados(id_workflow)] == ["C", "B", "A"]

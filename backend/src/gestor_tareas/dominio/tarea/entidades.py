@@ -45,6 +45,14 @@ class ReferenciaEstado:
 
 
 @dataclass
+class ReferenciaWorkflow:
+    """Workflow asignado a una tarea: la tarea apunta al workflow."""
+
+    id: int
+    nombre: str
+
+
+@dataclass
 class Subtarea:
     """Parte de una tarea, que solo existe dentro de ella.
 
@@ -79,10 +87,12 @@ class Tarea:
 
     ``completada`` indica si la tarea está hecha; una tarea nueva está pendiente.
 
-    ``subtareas`` son las subtareas de la tarea por orden de alta. Una tarea creada
-    como oportunidad recibe al darla de alta una subtarea por cada paso del workflow
-    de las oportunidades, en su orden. Después solo cambian con sus propias
-    operaciones: editar la tarea o cambiar su tipo no las altera.
+    ``subtareas`` son las subtareas de la tarea por orden de alta. Solo cambian con
+    sus propias operaciones y al asignar a la tarea un workflow distinto del que
+    tenía, que le añade al final una subtarea por cada paso del workflow, en su
+    orden. El tipo de la tarea no añade subtareas.
+
+    ``workflow`` es el workflow de la tarea (opcional).
 
     ``grupo_estados`` es el grupo de estados de la tarea (opcional) y ``estado`` el
     estado del grupo en el que está: los dos son ``None`` o el estado es de ese
@@ -102,4 +112,5 @@ class Tarea:
     subtareas: list[Subtarea] = field(default_factory=list)
     grupo_estados: ReferenciaGrupoEstados | None = None
     estado: ReferenciaEstado | None = None
+    workflow: ReferenciaWorkflow | None = None
     id: int | None = None

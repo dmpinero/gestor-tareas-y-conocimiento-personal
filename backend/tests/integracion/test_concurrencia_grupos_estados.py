@@ -46,8 +46,8 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (
     RepositorioTareasSqlAlchemy,
 )
-from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflow_oportunidades_sqlalchemy import (  # noqa: E501
-    RepositorioWorkflowOportunidadesSqlAlchemy,
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflows_sqlalchemy import (  # noqa: E501
+    RepositorioWorkflowsSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     RepositorioEtiquetasSqlAlchemy,
@@ -141,7 +141,7 @@ def _crear_tarea(sesion: Session, id_grupo: int | None) -> object:
         RepositorioTareasSqlAlchemy(sesion),
         RepositorioEtiquetasSqlAlchemy(sesion),
         RepositorioPersonasSqlAlchemy(sesion),
-        RepositorioWorkflowOportunidadesSqlAlchemy(sesion),
+        RepositorioWorkflowsSqlAlchemy(sesion),
         _grupos(sesion),
     ).ejecutar(nombre="T", descripcion="d", fecha_creacion=_FECHA, grupo_estados_id=id_grupo)
 
@@ -152,6 +152,7 @@ def _editar_tarea(sesion: Session, id_tarea: int, id_grupo: int | None) -> objec
         RepositorioEtiquetasSqlAlchemy(sesion),
         RepositorioPersonasSqlAlchemy(sesion),
         _grupos(sesion),
+        RepositorioWorkflowsSqlAlchemy(sesion),
     ).ejecutar(
         id_tarea, nombre="T", descripcion="d", fecha_creacion=_FECHA, grupo_estados_id=id_grupo
     )

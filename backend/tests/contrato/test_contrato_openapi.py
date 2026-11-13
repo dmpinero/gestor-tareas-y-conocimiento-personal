@@ -9,8 +9,8 @@ from gestor_tareas.dominio.grupo_estados.entidades import GrupoEstados
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
     RepositorioGruposEstadosSqlAlchemy,
 )
-from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflow_oportunidades_sqlalchemy import (  # noqa: E501
-    RepositorioWorkflowOportunidadesSqlAlchemy,
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflows_sqlalchemy import (  # noqa: E501
+    RepositorioWorkflowsSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import PATRON_FECHA_HORA
@@ -47,28 +47,27 @@ def _respetar_orden_de_las_fechas(case: schemathesis.Case) -> None:
         cuerpo["fecha_vencimiento"] = cuerpo["fecha_creacion"]
 
 
-def _ids_de_los_pasos_actuales() -> list[int]:
+def _ids_de_los_pasos_actuales(id_workflow: object) -> list[int] | None:
     sesion = FabricaSesiones()
     try:
-        return [p.id for p in RepositorioWorkflowOportunidadesSqlAlchemy(sesion).listar_pasos()]
+        workflows = RepositorioWorkflowsSqlAlchemy(sesion).listar()
     finally:
         sesion.close()
+    workflow = next((w for w in workflows if w.id == id_workflow), None)
+    return None if workflow is None else [p.id for p in workflow.pasos]
 
 
 def _reordenar_los_pasos_que_existen(case: schemathesis.Case) -> None:
     """JSON Schema no puede exigir que `ids` sea justo una permutación de los pasos
     guardados (si no, 422). En los casos que el contrato da por válidos se envían
-    los ids actuales en orden inverso, para seguir probando la respuesta 200; los
-    casos inválidos se envían tal cual."""
-    meta = case.meta
-    cuerpo = case.body
-    if (
-        case.path.endswith("/pasos/orden")
-        and meta is not None
-        and meta.generation.mode.is_positive
-        and isinstance(cuerpo, dict)
-    ):
-        cuerpo["ids"] = _ids_de_los_pasos_actuales()[::-1]
+    los ids actuales del workflow en orden inverso, para seguir probando la
+    respuesta 200 (si el workflow no existe, el 404 es válido); los casos inválidos
+    se envían tal cual."""
+    if not (case.path == "/api/v1/workflows/{id_workflow}/orden" and _es_positivo_con_cuerpo(case)):
+        return
+    ids = _ids_de_los_pasos_actuales((case.path_parameters or {}).get("id_workflow"))
+    if ids is not None:
+        case.body["ids"] = ids[::-1]
 
 
 def _es_positivo_con_cuerpo(case: schemathesis.Case) -> bool:
@@ -77,6 +76,33 @@ def _es_positivo_con_cuerpo(case: schemathesis.Case) -> bool:
 
 
 _GRUPO_DEL_CONTRATO = "Grupo del contrato"
+_WORKFLOW_DEL_CONTRATO = "Workflow del contrato"
+
+
+def _id_de_un_workflow() -> int:
+    """El id de un workflow guardado, creado si no existe (las peticiones generadas
+    pueden haberlos borrado todos)."""
+    sesion = FabricaSesiones()
+    try:
+        repositorio = RepositorioWorkflowsSqlAlchemy(sesion)
+        workflow = next(iter(repositorio.listar()), None)
+        if workflow is None:
+            workflow = repositorio.crear(_WORKFLOW_DEL_CONTRATO)
+        return workflow.id
+    finally:
+        sesion.close()
+
+
+def _asignar_workflows_que_existen(case: schemathesis.Case) -> None:
+    """Como con los grupos: JSON Schema no puede exigir que `workflow_id` sea un
+    workflow guardado (si no, 422). En los casos válidos se envía el de uno que existe."""
+    if (
+        case.method in ("POST", "PUT")
+        and case.path in ("/api/v1/tareas", "/api/v1/tareas/{id_tarea}")
+        and _es_positivo_con_cuerpo(case)
+        and case.body.get("workflow_id") is not None
+    ):
+        case.body["workflow_id"] = _id_de_un_workflow()
 
 
 def _grupo_con_estados() -> GrupoEstados:
@@ -156,6 +182,7 @@ def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     _respetar_orden_de_las_fechas(case)
     _reordenar_los_pasos_que_existen(case)
     _asignar_grupos_que_existen(case)
+    _asignar_workflows_que_existen(case)
     _mover_a_un_estado_del_grupo_de_la_tarea(case)
     _reordenar_los_estados_que_existen(case)
     excluidos = _CHECKS_EXCLUIDOS_POR_RUTA.get(case.path)

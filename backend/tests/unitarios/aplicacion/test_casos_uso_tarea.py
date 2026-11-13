@@ -8,14 +8,23 @@ from gestor_tareas.aplicacion.tarea.eliminar_tarea import EliminarTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
 from gestor_tareas.aplicacion.tarea.marcar_subtarea_resuelta import MarcarSubtareaResuelta
-from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
-from gestor_tareas.dominio.tarea.entidades import Oportunidad, Subtarea, Tarea, TipoTarea
+from gestor_tareas.dominio.excepciones import (
+    AsignacionDeWorkflowInvalidaError,
+    EntidadNoEncontradaError,
+)
+from gestor_tareas.dominio.tarea.entidades import (
+    Oportunidad,
+    ReferenciaWorkflow,
+    Subtarea,
+    Tarea,
+    TipoTarea,
+)
 from tests.unitarios.aplicacion.dobles import (
     RepositorioEtiquetasFalso,
     RepositorioGruposEstadosFalso,
     RepositorioPersonasFalso,
     RepositorioTareasFalso,
-    RepositorioWorkflowOportunidadesFalso,
+    RepositorioWorkflowsFalso,
 )
 
 _FECHA_CREACION = datetime(2026, 11, 9, 10, 30, 0)
@@ -27,20 +36,22 @@ class _Repositorios:
         self,
         etiquetas: tuple[str, ...] = (),
         personas: tuple[str, ...] = (),
-        workflow: tuple[str, ...] = (),
+        workflows: dict[str, list[str]] | None = None,
         grupos: dict[str, list[str]] | None = None,
     ) -> None:
         self.tareas = RepositorioTareasFalso()
         self.etiquetas = RepositorioEtiquetasFalso(*etiquetas)
         self.personas = RepositorioPersonasFalso(*personas)
-        self.workflow = RepositorioWorkflowOportunidadesFalso(*workflow)
+        self.workflows = RepositorioWorkflowsFalso(**(workflows or {}))
         self.grupos = RepositorioGruposEstadosFalso(**(grupos or {}))
 
     def crear(self) -> CrearTarea:
-        return CrearTarea(self.tareas, self.etiquetas, self.personas, self.workflow, self.grupos)
+        return CrearTarea(self.tareas, self.etiquetas, self.personas, self.workflows, self.grupos)
 
     def actualizar(self) -> ActualizarTarea:
-        return ActualizarTarea(self.tareas, self.etiquetas, self.personas, self.grupos)
+        return ActualizarTarea(
+            self.tareas, self.etiquetas, self.personas, self.grupos, self.workflows
+        )
 
     def marcar_completada(self) -> MarcarCompletada:
         return MarcarCompletada(self.tareas)
@@ -369,22 +380,34 @@ def test_actualizar_tarea_conserva_el_estado_completada() -> None:
     assert repos.tareas.listar()[0].completada is True
 
 
-# --- Subtareas del workflow de las oportunidades ---------------------------------
+# --- Workflow de las tareas ------------------------------------------------------
 
-_WORKFLOW = ("Contactar", "Proponer", "Cerrar")
+_WORKFLOWS = {"Ventas": ["Contactar", "Proponer", "Cerrar"], "Compras": ["Pedir"], "Vacio": []}
 
 
-def _crear_oportunidad(repos: _Repositorios, nombre: str = "Venta") -> Tarea:
+def _crear(
+    repos: _Repositorios,
+    workflow: str | None = None,
+    nombre: str = "Venta",
+    oportunidad: bool = False,
+) -> Tarea:
     return repos.crear().ejecutar(
         nombre=nombre,
         descripcion="d",
         fecha_creacion=_FECHA_CREACION,
-        tipo=TipoTarea.OPORTUNIDAD,
-        oportunidad=Oportunidad(codigo="OP-1"),
+        tipo=TipoTarea.OPORTUNIDAD if oportunidad else None,
+        oportunidad=Oportunidad(codigo="OP-1") if oportunidad else None,
+        workflow_id=repos.workflows.id_de(workflow) if workflow else None,
     )
 
 
-def _editar(repos: _Repositorios, id_tarea: int, tipo: TipoTarea | None) -> Tarea:
+def _editar(
+    repos: _Repositorios,
+    id_tarea: int,
+    workflow: str | None = None,
+    tipo: TipoTarea | None = None,
+    workflow_id: int | None = None,
+) -> Tarea:
     return repos.actualizar().ejecutar(
         id_tarea,
         nombre="Editada",
@@ -392,6 +415,7 @@ def _editar(repos: _Repositorios, id_tarea: int, tipo: TipoTarea | None) -> Tare
         fecha_creacion=_FECHA_CREACION,
         tipo=tipo,
         oportunidad=Oportunidad(codigo="OP-2") if tipo is TipoTarea.OPORTUNIDAD else None,
+        workflow_id=repos.workflows.id_de(workflow) if workflow else workflow_id,
     )
 
 
@@ -403,42 +427,72 @@ def _pendientes(*nombres: str) -> list[tuple[str, None, None, bool]]:
     return [(nombre, None, None, False) for nombre in nombres]
 
 
-def test_crear_una_oportunidad_le_crea_una_subtarea_por_paso_del_workflow_en_orden() -> None:
-    repos = _Repositorios(workflow=_WORKFLOW)
-    # El workflow se lee por número, aunque se haya guardado en otro orden.
-    repos.workflow.pasos.reverse()
+def _referencia(repos: _Repositorios, nombre: str) -> ReferenciaWorkflow:
+    return ReferenciaWorkflow(id=repos.workflows.id_de(nombre), nombre=nombre)
 
-    tarea = _crear_oportunidad(repos)
+
+def test_crear_una_tarea_con_workflow_le_crea_una_subtarea_por_paso_en_orden() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    # Los pasos se copian por número, aunque se hayan guardado en otro orden.
+    repos.workflows.workflows[repos.workflows.id_de("Ventas")].pasos.reverse()
+
+    tarea = _crear(repos, "Ventas")
 
     esperadas = _pendientes("Contactar", "Proponer", "Cerrar")
     assert _subtareas_sin_id(tarea) == esperadas
     assert [s.id for s in tarea.subtareas] == [1, 2, 3]
-    assert _subtareas_sin_id(repos.tareas.listar()[0]) == esperadas
-    assert repos.workflow.lecturas_para_copiar == 1
+    assert tarea.workflow == _referencia(repos, "Ventas")
+    guardada = repos.tareas.listar()[0]
+    assert (_subtareas_sin_id(guardada), guardada.workflow) == (esperadas, tarea.workflow)
+    assert repos.workflows.lecturas_para_copiar == [repos.workflows.id_de("Ventas")]
 
 
-def test_crear_una_tarea_sin_tipo_no_le_crea_subtareas_ni_lee_el_workflow() -> None:
-    repos = _Repositorios(workflow=_WORKFLOW)
+def test_crear_una_tarea_sin_workflow_no_le_crea_subtareas_ni_lee_workflows() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
 
-    tarea = repos.crear().ejecutar(nombre="T", descripcion="d", fecha_creacion=_FECHA_CREACION)
+    tarea = _crear(repos)
 
-    assert tarea.subtareas == []
-    assert repos.workflow.lecturas_para_copiar == 0
+    assert (tarea.subtareas, tarea.workflow) == ([], None)
+    assert repos.workflows.lecturas_para_copiar == []
 
 
-def test_crear_una_oportunidad_con_el_workflow_vacio_no_le_crea_subtareas() -> None:
-    repos = _Repositorios()
+def test_el_tipo_oportunidad_por_si_solo_no_crea_subtareas() -> None:
+    repos = _Repositorios(workflows={"Workflow Oportunidades": ["Contactar", "Cerrar"]})
 
-    assert _crear_oportunidad(repos).subtareas == []
+    tarea = _crear(repos, oportunidad=True)
+
+    assert (tarea.subtareas, tarea.workflow) == ([], None)
+    assert repos.tareas.listar()[0].subtareas == []
+    assert repos.workflows.lecturas_para_copiar == []
+
+
+def test_crear_una_tarea_con_un_workflow_vacio_lo_asigna_sin_subtareas() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+
+    tarea = _crear(repos, "Vacio")
+
+    assert (tarea.subtareas, tarea.workflow) == ([], _referencia(repos, "Vacio"))
+
+
+def test_crear_una_tarea_con_un_workflow_que_no_existe_no_la_guarda() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+
+    with pytest.raises(AsignacionDeWorkflowInvalidaError, match="^No existe el workflow con id 9$"):
+        repos.crear().ejecutar(
+            nombre="T", descripcion="d", fecha_creacion=_FECHA_CREACION, workflow_id=9
+        )
+
+    assert repos.tareas.listar() == []
 
 
 def test_las_subtareas_creadas_no_cambian_al_cambiar_el_workflow_despues() -> None:
-    repos = _Repositorios(workflow=_WORKFLOW)
-    tarea = _crear_oportunidad(repos)
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    tarea = _crear(repos, "Ventas")
 
-    repos.workflow.pasos[0].nombre = "Renombrado"
-    repos.workflow.pasos.pop()
-    nueva = _crear_oportunidad(repos, "Otra")
+    pasos = repos.workflows.workflows[repos.workflows.id_de("Ventas")].pasos
+    pasos[0].nombre = "Renombrado"
+    pasos.pop()
+    nueva = _crear(repos, "Ventas", nombre="Otra")
 
     guardada = repos.tareas.obtener_por_id(tarea.id)
     assert [s.nombre for s in guardada.subtareas] == ["Contactar", "Proponer", "Cerrar"]
@@ -446,38 +500,92 @@ def test_las_subtareas_creadas_no_cambian_al_cambiar_el_workflow_despues() -> No
 
 
 def test_las_subtareas_del_workflow_se_resuelven_como_cualquier_subtarea() -> None:
-    repos = _Repositorios(workflow=_WORKFLOW)
-    tarea = _crear_oportunidad(repos)
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    tarea = _crear(repos, "Ventas")
 
     resuelta = repos.resolver_subtarea().ejecutar(tarea.id, tarea.subtareas[1].id, True)
 
     assert [s.resuelta for s in resuelta.subtareas] == [False, True, False]
 
 
-@pytest.mark.parametrize("tipo", [TipoTarea.OPORTUNIDAD, None])
-def test_editar_una_oportunidad_conserva_sus_subtareas_aunque_cambie_el_tipo(
-    tipo: TipoTarea | None,
-) -> None:
-    repos = _Repositorios(workflow=_WORKFLOW)
-    tarea = _crear_oportunidad(repos)
+def test_editar_para_dar_un_workflow_anade_sus_pasos_tras_las_subtareas_que_tenia() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    tarea = _crear(repos, "Compras")
     repos.resolver_subtarea().ejecutar(tarea.id, tarea.subtareas[0].id, True)
 
-    editada = _editar(repos, tarea.id, tipo)
+    editada = _editar(repos, tarea.id, "Ventas")
+
+    esperadas = [("Pedir", None, None, True), *_pendientes("Contactar", "Proponer", "Cerrar")]
+    assert _subtareas_sin_id(editada) == esperadas
+    assert [s.id for s in editada.subtareas] == [1, 2, 3, 4]
+    assert editada.workflow == _referencia(repos, "Ventas")
+    guardada = repos.tareas.obtener_por_id(tarea.id)
+    assert (_subtareas_sin_id(guardada), guardada.workflow) == (esperadas, editada.workflow)
+
+
+def test_editar_una_tarea_sin_workflow_para_darle_uno_anade_sus_pasos() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    tarea = _crear(repos)
+
+    editada = _editar(repos, tarea.id, "Compras")
+
+    assert _subtareas_sin_id(editada) == _pendientes("Pedir")
+    assert editada.workflow == _referencia(repos, "Compras")
+
+
+@pytest.mark.parametrize("tipo", [TipoTarea.OPORTUNIDAD, None])
+def test_editar_con_el_mismo_workflow_no_toca_las_subtareas(tipo: TipoTarea | None) -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    tarea = _crear(repos, "Ventas", oportunidad=True)
+    repos.resolver_subtarea().ejecutar(tarea.id, tarea.subtareas[0].id, True)
+
+    editada = _editar(repos, tarea.id, "Ventas", tipo=tipo)
 
     esperadas = [("Contactar", None, None, True), *_pendientes("Proponer", "Cerrar")]
     assert _subtareas_sin_id(editada) == esperadas
     assert _subtareas_sin_id(repos.tareas.obtener_por_id(tarea.id)) == esperadas
+    assert editada.workflow == _referencia(repos, "Ventas")
+
+
+def test_editar_sin_workflow_lo_quita_y_no_toca_las_subtareas() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    tarea = _crear(repos, "Ventas")
+
+    editada = _editar(repos, tarea.id)
+
+    assert _subtareas_sin_id(editada) == _pendientes("Contactar", "Proponer", "Cerrar")
+    assert editada.workflow is None
+    assert repos.tareas.obtener_por_id(tarea.id).workflow is None
 
 
 def test_editar_una_tarea_para_hacerla_oportunidad_no_le_crea_subtareas() -> None:
-    repos = _Repositorios(workflow=_WORKFLOW)
-    tarea = repos.crear().ejecutar(nombre="T", descripcion="d", fecha_creacion=_FECHA_CREACION)
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    tarea = _crear(repos)
 
-    editada = _editar(repos, tarea.id, TipoTarea.OPORTUNIDAD)
+    editada = _editar(repos, tarea.id, tipo=TipoTarea.OPORTUNIDAD)
 
     assert editada.subtareas == []
     assert repos.tareas.obtener_por_id(tarea.id).subtareas == []
-    assert repos.workflow.lecturas_para_copiar == 0
+    assert repos.workflows.lecturas_para_copiar == []
+
+
+def test_editar_con_un_workflow_que_no_existe_no_cambia_la_tarea() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    tarea = _crear(repos, "Ventas")
+
+    with pytest.raises(AsignacionDeWorkflowInvalidaError, match="^No existe el workflow con id 9$"):
+        _editar(repos, tarea.id, workflow_id=9)
+
+    guardada = repos.tareas.obtener_por_id(tarea.id)
+    assert (guardada.nombre, guardada.workflow) == ("Venta", _referencia(repos, "Ventas"))
+    assert len(guardada.subtareas) == 3
+
+
+def test_editar_una_tarea_que_no_existe_responde_que_no_existe_aunque_el_workflow_tampoco() -> None:
+    repos = _Repositorios(workflows=_WORKFLOWS)
+
+    with pytest.raises(EntidadNoEncontradaError, match="^No existe la tarea con id 99$"):
+        _editar(repos, 99, workflow_id=9)
 
 
 def test_subtarea_nueva_esta_pendiente_y_sin_comentarios() -> None:
@@ -490,9 +598,9 @@ def test_subtarea_nueva_esta_pendiente_y_sin_comentarios() -> None:
 
 
 def test_eliminar_una_tarea_la_borra_y_conserva_las_demas() -> None:
-    repos = _Repositorios(workflow=_WORKFLOW)
-    borrada = _crear_oportunidad(repos, "Venta")
-    conservada = _crear_oportunidad(repos, "Otra")
+    repos = _Repositorios(workflows=_WORKFLOWS)
+    borrada = _crear(repos, "Ventas")
+    conservada = _crear(repos, "Ventas", nombre="Otra")
 
     assert repos.eliminar().ejecutar(borrada.id) is None
 

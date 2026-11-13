@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
@@ -8,7 +9,7 @@ from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
 from gestor_tareas.dominio.tarea.entidades import ReferenciaEstado, Subtarea, Tarea
-from gestor_tareas.dominio.workflow_oportunidades.entidades import PasoWorkflowOportunidad
+from gestor_tareas.dominio.workflow.entidades import PasoWorkflow, Workflow
 
 
 class RepositorioTareasFalso:
@@ -46,13 +47,16 @@ class RepositorioTareasFalso:
         tarea.estado = replace(estado)
         return deepcopy(tarea)
 
-    def actualizar(self, tarea: Tarea) -> Tarea:
+    def actualizar(self, tarea: Tarea, subtareas_nuevas: Sequence[Subtarea] = ()) -> Tarea:
         assert tarea.id in self._tareas
         guardada = self._tareas[tarea.id]
         # Como el repositorio real, la edición no cambia el estado completada ni las
-        # subtareas (tampoco al cambiar el tipo).
+        # subtareas que ya tiene (tampoco al cambiar el tipo), y añade al final las
+        # nuevas.
         tarea.completada = guardada.completada
-        tarea.subtareas = deepcopy(guardada.subtareas)
+        tarea.subtareas = deepcopy(guardada.subtareas) + [
+            self._nueva_subtarea(s, s.resuelta) for s in subtareas_nuevas
+        ]
         self._tareas[tarea.id] = deepcopy(tarea)
         return tarea
 
@@ -224,19 +228,34 @@ class RepositorioComentariosSubtareaFalso:
         return True
 
 
-class RepositorioWorkflowOportunidadesFalso:
-    """Doble del workflow en memoria: solo lo que leen los casos de uso de tareas."""
+class RepositorioWorkflowsFalso:
+    """Doble de los workflows en memoria: solo lo que leen los casos de uso de tareas.
+    ``workflows`` es {nombre: [pasos en orden]}; los ids empiezan en 300 (workflows) y
+    400 (pasos)."""
 
-    def __init__(self, *nombres: str) -> None:
-        self.pasos = [
-            PasoWorkflowOportunidad(id=10 + i, numero=i, nombre=nombre)
-            for i, nombre in enumerate(nombres, start=1)
-        ]
-        self.lecturas_para_copiar = 0
+    def __init__(self, **workflows: list[str]) -> None:
+        self.workflows: dict[int, Workflow] = {}
+        id_paso = 400
+        for id_workflow, (nombre, pasos) in enumerate(workflows.items(), start=300):
+            entidades = []
+            for numero, nombre_paso in enumerate(pasos, start=1):
+                entidades.append(PasoWorkflow(id=id_paso, nombre=nombre_paso, numero=numero))
+                id_paso += 1
+            self.workflows[id_workflow] = Workflow(id=id_workflow, nombre=nombre, pasos=entidades)
+        self.lecturas_para_copiar: list[int] = []
 
-    def leer_pasos_para_copiar(self) -> list[PasoWorkflowOportunidad]:
-        self.lecturas_para_copiar += 1
-        return [replace(p) for p in sorted(self.pasos, key=lambda p: p.numero)]
+    def id_de(self, nombre: str) -> int:
+        return next(w.id for w in self.workflows.values() if w.nombre == nombre)
+
+    def leer_para_copiar(self, id_workflow: int) -> Workflow | None:
+        self.lecturas_para_copiar.append(id_workflow)
+        workflow = self.workflows.get(id_workflow)
+        if workflow is None:
+            return None
+        # Como el repositorio real: los pasos por número.
+        copia = deepcopy(workflow)
+        copia.pasos.sort(key=lambda p: p.numero)
+        return copia
 
 
 class RepositorioGruposEstadosFalso:

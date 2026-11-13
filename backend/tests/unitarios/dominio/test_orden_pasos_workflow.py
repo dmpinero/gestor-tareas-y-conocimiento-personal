@@ -1,7 +1,7 @@
 import pytest
 
 from gestor_tareas.dominio.excepciones import OrdenDePasosInvalidoError
-from gestor_tareas.dominio.workflow_oportunidades.orden import comprobar_nuevo_orden
+from gestor_tareas.dominio.workflow.orden import comprobar_nuevo_orden
 
 
 @pytest.mark.parametrize(
@@ -17,7 +17,7 @@ def test_admite_cualquier_permutacion_de_los_pasos_actuales(actuales, nuevos) ->
     [
         ([1, 2, 2, 3], "repetidos: 2"),
         ([1, 2], "faltan: 3"),
-        ([1, 2, 3, 9], "no existen: 9"),
+        ([1, 2, 3, 9], "no son del workflow: 9"),
         ([1, 2, 9], "faltan: 3"),
         ([], "faltan: 1, 2, 3"),
     ],
@@ -33,5 +33,5 @@ def test_con_varios_problemas_los_indica_todos() -> None:
 
     assert str(error.value) == (
         "El nuevo orden debe incluir cada paso del workflow exactamente una vez "
-        "(repetidos: 1; faltan: 2, 3; no existen: 9)"
+        "(repetidos: 1; faltan: 2, 3; no son del workflow: 9)"
     )

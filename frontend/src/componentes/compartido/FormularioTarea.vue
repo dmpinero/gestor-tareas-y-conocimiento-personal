@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { watch } from 'vue'
+
 import { TIPOS_TAREA } from '@/api/tipos'
 import SelectorEtiquetas from '@/componentes/compartido/SelectorEtiquetas.vue'
 import SelectorFechaHora from '@/componentes/compartido/SelectorFechaHora.vue'
@@ -9,20 +11,40 @@ import { Textarea } from '@/componentes/ui/textarea'
 import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import { useTiendaTareas } from '@/stores/tareas'
+import { useTiendaWorkflows } from '@/stores/workflows'
 
 // Campos de una tarea, compartidos por las ventanas modales de alta y de
 // edición. Escribe directamente en `valores` (v-model); al enviar emite
 // `guardar` y quien lo usa valida y guarda, y devuelve el fallo por `error`.
 // "Cancelar" emite `cancelar`. El cuerpo desplaza y el pie con los botones
-// queda fijo, para que en pantallas bajas se vea que hay más campos.
+// queda fijo, para que en pantallas bajas se vea que hay más campos. `alta`
+// indica que el formulario es el de crear una tarea.
 const valores = defineModel<ValoresFormularioTarea>('valores', { required: true })
-const props = defineProps<{ error: string | null }>()
+const props = defineProps<{ error: string | null; alta?: boolean }>()
 const emit = defineEmits<{ guardar: []; cancelar: [] }>()
 
 const tienda = useTiendaTareas()
 // Los grupos los carga quien usa el formulario. Un grupo sin estados no se
 // puede asignar: la tarea no tendría estado en el que empezar.
 const tiendaGrupos = useTiendaGruposEstados()
+// Los workflows también los carga quien usa el formulario.
+const tiendaWorkflows = useTiendaWorkflows()
+
+const NOMBRE_WORKFLOW_OPORTUNIDADES = 'workflow oportunidades'
+
+// En el alta, al elegir el tipo Oportunidad sin workflow, se propone el
+// "Workflow Oportunidades" si existe. En la edición no: cambiar el workflow
+// añade sus pasos como subtareas nuevas.
+watch(
+  () => valores.value.tipo,
+  (tipo) => {
+    if (!props.alta || tipo !== 'oportunidad' || valores.value.workflowId !== '') return
+    const workflow = tiendaWorkflows.workflows.find(
+      (candidato) => candidato.nombre.trim().toLowerCase() === NOMBRE_WORKFLOW_OPORTUNIDADES,
+    )
+    if (workflow) valores.value.workflowId = workflow.id
+  },
+)
 </script>
 
 <template>
@@ -151,6 +173,23 @@ const tiendaGrupos = useTiendaGruposEstados()
             :disabled="grupo.estados.length === 0"
           >
             {{ grupo.estados.length === 0 ? `${grupo.nombre} (sin estados)` : grupo.nombre }}
+          </option>
+        </select>
+      </div>
+      <div class="campo-opcional flex flex-col gap-1.5">
+        <Label for="tarea-workflow">Workflow</Label>
+        <select
+          id="tarea-workflow"
+          v-model="valores.workflowId"
+          class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
+        >
+          <option value="">Sin workflow</option>
+          <option
+            v-for="workflow in tiendaWorkflows.workflows"
+            :key="workflow.id"
+            :value="workflow.id"
+          >
+            {{ workflow.nombre }}
           </option>
         </select>
       </div>

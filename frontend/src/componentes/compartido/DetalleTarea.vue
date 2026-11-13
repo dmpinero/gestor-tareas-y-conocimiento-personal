@@ -72,6 +72,7 @@ const camposTarea = computed<Campo[]>(() => {
       cuentaAtras: tarea.fecha_vencimiento ?? undefined,
     },
     { termino: 'Tipo', valor: textoOVacio(etiquetaTipoTarea(tarea.tipo)) },
+    { termino: 'Workflow', valor: textoOVacio(tarea.workflow?.nombre) },
     { termino: 'Estado', valor: tarea.completada ? 'Completada' : 'Pendiente' },
     // "Estado del grupo" para no confundirlo con el de completado.
     { termino: 'Grupo de estados', valor: textoOVacio(tarea.grupo_estados?.nombre) },

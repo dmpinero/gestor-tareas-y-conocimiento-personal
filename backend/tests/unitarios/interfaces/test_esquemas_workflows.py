@@ -1,12 +1,17 @@
 import pytest
 from pydantic import ValidationError
 
-from gestor_tareas.interfaces.api.v1.esquemas.workflow_oportunidades import (
+from gestor_tareas.interfaces.api.v1.esquemas.workflows import (
     OrdenPasosEsquema,
     PasoWorkflowEsquema,
+    WorkflowEsquema,
 )
 
+# El nombre del workflow y el de sus pasos siguen las mismas reglas.
+_ESQUEMAS_CON_NOMBRE = pytest.mark.parametrize("esquema", [PasoWorkflowEsquema, WorkflowEsquema])
 
+
+@_ESQUEMAS_CON_NOMBRE
 @pytest.mark.parametrize(
     ("nombre", "esperado"),
     [
@@ -18,23 +23,26 @@ from gestor_tareas.interfaces.api.v1.esquemas.workflow_oportunidades import (
         ("x", "x"),
     ],
 )
-def test_el_nombre_del_paso_se_recorta_y_admite_de_1_a_50_caracteres(nombre, esperado) -> None:
-    assert PasoWorkflowEsquema(nombre=nombre).nombre == esperado
+def test_el_nombre_se_recorta_y_admite_de_1_a_50_caracteres(esquema, nombre, esperado) -> None:
+    assert esquema(nombre=nombre).nombre == esperado
 
 
+@_ESQUEMAS_CON_NOMBRE
 @pytest.mark.parametrize("nombre", ["", "   ", "   ", "n" * 51, None, 5])
-def test_el_nombre_del_paso_es_obligatorio_y_de_como_mucho_50_caracteres(nombre) -> None:
+def test_el_nombre_es_obligatorio_y_de_como_mucho_50_caracteres(esquema, nombre) -> None:
     with pytest.raises(ValidationError):
-        PasoWorkflowEsquema(nombre=nombre)
+        esquema(nombre=nombre)
 
 
-def test_el_nombre_del_paso_es_obligatorio() -> None:
+@_ESQUEMAS_CON_NOMBRE
+def test_el_nombre_es_obligatorio(esquema) -> None:
     with pytest.raises(ValidationError):
-        PasoWorkflowEsquema.model_validate({})
+        esquema.model_validate({})
 
 
-def test_el_contrato_publica_los_limites_del_nombre() -> None:
-    propiedad = PasoWorkflowEsquema.model_json_schema()["properties"]["nombre"]
+@_ESQUEMAS_CON_NOMBRE
+def test_el_contrato_publica_los_limites_del_nombre(esquema) -> None:
+    propiedad = esquema.model_json_schema()["properties"]["nombre"]
 
     assert propiedad["minLength"] == 1
     assert propiedad["maxLength"] == 50

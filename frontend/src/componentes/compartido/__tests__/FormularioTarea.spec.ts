@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { reactive } from 'vue'
 
+import type { Workflow } from '@/api/tipos'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
 import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
+import { useTiendaWorkflows } from '@/stores/workflows'
 
 let envoltorio: VueWrapper | null = null
+// Valores que recibe el formulario montado, para comprobar lo que escribe.
+let valoresMontados: ValoresFormularioTarea | null = null
 
 afterEach(() => {
   envoltorio?.unmount()
@@ -13,9 +18,18 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-function montar(tipo: ValoresFormularioTarea['tipo'] = ''): VueWrapper {
+const WORKFLOWS: Workflow[] = [
+  { id: 1, nombre: 'Altas', pasos: [] },
+  { id: 2, nombre: 'Workflow Oportunidades', pasos: [{ id: 10, numero: 1, nombre: 'Contacto' }] },
+]
+
+function montar(
+  tipo: ValoresFormularioTarea['tipo'] = '',
+  opciones: { alta?: boolean; workflowId?: number | ''; workflows?: Workflow[] } = {},
+): VueWrapper {
   setActivePinia(createPinia())
-  const valores: ValoresFormularioTarea = {
+  useTiendaWorkflows().workflows = opciones.workflows ?? WORKFLOWS
+  const valores: ValoresFormularioTarea = reactive({
     nombre: '',
     prioridad: '',
     descripcion: '',
@@ -26,9 +40,11 @@ function montar(tipo: ValoresFormularioTarea['tipo'] = ''): VueWrapper {
     tipo,
     oportunidad: { codigo: '', descripcion: '', observaciones: '' },
     grupoEstadosId: '',
-  }
+    workflowId: opciones.workflowId ?? '',
+  })
+  valoresMontados = valores
   envoltorio = mount(FormularioTarea, {
-    props: { valores, error: null },
+    props: { valores, error: null, alta: opciones.alta },
     attachTo: document.body,
   })
   return envoltorio
@@ -50,6 +66,7 @@ const OPCIONALES = [
   'fecha-vencimiento',
   'tarea-tipo',
   'tarea-grupo-estados',
+  'tarea-workflow',
 ]
 
 describe('FormularioTarea: campos obligatorios y opcionales', () => {
@@ -88,5 +105,73 @@ describe('FormularioTarea: campos obligatorios y opcionales', () => {
     for (const id of ['oportunidad-descripcion', 'oportunidad-observaciones']) {
       expect(contenedor(formulario, id).classList.contains('campo-opcional')).toBe(true)
     }
+  })
+})
+
+describe('FormularioTarea: workflow', () => {
+  function selector(formulario: VueWrapper): HTMLSelectElement {
+    return formulario.get('select#tarea-workflow').element as HTMLSelectElement
+  }
+
+  function valores(): ValoresFormularioTarea {
+    if (!valoresMontados) throw new Error('No hay formulario montado')
+    return valoresMontados
+  }
+
+  it('ofrece "Sin workflow" y los workflows de Ajustes en un campo "Workflow"', () => {
+    const formulario = montar()
+
+    expect(formulario.get('label[for="tarea-workflow"]').text()).toBe('Workflow')
+    expect([...selector(formulario).options].map((opcion) => opcion.text.trim())).toEqual([
+      'Sin workflow',
+      'Altas',
+      'Workflow Oportunidades',
+    ])
+    expect(selector(formulario).value).toBe('')
+  })
+
+  it('elegir un workflow guarda su id en los valores', async () => {
+    const formulario = montar()
+
+    await formulario.get('select#tarea-workflow').setValue('1')
+
+    expect(valores().workflowId).toBe(1)
+  })
+
+  it('en el alta, al elegir el tipo Oportunidad sin workflow preselecciona "Workflow Oportunidades"', async () => {
+    const formulario = montar('', { alta: true })
+
+    await formulario.get('select#tarea-tipo').setValue('oportunidad')
+    await flushPromises()
+
+    expect(valores().workflowId).toBe(2)
+    expect(selector(formulario).value).toBe('2')
+  })
+
+  it('en el alta no cambia el workflow ya elegido al elegir el tipo Oportunidad', async () => {
+    const formulario = montar('', { alta: true, workflowId: 1 })
+
+    await formulario.get('select#tarea-tipo').setValue('oportunidad')
+    await flushPromises()
+
+    expect(valores().workflowId).toBe(1)
+  })
+
+  it('en el alta no preselecciona nada si no existe "Workflow Oportunidades"', async () => {
+    const formulario = montar('', { alta: true, workflows: [WORKFLOWS[0]!] })
+
+    await formulario.get('select#tarea-tipo').setValue('oportunidad')
+    await flushPromises()
+
+    expect(valores().workflowId).toBe('')
+  })
+
+  it('en la edición no preselecciona el workflow al elegir el tipo Oportunidad', async () => {
+    const formulario = montar('', { alta: false })
+
+    await formulario.get('select#tarea-tipo').setValue('oportunidad')
+    await flushPromises()
+
+    expect(valores().workflowId).toBe('')
   })
 })
