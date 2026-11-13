@@ -34,6 +34,7 @@ import {
 } from '@/composables/useOrdenacionTabla'
 import BarraPrioridades from '@/componentes/compartido/BarraPrioridades.vue'
 import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
+import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
@@ -758,6 +759,19 @@ function abrirDesdeRelacionadas(id: number): void {
   idEnDetalle.value = id
 }
 
+// Elementos de la fila con acción propia: pulsarlos no abre el detalle.
+const SELECTOR_INTERACTIVO =
+  'button, a, input, select, textarea, label, [role="checkbox"], [role="menuitem"]'
+
+// Pulsar cualquier parte de la fila abre el detalle de la tarea, salvo los
+// controles de la fila o cuando se está seleccionando texto.
+function alPulsarFila(evento: MouseEvent, id: number): void {
+  const objetivo = evento.target
+  if (objetivo instanceof Element && objetivo.closest(SELECTOR_INTERACTIVO)) return
+  if ((window.getSelection()?.toString() ?? '') !== '') return
+  idEnDetalle.value = id
+}
+
 function cerrarDetalle(): void {
   idEnDetalle.value = null
   editandoEnDetalle.value = false
@@ -1253,7 +1267,13 @@ async function guardar(): Promise<void> {
             </TableCell>
           </TableRow>
           <template v-if="!estaPlegado(grupo.id)">
-            <TableRow v-for="tarea in grupo.filas" :key="tarea.id" data-fila-tarea>
+            <TableRow
+              v-for="tarea in grupo.filas"
+              :key="tarea.id"
+              data-fila-tarea
+              class="cursor-pointer"
+              @click="alPulsarFila($event, tarea.id)"
+            >
               <TableCell :class="claseCelda(tarea, `${TEXTO_AJUSTABLE} border-l-4 ${grupo.borde}`)">
                 <div class="flex items-start gap-2">
                   <Checkbox
@@ -1264,6 +1284,11 @@ async function guardar(): Promise<void> {
                     @update:model-value="tienda.alternarCompletada(tarea.id)"
                   />
                   <span>{{ tarea.nombre }}</span>
+                  <AvisoVencimiento
+                    class="mt-0.5"
+                    :vencimiento="tarea.fecha_vencimiento"
+                    :completada="tarea.completada"
+                  />
                 </div>
               </TableCell>
               <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">

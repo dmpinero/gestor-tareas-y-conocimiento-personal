@@ -6,6 +6,7 @@ import { RouterLink } from 'vue-router'
 import type { EstadoGrupo, GrupoEstados, Tarea } from '@/api/tipos'
 import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BarraEstados from '@/componentes/compartido/BarraEstados.vue'
+import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
@@ -317,15 +318,22 @@ function terminarArrastre(): void {
                     @dragstart="alEmpezarArrastre($event, tarea)"
                     @dragend="terminarArrastre"
                   >
-                    <button
-                      type="button"
-                      data-nombre-tarjeta
-                      class="focus-visible:ring-ring/50 line-clamp-2 rounded-sm text-left text-sm font-medium outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px]"
-                      :class="tarea.completada ? 'line-through' : ''"
-                      @click="emit('verDetalle', tarea.id)"
-                    >
-                      {{ tarea.nombre }}
-                    </button>
+                    <div class="flex items-start justify-between gap-2">
+                      <button
+                        type="button"
+                        data-nombre-tarjeta
+                        class="focus-visible:ring-ring/50 line-clamp-2 rounded-sm text-left text-sm font-medium outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px]"
+                        :class="tarea.completada ? 'line-through' : ''"
+                        @click="emit('verDetalle', tarea.id)"
+                      >
+                        {{ tarea.nombre }}
+                      </button>
+                      <AvisoVencimiento
+                        class="mt-0.5"
+                        :vencimiento="tarea.fecha_vencimiento"
+                        :completada="tarea.completada"
+                      />
+                    </div>
 
                     <div
                       v-if="tarea.asignados.length > 0 || tarea.fecha_vencimiento"

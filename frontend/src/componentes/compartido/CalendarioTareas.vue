@@ -4,6 +4,7 @@ import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import { computed, nextTick, ref, useTemplateRef } from 'vue'
 
 import type { Tarea } from '@/api/tipos'
+import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import { Button } from '@/componentes/ui/button'
 import { dosCifras } from '@/lib/fechas'
 
@@ -150,12 +151,12 @@ const plantillaTareasDia = createReusableTemplate<{ dia: Dia }>()
       :aria-label="`Tareas del ${dia.nombre}`"
       class="flex min-w-0 flex-col gap-1"
     >
-      <li v-for="tarea in visibles(dia)" :key="tarea.id" class="min-w-0">
+      <li v-for="tarea in visibles(dia)" :key="tarea.id" class="flex min-w-0 items-start gap-1">
         <button
           type="button"
           data-tarea-calendario
           :class="[
-            'hover:bg-accent focus-visible:ring-ring/50 w-full rounded-sm border px-1.5 py-0.5 text-left text-xs outline-none focus-visible:ring-[3px]',
+            'hover:bg-accent focus-visible:ring-ring/50 min-w-0 flex-1 rounded-sm border px-1.5 py-0.5 text-left text-xs outline-none focus-visible:ring-[3px]',
             tarea.completada ? 'text-muted-foreground line-through' : 'bg-background',
           ]"
           @click="emit('verDetalle', tarea.id)"
@@ -165,6 +166,11 @@ const plantillaTareasDia = createReusableTemplate<{ dia: Dia }>()
             >{{ ` ${tarea.nombre}` }}</span
           >
         </button>
+        <AvisoVencimiento
+          class="mt-0.5"
+          :vencimiento="tarea.fecha_vencimiento"
+          :completada="tarea.completada"
+        />
       </li>
     </ul>
     <Button
