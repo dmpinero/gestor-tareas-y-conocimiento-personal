@@ -5,6 +5,7 @@ import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
 
 import type { DatosEdicionSubtarea, DatosSubtarea, Subtarea, Tarea } from '@/api/tipos'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
+import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
@@ -512,9 +513,13 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
           <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
             <dt class="text-muted-foreground">Persona asignada</dt>
             <dd class="min-w-0">
-              <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
-                textoOVacio(subtarea.asignado)
-              }}</span>
+              <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)"
+                ><NombreRelacionado
+                  v-if="subtarea.asignado"
+                  tipo="persona"
+                  :nombre="subtarea.asignado"
+                /><template v-else>{{ textoOVacio(subtarea.asignado) }}</template></span
+              >
             </dd>
             <dt class="text-muted-foreground">Prioridad</dt>
             <dd>
@@ -555,9 +560,13 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
                 </div>
               </TableCell>
               <TableCell class="whitespace-normal">
-                <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
-                  textoOVacio(subtarea.asignado)
-                }}</span>
+                <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)"
+                  ><NombreRelacionado
+                    v-if="subtarea.asignado"
+                    tipo="persona"
+                    :nombre="subtarea.asignado"
+                  /><template v-else>{{ textoOVacio(subtarea.asignado) }}</template></span
+                >
               </TableCell>
               <TableCell>
                 <span :class="claseResuelta(subtarea)">{{ textoOVacio(subtarea.prioridad) }}</span>

@@ -2409,6 +2409,26 @@ describe('VistaTareas', () => {
     })
 
     describe('Lista / Tablero', () => {
+      it('en una tarjeta se pulsan las personas y las etiquetas para ver sus tareas', async () => {
+        await montarTablero()
+        const tarjeta = columna('Pendiente').querySelector<HTMLElement>('[data-tarjeta]')!
+        expect(tarjeta.textContent).toContain('Asignado a: Ana')
+
+        tarjeta
+          .querySelector<HTMLButtonElement>('button[aria-label="Ver tareas y subtareas de Ana"]')!
+          .click()
+        await flushPromises()
+        const modal = [...document.body.querySelectorAll('[role="dialog"]')].find(
+          (d) => d.querySelector('h2')?.textContent?.trim() === 'Persona: Ana',
+        )
+        expect(modal?.querySelector('ul[aria-label="Tareas"]')?.textContent).toContain(
+          'Escribir informe',
+        )
+        expect(
+          tarjeta.querySelector('button[aria-label="Ver tareas con la etiqueta Backend"]'),
+        ).not.toBeNull()
+      })
+
       it('muestra la lista por defecto con "Ver como lista" pulsado', async () => {
         await montar(TAREAS_GRUPO, GRUPOS)
 
@@ -3250,6 +3270,105 @@ describe('VistaTareas', () => {
 
       expect(panelActual().querySelector('#tarea-estado')).toBeNull()
       expect(panelActual().querySelector('#tarea-completada')).not.toBeNull()
+    })
+  })
+
+  describe('tareas relacionadas de una etiqueta o persona', () => {
+    // "Leer artículo" no tiene a Ana asignada, pero sí una de sus subtareas.
+    const CON_SUBTAREA_DE_ANA = {
+      ...TAREAS[1],
+      subtareas: [{ ...SUBTAREAS[1], asignado: 'Ana' }],
+    }
+
+    function dialogoTitulado(titulo: string): HTMLElement {
+      const dialogo = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+        (d) => d.querySelector('h2')?.textContent?.trim() === titulo,
+      )
+      if (!dialogo) throw new Error(`No se encontró el diálogo "${titulo}"`)
+      return dialogo
+    }
+
+    function textosLista(dialogo: HTMLElement, lista: string): string[] {
+      return [...dialogo.querySelectorAll(`ul[aria-label="${lista}"] li button`)].map(
+        (b) => b.getAttribute('aria-label') ?? '',
+      )
+    }
+
+    it('pulsar una etiqueta de la tabla abre la modal con las tareas que la llevan', async () => {
+      const envoltorio = await montar()
+
+      await envoltorio
+        .find('button[aria-label="Ver tareas con la etiqueta Urgente"]')
+        .trigger('click')
+      await flushPromises()
+
+      const modal = dialogoTitulado('Etiqueta: Urgente')
+      expect(textosLista(modal, 'Tareas')).toEqual(['Abrir la tarea Escribir informe'])
+      expect(modal.querySelector('ul[aria-label="Subtareas"]')).toBeNull()
+    })
+
+    it('pulsar una persona de la tabla lista sus tareas y las subtareas que tiene asignadas', async () => {
+      const envoltorio = await montar([TAREAS[0], CON_SUBTAREA_DE_ANA])
+
+      await envoltorio.find('button[aria-label="Ver tareas y subtareas de Ana"]').trigger('click')
+      await flushPromises()
+
+      const modal = dialogoTitulado('Persona: Ana')
+      expect(textosLista(modal, 'Tareas')).toEqual(['Abrir la tarea Escribir informe'])
+      expect(textosLista(modal, 'Subtareas')).toEqual([
+        'Abrir la tarea Leer artículo (subtarea Enviar propuesta)',
+      ])
+    })
+
+    it('en el detalle se pulsan las etiquetas, las personas y la persona de una subtarea', async () => {
+      const envoltorio = await montar([TAREAS[0], CON_SUBTAREA_DE_ANA])
+
+      await envoltorio
+        .find('button[aria-label="Ver detalle de la tarea Escribir informe"]')
+        .trigger('click')
+      await flushPromises()
+      const detalle = dialogoTitulado('Escribir informe')
+      const campos = detalle.querySelector('[data-testid="campos-tarea"]')
+      campos
+        ?.querySelector<HTMLButtonElement>(
+          'button[aria-label="Ver tareas con la etiqueta Backend"]',
+        )
+        ?.click()
+      await flushPromises()
+      expect(textosLista(dialogoTitulado('Etiqueta: Backend'), 'Tareas')).toEqual([
+        'Abrir la tarea Escribir informe',
+      ])
+
+      // Se cambia al detalle de la otra tarea para pulsar la persona de su subtarea.
+      await envoltorio
+        .find('button[aria-label="Ver detalle de la tarea Leer artículo"]')
+        .trigger('click')
+      await flushPromises()
+      dialogoTitulado('Leer artículo')
+        .querySelector<HTMLButtonElement>('button[aria-label="Ver tareas y subtareas de Ana"]')
+        ?.click()
+      await flushPromises()
+      expect(textosLista(dialogoTitulado('Persona: Ana'), 'Subtareas')).toEqual([
+        'Abrir la tarea Leer artículo (subtarea Enviar propuesta)',
+      ])
+    })
+
+    it('pulsar una tarea de la modal cierra la modal y abre el detalle de esa tarea', async () => {
+      const envoltorio = await montar([TAREAS[0], CON_SUBTAREA_DE_ANA])
+
+      await envoltorio.find('button[aria-label="Ver tareas y subtareas de Ana"]').trigger('click')
+      await flushPromises()
+      dialogoTitulado('Persona: Ana')
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Abrir la tarea Leer artículo (subtarea Enviar propuesta)"]',
+        )
+        ?.click()
+      await flushPromises()
+
+      const dialogos = [...document.body.querySelectorAll('[role="dialog"]')]
+      expect(dialogos.map((d) => d.querySelector('h2')?.textContent?.trim())).toEqual([
+        'Leer artículo',
+      ])
     })
   })
 })
