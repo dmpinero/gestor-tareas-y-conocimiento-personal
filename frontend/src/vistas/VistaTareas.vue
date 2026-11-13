@@ -34,6 +34,7 @@ import {
 } from '@/composables/useOrdenacionTabla'
 import BarraPrioridades from '@/componentes/compartido/BarraPrioridades.vue'
 import BotonesExportarTabla from '@/componentes/compartido/BotonesExportarTabla.vue'
+import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import DetalleTarea from '@/componentes/compartido/DetalleTarea.vue'
@@ -46,6 +47,13 @@ import ModalTareasRelacionadas from '@/componentes/compartido/ModalTareasRelacio
 import { useProveedorTareasRelacionadas } from '@/composables/useTareasRelacionadas'
 import CalendarioTareas from '@/componentes/compartido/CalendarioTareas.vue'
 import TableroTareas from '@/componentes/compartido/TableroTareas.vue'
+import {
+  CLASE_PILDORA,
+  PILDORA_PRIORIDAD,
+  PILDORA_TIPO,
+  clavePrioridad,
+  pildoraEstado,
+} from '@/lib/coloresTarea'
 import type { CeldaExportada } from '@/lib/exportarTabla'
 import { Button } from '@/componentes/ui/button'
 import { Checkbox } from '@/componentes/ui/checkbox'
@@ -103,6 +111,20 @@ function textoTipoEnTabla(tarea: Tarea): string {
   if (tarea.tipo !== 'oportunidad' || tarea.subtareas.length === 0) return etiqueta
   const resueltas = tarea.subtareas.filter((subtarea) => subtarea.resuelta).length
   return `${etiqueta} · ${resueltas}/${tarea.subtareas.length}`
+}
+
+// Píldora de la prioridad (sin prioridad no hay píldora, sino "—").
+function clasePildoraPrioridad(prioridad: number): string {
+  const clave = clavePrioridad(prioridad)
+  return clave === 'sin' ? CLASE_PILDORA : `${CLASE_PILDORA} ${PILDORA_PRIORIDAD[clave]}`
+}
+
+// Color del estado según su posición en el grupo de estados de la tarea.
+function clasePildoraEstado(tarea: Tarea): string {
+  const estados =
+    tiendaGrupos.grupos.find((grupo) => grupo.id === tarea.grupo_estados?.id)?.estados ?? []
+  const indice = estados.findIndex((estado) => estado.id === tarea.estado?.id)
+  return `${CLASE_PILDORA} ${pildoraEstado(indice, estados.length)}`
 }
 
 // --- Eliminar tarea, con confirmación --------------------------------------
@@ -300,6 +322,7 @@ type CampoOrdenable =
   | 'fechaCreacion'
   | 'fechaVencimiento'
   | 'tipo'
+  | 'estado'
 
 // --- Filtros (en el navegador; el orden y la exportación usan las filas filtradas) ---
 
@@ -476,6 +499,7 @@ const { campo, direccion, ordenarPor, filasOrdenadas } = useOrdenacionTabla<Tare
     fechaCreacion: (a, b) => compararIso(a.fecha_creacion, b.fecha_creacion),
     fechaVencimiento: compararConNulosAlFinal((tarea) => tarea.fecha_vencimiento, compararIso),
     tipo: compararConNulosAlFinal((tarea) => etiquetaTipoTarea(tarea.tipo), compararTexto),
+    estado: compararConNulosAlFinal((tarea) => tarea.estado?.nombre ?? null, compararTexto),
   },
 )
 
@@ -488,6 +512,7 @@ const COLUMNAS_ORDENABLES: { campo: CampoOrdenable; etiqueta: string }[] = [
   { campo: 'fechaCreacion', etiqueta: 'Fecha de creación' },
   { campo: 'fechaVencimiento', etiqueta: 'Fecha de vencimiento' },
   { campo: 'tipo', etiqueta: 'Tipo' },
+  { campo: 'estado', etiqueta: 'Estado' },
 ]
 // Columnas de la tabla que se muestran como chips.
 const CAMPOS_LISTA = ['etiquetas', 'asignados'] as const
@@ -673,6 +698,7 @@ const filasExportacion = computed<CeldaExportada[][]>(() =>
       fechaCreacion: formatearFechaHora(tarea.fecha_creacion),
       fechaVencimiento: tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—',
       tipo: etiquetaTipoTarea(tarea.tipo) ?? '—',
+      estado: tarea.estado?.nombre ?? '—',
     }
     return columnasVisibles.value.map((columna) => celdas[columna.campo])
   }),
@@ -1238,9 +1264,15 @@ async function guardar(): Promise<void> {
                   <span>{{ tarea.nombre }}</span>
                 </div>
               </TableCell>
-              <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">{{
-                tarea.prioridad ?? '—'
-              }}</TableCell>
+              <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">
+                <span
+                  v-if="tarea.prioridad !== null"
+                  data-testid="pildora-prioridad"
+                  :class="clasePildoraPrioridad(tarea.prioridad)"
+                  >{{ tarea.prioridad }}</span
+                >
+                <template v-else>—</template>
+              </TableCell>
               <TableCell
                 v-if="esVisible('descripcion')"
                 :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
@@ -1276,7 +1308,10 @@ async function guardar(): Promise<void> {
                 :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
               >
                 <template v-if="tarea.fecha_vencimiento">
-                  {{ formatearFechaHora(tarea.fecha_vencimiento) }}
+                  <VencimientoCorto
+                    :vencimiento="tarea.fecha_vencimiento"
+                    :completada="tarea.completada"
+                  />
                   <ContadorVencimiento
                     :vencimiento="tarea.fecha_vencimiento"
                     :class="claseCelda(tarea, 'block text-xs')"
@@ -1284,9 +1319,24 @@ async function guardar(): Promise<void> {
                 </template>
                 <template v-else>—</template>
               </TableCell>
-              <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">{{
-                textoTipoEnTabla(tarea)
-              }}</TableCell>
+              <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">
+                <span
+                  v-if="tarea.tipo !== null"
+                  data-testid="pildora-tipo"
+                  :class="`${CLASE_PILDORA} ${PILDORA_TIPO}`"
+                  >{{ textoTipoEnTabla(tarea) }}</span
+                >
+                <template v-else>—</template>
+              </TableCell>
+              <TableCell v-if="esVisible('estado')" :class="claseCelda(tarea)">
+                <span
+                  v-if="tarea.estado"
+                  data-testid="pildora-estado"
+                  :class="clasePildoraEstado(tarea)"
+                  >{{ tarea.estado.nombre }}</span
+                >
+                <template v-else>—</template>
+              </TableCell>
               <TableCell class="w-0">
                 <MenuAccionesTarea
                   :nombre="tarea.nombre"

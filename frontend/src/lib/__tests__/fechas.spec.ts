@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { aFechaHoraIso, formatearFechaHora, formatearMarcaTemporalFichero } from '@/lib/fechas'
+import {
+  aFechaHoraIso,
+  formatearFechaCorta,
+  formatearFechaHora,
+  formatearMarcaTemporalFichero,
+} from '@/lib/fechas'
 
 describe('formatearFechaHora', () => {
   it('formatea un Date como dd/mm/aaaa hh:mm:ss en hora local', () => {
@@ -9,6 +14,20 @@ describe('formatearFechaHora', () => {
 
   it('formatea una cadena ISO sin zona horaria tal como está escrita', () => {
     expect(formatearFechaHora('2026-11-09T18:45:30')).toBe('09/11/2026 18:45:30')
+  })
+})
+
+describe('formatearFechaCorta', () => {
+  it.each([
+    ['2026-11-13T18:00:00', '13 nov'],
+    ['2026-01-05T00:00:00', '5 ene'],
+    ['2027-09-30T23:59:59', '30 sep'],
+  ])('formatea %s como día y mes abreviado (%s)', (iso, esperado) => {
+    expect(formatearFechaCorta(iso)).toBe(esperado)
+  })
+
+  it('devuelve sin cambios una cadena que no es ISO', () => {
+    expect(formatearFechaCorta('mañana')).toBe('mañana')
   })
 })
 

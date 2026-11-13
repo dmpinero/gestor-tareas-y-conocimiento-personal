@@ -208,7 +208,9 @@ async function abrirPanelEdicion(envoltorio: VueWrapper, nombre: string): Promis
 // Filas de tareas de la tabla (sin las cabeceras, altas rápidas ni pies de los grupos).
 const FILAS_TAREA = 'tbody tr[data-fila-tarea]'
 
-// Las celdas con chips se leen como sus textos unidos por " | ".
+// Las celdas con chips se leen como sus textos unidos por " | ". En el vencimiento,
+// el texto une la fecha corta visible, la completa (solo para lectores de
+// pantalla) y la cuenta atrás: "20 nov20/11/2026 18:00:00Vence en …".
 function filasTabla(envoltorio: VueWrapper): string[][] {
   return envoltorio.findAll(FILAS_TAREA).map((tr) =>
     tr.findAll('td').map((td) => {
@@ -296,6 +298,7 @@ describe('VistaTareas', () => {
       'Fecha de creación',
       'Fecha de vencimiento',
       'Tipo',
+      'Estado',
       'Acciones',
     ])
     expect(filasTabla(envoltorio)).toEqual([
@@ -306,11 +309,23 @@ describe('VistaTareas', () => {
         'Backend | Urgente',
         'Ana',
         '10/11/2026 09:30:00',
-        '20/11/2026 18:00:00 Vence en 10 d 23 h 14 min 30 s',
+        '20 nov20/11/2026 18:00:00Vence en 10 d 23 h 14 min 30 s',
+        '—',
         '—',
         '',
       ],
-      ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', '—', ''],
+      [
+        'Leer artículo',
+        '—',
+        'Artículo sobre Vue',
+        '—',
+        '—',
+        '01/12/2026 17:05:09',
+        '—',
+        '—',
+        '—',
+        '',
+      ],
     ])
   })
 
@@ -494,7 +509,7 @@ describe('VistaTareas', () => {
       ...SIN_EXTRAS,
     })
     expect(filasTabla(envoltorio)).toEqual([
-      ['Con fecha', '—', 'Detalle', '—', '—', '02/01/2027 03:04:05', '—', '—', ''],
+      ['Con fecha', '—', 'Detalle', '—', '—', '02/01/2027 03:04:05', '—', '—', '—', ''],
     ])
   })
 
@@ -561,7 +576,8 @@ describe('VistaTareas', () => {
         'Frontend | Urgente',
         'Luis',
         AHORA_TEXTO,
-        '30/11/2026 12:00:00 Vence en 20 d 17 h 14 min 30 s',
+        '30 nov30/11/2026 12:00:00Vence en 20 d 17 h 14 min 30 s',
+        '—',
         '—',
         '',
       ],
@@ -677,9 +693,21 @@ describe('VistaTareas', () => {
         '11/11/2026 08:00:00',
         '—',
         '—',
+        '—',
         '',
       ],
-      ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', '—', ''],
+      [
+        'Leer artículo',
+        '—',
+        'Artículo sobre Vue',
+        '—',
+        '—',
+        '01/12/2026 17:05:09',
+        '—',
+        '—',
+        '—',
+        '',
+      ],
     ])
 
     // Tras editar, "Crear tarea" vuelve al modo crear con el formulario limpio.
@@ -740,7 +768,7 @@ describe('VistaTareas', () => {
     })
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(filasTabla(envoltorio)).toEqual([
-      ['Nueva', '1', 'Detalle', '—', '—', AHORA_TEXTO, '—', '—', ''],
+      ['Nueva', '1', 'Detalle', '—', '—', AHORA_TEXTO, '—', '—', '—', ''],
     ])
 
     const panelReabierto = await abrirPanel(envoltorio)
@@ -874,7 +902,7 @@ describe('VistaTareas', () => {
         oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
       })
       expect(filasTabla(envoltorio)).toEqual([
-        ['Venta', '—', 'Detalle', '—', '—', AHORA_TEXTO, '—', 'Oportunidad', ''],
+        ['Venta', '—', 'Detalle', '—', '—', AHORA_TEXTO, '—', 'Oportunidad', '—', ''],
       ])
     })
 
@@ -1573,6 +1601,151 @@ describe('VistaTareas', () => {
     })
   })
 
+  describe('celdas de color', () => {
+    function celda(envoltorio: VueWrapper, fila: number, columna: string) {
+      const indice = envoltorio.findAll('thead th').findIndex((th) => th.text().trim() === columna)
+      if (indice === -1) throw new Error(`No hay columna "${columna}"`)
+      return envoltorio.findAll(FILAS_TAREA)[fila]!.findAll('td')[indice]!
+    }
+
+    it('la prioridad es una píldora de color: 1 rojo, 2 naranja, 3 azul, 4 verde azulado y 5 gris', async () => {
+      const envoltorio = await montar(
+        [1, 2, 3, 4, 5, null].map((prioridad, indice) => ({
+          ...TAREAS[1],
+          id: indice + 1,
+          nombre: `Tarea ${indice + 1}`,
+          prioridad,
+        })),
+      )
+
+      const colores = ['bg-red-100', 'bg-orange-100', 'bg-blue-100', 'bg-teal-100', 'bg-gray-100']
+      colores.forEach((color, fila) => {
+        const pildora = celda(envoltorio, fila, 'Prioridad').get(
+          '[data-testid="pildora-prioridad"]',
+        )
+        expect(pildora.text()).toBe(String(fila + 1))
+        expect(pildora.classes()).toContain(color)
+        // Tonos propios en modo oscuro.
+        expect(pildora.classes().some((clase) => clase.startsWith('dark:bg-'))).toBe(true)
+      })
+      const sinPrioridad = celda(envoltorio, 5, 'Prioridad')
+      expect(sinPrioridad.text()).toBe('—')
+      expect(sinPrioridad.find('[data-testid="pildora-prioridad"]').exists()).toBe(false)
+    })
+
+    it('el tipo es una píldora de color con su texto y avance', async () => {
+      const envoltorio = await montar([OPORTUNIDAD_CON_SUBTAREAS, TAREAS[1]])
+
+      const pildora = celda(envoltorio, 0, 'Tipo').get('[data-testid="pildora-tipo"]')
+      expect(pildora.text()).toBe('Oportunidad · 1/3')
+      expect(pildora.classes()).toContain('bg-violet-100')
+      expect(celda(envoltorio, 1, 'Tipo').text()).toBe('—')
+      expect(celda(envoltorio, 1, 'Tipo').find('[data-testid="pildora-tipo"]').exists()).toBe(false)
+    })
+
+    it('muestra el estado del grupo como píldora: el primero gris, el último verde y los intermedios azules', async () => {
+      const grupos = [
+        {
+          id: 1,
+          nombre: 'Desarrollo',
+          tareas: 3,
+          estados: [
+            { id: 10, nombre: 'Pendiente', posicion: 1, tareas: 1 },
+            { id: 11, nombre: 'En curso', posicion: 2, tareas: 1 },
+            { id: 12, nombre: 'Hecho', posicion: 3, tareas: 1 },
+          ],
+        },
+      ]
+      const enGrupo = (id: number, nombre: string, idEstado: number, estado: string) => ({
+        ...TAREAS[1],
+        id,
+        nombre,
+        grupo_estados: { id: 1, nombre: 'Desarrollo' },
+        estado: { id: idEstado, nombre: estado },
+      })
+      const envoltorio = await montar(
+        [
+          enGrupo(1, 'A', 10, 'Pendiente'),
+          enGrupo(2, 'B', 11, 'En curso'),
+          enGrupo(3, 'C', 12, 'Hecho'),
+          { ...TAREAS[1], id: 4, nombre: 'D' },
+        ],
+        grupos,
+      )
+
+      const pildora = (fila: number) =>
+        celda(envoltorio, fila, 'Estado').get('[data-testid="pildora-estado"]')
+      expect([0, 1, 2].map((fila) => pildora(fila).text())).toEqual([
+        'Pendiente',
+        'En curso',
+        'Hecho',
+      ])
+      expect(pildora(0).classes()).toContain('bg-gray-100')
+      expect(pildora(1).classes()).toContain('bg-blue-100')
+      expect(pildora(2).classes()).toContain('bg-emerald-100')
+      expect(celda(envoltorio, 3, 'Estado').text()).toBe('—')
+
+      // Se ordena y se exporta por el nombre del estado.
+      const cabecera = envoltorio.findAll('th button').find((b) => b.text() === 'Estado')!
+      await cabecera.trigger('click')
+      expect(envoltorio.findAll(FILAS_TAREA).map((f) => f.findAll('td')[0]!.text())).toEqual([
+        'B',
+        'C',
+        'A',
+        'D',
+      ])
+      await envoltorio.get('button[aria-label="Exportar a Excel"]').trigger('click')
+      const [, columnas, filas] = vi.mocked(exportarTablaExcel).mock.calls[0]!
+      const indice = (columnas as string[]).indexOf('Estado')
+      expect((filas as unknown[][]).map((fila) => fila[indice])).toEqual([
+        'En curso',
+        'Hecho',
+        'Pendiente',
+        '—',
+      ])
+    })
+
+    describe('vencimiento', () => {
+      it('muestra la fecha corta con la completa en el title y para lectores de pantalla, y conserva la cuenta atrás', async () => {
+        const envoltorio = await montar()
+
+        const corto = celda(envoltorio, 0, 'Fecha de vencimiento').get(
+          '[data-testid="vencimiento-corto"]',
+        )
+        const fecha = corto.get('time')
+        expect(fecha.attributes('datetime')).toBe('2026-11-20T18:00:00')
+        expect(fecha.attributes('title')).toBe('20/11/2026 18:00:00')
+        expect(fecha.get('[aria-hidden="true"]').text()).toBe('20 nov')
+        expect(fecha.get('.sr-only').text()).toBe('20/11/2026 18:00:00')
+        expect(corto.attributes('data-icono')).toBeUndefined()
+        expect(
+          celda(envoltorio, 0, 'Fecha de vencimiento')
+            .get('[data-testid="contador-vencimiento"]')
+            .text(),
+        ).toBe('Vence en 10 d 23 h 14 min 30 s')
+      })
+
+      it('con la tarea completada muestra un ✓ y con el vencimiento pasado un ! rojo', async () => {
+        const envoltorio = await montar([
+          { ...TAREAS[0], id: 1, nombre: 'Vencida', fecha_vencimiento: '2026-11-01T10:00:00' },
+          { ...TAREAS[0], id: 2, nombre: 'Hecha', completada: true },
+        ])
+
+        const vencida = celda(envoltorio, 0, 'Fecha de vencimiento').get(
+          '[data-testid="vencimiento-corto"]',
+        )
+        expect(vencida.attributes('data-icono')).toBe('vencida')
+        expect(vencida.get('svg').classes()).toContain('text-destructive')
+        expect(vencida.get('time [aria-hidden="true"]').text()).toBe('1 nov')
+        const hecha = celda(envoltorio, 1, 'Fecha de vencimiento').get(
+          '[data-testid="vencimiento-corto"]',
+        )
+        expect(hecha.attributes('data-icono')).toBe('completada')
+        expect(hecha.get('svg').attributes('aria-hidden')).toBe('true')
+      })
+    })
+  })
+
   describe('ordenación', () => {
     const TAREAS_ORDEN = [
       {
@@ -1658,6 +1831,7 @@ describe('VistaTareas', () => {
         'Fecha de creación',
         'Fecha de vencimiento',
         'Tipo',
+        'Estado',
       ]) {
         expect(cabecera(envoltorio, etiqueta).attributes('type')).toBe('button')
         expect(thDe(envoltorio, etiqueta).attributes('aria-sort')).toBeUndefined()
@@ -1774,6 +1948,7 @@ describe('VistaTareas', () => {
       'Fecha de creación',
       'Fecha de vencimiento',
       'Tipo',
+      'Estado',
     ]
 
     function botonExportar(envoltorio: VueWrapper, nombre: string) {
@@ -1808,8 +1983,19 @@ describe('VistaTareas', () => {
           '10/11/2026 09:30:00',
           '20/11/2026 18:00:00',
           '—',
+          '—',
         ],
-        ['Leer artículo', '—', 'Artículo sobre Vue', '—', '—', '01/12/2026 17:05:09', '—', '—'],
+        [
+          'Leer artículo',
+          '—',
+          'Artículo sobre Vue',
+          '—',
+          '—',
+          '01/12/2026 17:05:09',
+          '—',
+          '—',
+          '—',
+        ],
       ])
     })
 
@@ -2425,6 +2611,7 @@ describe('VistaTareas', () => {
       'Fecha de creación',
       'Fecha de vencimiento',
       'Tipo',
+      'Estado',
     ]
 
     it('por defecto muestra todas las columnas y las lista marcadas; "Nombre" no se puede ocultar', async () => {
