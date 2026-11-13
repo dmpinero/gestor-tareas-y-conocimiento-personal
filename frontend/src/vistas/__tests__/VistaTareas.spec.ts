@@ -1727,11 +1727,23 @@ describe('VistaTareas', () => {
       await flushPromises()
 
       expect(disparador(envoltorio, 'Expandir filtros').exists()).toBe(true)
-      // El buscador y "Limpiar filtros" quedan en la barra, visibles aunque se pliegue.
-      expect(envoltorio.find('#filtro-buscar').exists()).toBe(true)
+      // "Limpiar filtros" queda en la barra, visible aunque se pliegue; el buscador
+      // está dentro del panel, en su propia línea bajo el Estado.
+      expect(envoltorio.find('#filtro-buscar').exists()).toBe(false)
       expect(envoltorio.findAll('button').some((b) => b.text() === 'Limpiar filtros')).toBe(true)
       expect(envoltorio.find('#filtro-creacion-desde').exists()).toBe(false)
       expect(nombresEnTabla(envoltorio)).toEqual(TODAS)
+    })
+
+    it('coloca el buscador en una línea propia bajo la fila del Estado', async () => {
+      const envoltorio = await montar(TAREAS_FILTRO)
+
+      const filaEstado = envoltorio.find('#filtro-estado-titulo').element.closest('.grid')
+      const filaBuscar = envoltorio.find('#filtro-buscar').element.closest('[data-fila="buscar"]')
+      expect(filaEstado).not.toBeNull()
+      expect(filaBuscar).not.toBeNull()
+      expect(filaEstado!.contains(filaBuscar)).toBe(false)
+      expect(filaEstado!.nextElementSibling).toBe(filaBuscar)
     })
 
     it('el botón "Filtros" indica cuántos filtros hay activos', async () => {
