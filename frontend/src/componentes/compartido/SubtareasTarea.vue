@@ -17,6 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/componentes/ui/table'
+import {
+  ERROR_NOMBRE_SUBTAREA_OBLIGATORIO,
+  MAX_NOMBRE_SUBTAREA,
+  validarNombreSubtarea,
+} from '@/lib/subtareas'
 import { useTiendaTareas } from '@/stores/tareas'
 
 // Subtareas de una tarea: listado, alta en línea, edición en línea (con
@@ -28,11 +33,8 @@ const props = defineProps<{ tarea: Tarea }>()
 
 const tienda = useTiendaTareas()
 
-const MAX_NOMBRE = 200
 const MAX_PERSONA = 100
 const VACIO = '—'
-const ERROR_NOMBRE_OBLIGATORIO = 'El nombre de la subtarea es obligatorio.'
-const ERROR_NOMBRE_LARGO = `El nombre de la subtarea no puede superar ${MAX_NOMBRE} caracteres.`
 const ERROR_PERSONA_LARGA = `La persona asignada no puede superar ${MAX_PERSONA} caracteres.`
 const ERROR_PRIORIDAD = 'La prioridad debe ser un número entero del 1 al 5.'
 
@@ -170,10 +172,9 @@ async function cancelarAlta(): Promise<void> {
 
 // Mismas reglas para el alta y la edición.
 function validar(campos: FormularioSubtarea): DatosSubtarea | { error: string } {
-  const nombre = campos.nombre.trim()
-  if (nombre === '') return { error: ERROR_NOMBRE_OBLIGATORIO }
-  if (nombre.length > MAX_NOMBRE) return { error: ERROR_NOMBRE_LARGO }
-  const datos: DatosSubtarea = { nombre }
+  const nombre = validarNombreSubtarea(campos.nombre)
+  if ('error' in nombre) return nombre
+  const datos: DatosSubtarea = { nombre: nombre.nombre }
 
   const asignado = campos.asignado.trim()
   if (asignado.length > MAX_PERSONA) return { error: ERROR_PERSONA_LARGA }
@@ -404,10 +405,10 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
           <Input
             :id="idCampoEdicion(subtarea, 'nombre')"
             v-model="edicion.nombre"
-            :maxlength="MAX_NOMBRE"
+            :maxlength="MAX_NOMBRE_SUBTAREA"
             required
             :readonly="confirmandoEdicion"
-            :aria-invalid="errorEdicion === ERROR_NOMBRE_OBLIGATORIO ? 'true' : undefined"
+            :aria-invalid="errorEdicion === ERROR_NOMBRE_SUBTAREA_OBLIGATORIO ? 'true' : undefined"
             :aria-describedby="errorEdicion ? `${idBase}-error-edicion` : undefined"
           />
         </div>
@@ -603,9 +604,9 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
         <Input
           :id="`${idBase}-nombre`"
           v-model="formulario.nombre"
-          :maxlength="MAX_NOMBRE"
+          :maxlength="MAX_NOMBRE_SUBTAREA"
           required
-          :aria-invalid="errorAlta === ERROR_NOMBRE_OBLIGATORIO ? 'true' : undefined"
+          :aria-invalid="errorAlta === ERROR_NOMBRE_SUBTAREA_OBLIGATORIO ? 'true' : undefined"
           :aria-describedby="errorAlta ? `${idBase}-error` : undefined"
         />
       </div>

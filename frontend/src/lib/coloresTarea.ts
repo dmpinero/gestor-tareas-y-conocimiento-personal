@@ -49,6 +49,41 @@ export function pildoraEstado(indice: number, total: number): string {
   return indice === total - 1 ? PILDORA_ESTADO_FINAL : PILDORA_ESTADO_INTERMEDIO
 }
 
+/** Colores de un estado en el tablero: la cabecera de su columna y su tramo
+ * en la barra de distribución. */
+export interface ColorEstadoTablero {
+  cabecera: string
+  relleno: string
+}
+
+// Mismo criterio que la píldora de la tabla (el primero gris, el último verde
+// y el primer intermedio azul), pero con un color sólido distinto para cada
+// intermedio, que se repite si hay más estados que colores. Las cabeceras
+// llevan texto blanco sobre tonos 600/700, por encima de 4,5:1 en ambos temas;
+// en la barra, el modo oscuro usa tonos más claros para destacar sobre el fondo.
+const ESTADO_TABLERO_INICIAL: ColorEstadoTablero = {
+  cabecera: 'bg-gray-600 text-white',
+  relleno: 'bg-gray-600 dark:bg-gray-400',
+}
+const ESTADO_TABLERO_FINAL: ColorEstadoTablero = {
+  cabecera: 'bg-emerald-700 text-white',
+  relleno: 'bg-emerald-700 dark:bg-emerald-500',
+}
+const ESTADOS_TABLERO_INTERMEDIOS: readonly ColorEstadoTablero[] = [
+  { cabecera: 'bg-blue-700 text-white', relleno: 'bg-blue-700 dark:bg-blue-500' },
+  { cabecera: 'bg-orange-700 text-white', relleno: 'bg-orange-700 dark:bg-orange-500' },
+  { cabecera: 'bg-violet-700 text-white', relleno: 'bg-violet-700 dark:bg-violet-500' },
+  { cabecera: 'bg-pink-700 text-white', relleno: 'bg-pink-700 dark:bg-pink-500' },
+  { cabecera: 'bg-teal-700 text-white', relleno: 'bg-teal-700 dark:bg-teal-500' },
+]
+
+/** Color de la columna de un estado según su posición en el grupo. */
+export function colorEstadoTablero(indice: number, total: number): ColorEstadoTablero {
+  if (indice <= 0 || total <= 1) return ESTADO_TABLERO_INICIAL
+  if (indice === total - 1) return ESTADO_TABLERO_FINAL
+  return ESTADOS_TABLERO_INTERMEDIOS[(indice - 1) % ESTADOS_TABLERO_INTERMEDIOS.length]!
+}
+
 export const CLASE_PILDORA =
   'inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-xs font-medium'
 
