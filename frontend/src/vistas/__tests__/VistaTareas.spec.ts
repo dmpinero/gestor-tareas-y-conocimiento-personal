@@ -3960,12 +3960,13 @@ describe('VistaTareas', () => {
       ).toBe(false)
     })
 
-    it('"Cancelar" vuelve a los datos sin guardar', async () => {
+    it('"Cancelar" vuelve a los datos sin guardar, tras confirmar que se descartan los cambios', async () => {
       const modal = await abrirDetalle(await montar(), 'Escribir informe')
       await pulsar(modal, 'Editar')
       await escribir(campo(panelActual(), 'input[placeholder="Nombre"]'), 'Otro nombre')
 
       await pulsar(panelActual(), 'Cancelar')
+      await pulsar(document.body.querySelector<HTMLElement>('[role="alertdialog"]')!, 'Descartar')
 
       expect(clienteApi.actualizar).not.toHaveBeenCalled()
       expect(panelActual().querySelector('[data-testid="campos-tarea"]')?.textContent).toContain(
@@ -4347,6 +4348,255 @@ describe('VistaTareas', () => {
       expect(dialogo.querySelector('[data-aviso-vencimiento]')?.getAttribute('aria-label')).toBe(
         'Vence en menos de 1 día',
       )
+    })
+  })
+
+  describe('avisar antes de descartar los cambios', () => {
+    function confirmacionDescarte(): HTMLElement | null {
+      return document.body.querySelector<HTMLElement>('[role="alertdialog"]')
+    }
+
+    function botonEn(contenedor: HTMLElement, texto: string): HTMLButtonElement {
+      const encontrado = [...contenedor.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === texto,
+      )
+      if (!encontrado) throw new Error(`No se encontró el botón "${texto}"`)
+      return encontrado
+    }
+
+    async function pulsarEn(contenedor: HTMLElement, texto: string): Promise<void> {
+      botonEn(contenedor, texto).click()
+      await flushPromises()
+    }
+
+    // reka-ui escucha el clic fuera tras un ciclo del bucle de eventos.
+    async function pulsarFuera(): Promise<void> {
+      await new Promise((resolver) => setTimeout(resolver, 0))
+      const fondo = document.body.querySelector<HTMLElement>('[data-slot="dialog-overlay"]')
+      if (!fondo) throw new Error('No se encontró el fondo de la modal')
+      fondo.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+      await flushPromises()
+    }
+
+    async function pulsarEscape(): Promise<void> {
+      panelActual().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await flushPromises()
+    }
+
+    function nombre(): HTMLInputElement {
+      return campo<HTMLInputElement>(panelActual(), 'input[placeholder="Nombre"]')
+    }
+
+    function expectConfirmacionVisible(): HTMLElement {
+      const confirmacion = confirmacionDescarte()
+      expect(confirmacion).not.toBeNull()
+      expect(confirmacion!.textContent).toContain('¿Descartar los cambios?')
+      expect(confirmacion!.textContent).toContain('Los datos que has introducido se perderán.')
+      expect(botonEn(confirmacion!, 'Descartar')).toBeTruthy()
+      expect(botonEn(confirmacion!, 'Seguir editando')).toBeTruthy()
+      return confirmacion!
+    }
+
+    describe('al crear una tarea', () => {
+      it('con datos escritos, el clic fuera pide confirmación y conserva los datos', async () => {
+        await abrirPanel(await montar())
+        await escribir(nombre(), 'Nueva tarea')
+
+        await pulsarFuera()
+
+        expectConfirmacionVisible()
+        expect(panelActual().querySelector('h2')?.textContent?.trim()).toBe('Crear tarea')
+        expect(nombre().value).toBe('Nueva tarea')
+      })
+
+      it('"Seguir editando" vuelve al formulario con los datos y el foco dentro', async () => {
+        await abrirPanel(await montar())
+        await escribir(nombre(), 'Nueva tarea')
+        await pulsarFuera()
+
+        await pulsarEn(confirmacionDescarte()!, 'Seguir editando')
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(nombre().value).toBe('Nueva tarea')
+        expect(panelActual().contains(document.activeElement)).toBe(true)
+      })
+
+      it('"Descartar" cierra la modal y descarta los datos', async () => {
+        const envoltorio = await montar()
+        await abrirPanel(envoltorio)
+        await escribir(nombre(), 'Nueva tarea')
+        await pulsarFuera()
+
+        await pulsarEn(confirmacionDescarte()!, 'Descartar')
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+        expect(clienteApi.crear).not.toHaveBeenCalled()
+        await abrirPanel(envoltorio)
+        expect(nombre().value).toBe('')
+      })
+
+      it('con datos escritos, Escape pide confirmación', async () => {
+        await abrirPanel(await montar())
+        await escribir(nombre(), 'Nueva tarea')
+
+        await pulsarEscape()
+
+        expectConfirmacionVisible()
+        expect(nombre().value).toBe('Nueva tarea')
+      })
+
+      it('con datos escritos, "Cancelar" pide confirmación', async () => {
+        await abrirPanel(await montar())
+        await escribir(nombre(), 'Nueva tarea')
+
+        await pulsarEn(panelActual(), 'Cancelar')
+
+        expectConfirmacionVisible()
+        expect(nombre().value).toBe('Nueva tarea')
+      })
+
+      it('sin cambios (solo la fecha de creación propuesta), el clic fuera cierra sin preguntar', async () => {
+        await abrirPanel(await montar())
+
+        await pulsarFuera()
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+      })
+
+      it('sin cambios, Escape cierra sin preguntar', async () => {
+        await abrirPanel(await montar())
+
+        await pulsarEscape()
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+      })
+
+      it('al guardar cierra sin preguntar', async () => {
+        vi.mocked(clienteApi.crear).mockResolvedValue({ ...TAREAS[1], id: 3, nombre: 'Nueva' })
+        await abrirPanel(await montar())
+        await escribir(nombre(), 'Nueva')
+
+        await enviar(panelActual())
+
+        expect(clienteApi.crear).toHaveBeenCalled()
+        expect(confirmacionDescarte()).toBeNull()
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+      })
+    })
+
+    describe('al editar una tarea', () => {
+      it('con cambios, el clic fuera pide confirmación y conserva los datos', async () => {
+        await abrirPanelEdicion(await montar(), 'Escribir informe')
+        await escribir(nombre(), 'Otro nombre')
+
+        await pulsarFuera()
+
+        expectConfirmacionVisible()
+        expect(nombre().value).toBe('Otro nombre')
+      })
+
+      it('"Descartar" cierra la modal sin guardar', async () => {
+        await abrirPanelEdicion(await montar(), 'Escribir informe')
+        await escribir(nombre(), 'Otro nombre')
+        await pulsarEscape()
+
+        await pulsarEn(confirmacionDescarte()!, 'Descartar')
+
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+        expect(clienteApi.actualizar).not.toHaveBeenCalled()
+      })
+
+      it('"Seguir editando" conserva los cambios', async () => {
+        await abrirPanelEdicion(await montar(), 'Escribir informe')
+        await escribir(nombre(), 'Otro nombre')
+        await pulsarEn(panelActual(), 'Cancelar')
+
+        await pulsarEn(confirmacionDescarte()!, 'Seguir editando')
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(nombre().value).toBe('Otro nombre')
+      })
+
+      it('sin cambios, el clic fuera cierra sin preguntar', async () => {
+        await abrirPanelEdicion(await montar(), 'Escribir informe')
+
+        await pulsarFuera()
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+      })
+
+      it('una oportunidad sin cambios se cierra sin preguntar', async () => {
+        await abrirPanelEdicion(await montar([TAREA_OPORTUNIDAD, TAREAS[1]]), 'Escribir informe')
+
+        await pulsarEn(panelActual(), 'Cancelar')
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+      })
+    })
+
+    describe('al editar en el detalle', () => {
+      async function editarEnDetalle(envoltorio: VueWrapper, nombreTarea: string): Promise<void> {
+        await pulsarAccionFila(envoltorio, nombreTarea, 'Ver detalle de la tarea')
+        await flushPromises()
+        await pulsarEn(panelActual(), 'Editar')
+      }
+
+      it('con cambios, el clic fuera pide confirmación y no cierra el detalle', async () => {
+        await editarEnDetalle(await montar(), 'Escribir informe')
+        await escribir(nombre(), 'Otro nombre')
+
+        await pulsarFuera()
+
+        expectConfirmacionVisible()
+        expect(nombre().value).toBe('Otro nombre')
+      })
+
+      it('con cambios, "Cerrar" pide confirmación y "Descartar" cierra el detalle', async () => {
+        await editarEnDetalle(await montar(), 'Escribir informe')
+        await escribir(nombre(), 'Otro nombre')
+
+        await pulsarEn(panelActual(), 'Cerrar')
+        expectConfirmacionVisible()
+        await pulsarEn(confirmacionDescarte()!, 'Descartar')
+
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+        expect(clienteApi.actualizar).not.toHaveBeenCalled()
+      })
+
+      it('con cambios, "Cancelar" pide confirmación; "Seguir editando" mantiene la edición', async () => {
+        await editarEnDetalle(await montar(), 'Escribir informe')
+        await escribir(nombre(), 'Otro nombre')
+
+        await pulsarEn(panelActual(), 'Cancelar')
+        expectConfirmacionVisible()
+        await pulsarEn(confirmacionDescarte()!, 'Seguir editando')
+
+        expect(nombre().value).toBe('Otro nombre')
+        expect(panelActual().contains(document.activeElement)).toBe(true)
+      })
+
+      it('sin cambios, "Cancelar" vuelve a los datos sin preguntar', async () => {
+        await editarEnDetalle(await montar(), 'Escribir informe')
+
+        await pulsarEn(panelActual(), 'Cancelar')
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(panelActual().querySelector('[data-testid="campos-tarea"]')).not.toBeNull()
+      })
+
+      it('sin cambios, el clic fuera cierra el detalle sin preguntar', async () => {
+        await editarEnDetalle(await montar(), 'Escribir informe')
+
+        await pulsarFuera()
+
+        expect(confirmacionDescarte()).toBeNull()
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+      })
     })
   })
 })

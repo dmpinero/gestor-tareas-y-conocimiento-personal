@@ -41,12 +41,14 @@ import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import DetalleTarea from '@/componentes/compartido/DetalleTarea.vue'
 import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vue'
+import DialogoDescartarCambios from '@/componentes/compartido/DialogoDescartarCambios.vue'
 import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
 import MenuAccionesTarea from '@/componentes/compartido/MenuAccionesTarea.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import ModalTareasRelacionadas from '@/componentes/compartido/ModalTareasRelacionadas.vue'
 import { useProveedorTareasRelacionadas } from '@/composables/useTareasRelacionadas'
+import { useConfirmarDescarte } from '@/composables/useConfirmarDescarte'
 import CalendarioTareas from '@/componentes/compartido/CalendarioTareas.vue'
 import TableroTareas from '@/componentes/compartido/TableroTareas.vue'
 import {
@@ -741,21 +743,61 @@ function limpiarFormulario(): void {
   destinoAlta = null
 }
 
+// --- Cambios sin guardar en el formulario ---------------------------------
+// Al abrir el formulario se guarda una foto de sus valores (con los extras del
+// detalle) ya rellenos, p. ej. con la fecha de creación propuesta. Cerrarlo sin
+// guardar (clic fuera, Escape, "Cancelar" o "Cerrar") con valores distintos
+// pide confirmación antes de descartarlos; guardar cierra sin preguntar.
+const fotoInicialFormulario = ref<string | null>(null)
+
+function fotoFormulario(): string {
+  return JSON.stringify({
+    ...formulario,
+    // El campo numérico puede devolver número o texto para el mismo valor.
+    prioridad: String(formulario.prioridad ?? ''),
+    extras: editandoEnDetalle.value ? { ...extrasDetalle } : null,
+  })
+}
+
+async function fijarFotoFormulario(): Promise<void> {
+  // Tras los ajustes del mismo ciclo (p. ej. el grupo de la columna del
+  // tablero o el estado que fija el watcher del detalle).
+  await nextTick()
+  fotoInicialFormulario.value = fotoFormulario()
+}
+
+const formularioCambiado = computed(
+  () => fotoInicialFormulario.value !== null && fotoFormulario() !== fotoInicialFormulario.value,
+)
+const descarteFormulario = useConfirmarDescarte(() => formularioCambiado.value)
+const { confirmando: confirmandoDescarteFormulario } = descarteFormulario
+
+function pedirCerrarFormulario(): void {
+  descarteFormulario.pedirCierre(cerrarFormulario)
+}
+
+function alCambiarAperturaFormulario(abierta: boolean): void {
+  if (!abierta) pedirCerrarFormulario()
+}
+
 function abrirParaCrear(): void {
   limpiarFormulario()
   formulario.fechaCreacion = formatearFechaHora(new Date())
   modalAltaAbierta.value = true
+  void fijarFotoFormulario()
 }
 
 function cerrarFormulario(): void {
   modalAltaAbierta.value = false
   panelEdicionAbierto.value = false
   editandoEnDetalle.value = false
+  fotoInicialFormulario.value = null
 }
 
 function abrirParaEditar(tarea: Tarea): void {
   cargarFormulario(tarea)
   panelEdicionAbierto.value = true
+  void fijarFotoFormulario()
 }
 
 function editarEnDetalle(): void {
@@ -765,6 +807,7 @@ function editarEnDetalle(): void {
   extrasDetalle.completada = tarea.completada
   extrasDetalle.estadoId = tarea.estado?.id ?? ''
   editandoEnDetalle.value = true
+  void fijarFotoFormulario()
 }
 
 // Modal con las tareas y subtareas de la etiqueta o persona pulsada.
@@ -792,6 +835,7 @@ function alPulsarFila(evento: MouseEvent, id: number): void {
 function cerrarDetalle(): void {
   idEnDetalle.value = null
   editandoEnDetalle.value = false
+  fotoInicialFormulario.value = null
 }
 
 // Estados del grupo elegido en el formulario del detalle.
@@ -1180,7 +1224,7 @@ async function guardar(): Promise<void> {
 
     <!-- Alta y edición en ventanas modales centradas, como el detalle. Ambas
          usan el mismo formulario. -->
-    <Dialog v-model:open="modalAltaAbierta">
+    <Dialog :open="modalAltaAbierta" @update:open="alCambiarAperturaFormulario">
       <DialogContent
         sin-aspa
         class="flex max-h-[90vh] w-[90vw] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
@@ -1194,12 +1238,12 @@ async function guardar(): Promise<void> {
           :error="errorFormulario"
           alta
           @guardar="guardar"
-          @cancelar="cerrarFormulario"
+          @cancelar="pedirCerrarFormulario"
         />
       </DialogContent>
     </Dialog>
 
-    <Dialog v-model:open="panelEdicionAbierto">
+    <Dialog :open="panelEdicionAbierto" @update:open="alCambiarAperturaFormulario">
       <DialogContent
         sin-aspa
         class="flex max-h-[90vh] w-[90vw] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
@@ -1212,7 +1256,7 @@ async function guardar(): Promise<void> {
           v-model:valores="formulario"
           :error="errorFormulario"
           @guardar="guardar"
-          @cancelar="cerrarFormulario"
+          @cancelar="pedirCerrarFormulario"
         />
       </DialogContent>
     </Dialog>
@@ -1464,6 +1508,7 @@ async function guardar(): Promise<void> {
       :tarea="tareaEnDetalle"
       :error="tienda.error"
       :editando="editandoEnDetalle"
+      :hay-cambios="editandoEnDetalle && formularioCambiado"
       @cerrar="cerrarDetalle"
       @editar="editarEnDetalle"
       @eliminar="tareaEnDetalle && pedirEliminar(tareaEnDetalle)"
@@ -1473,7 +1518,7 @@ async function guardar(): Promise<void> {
           v-model:valores="formulario"
           :error="errorFormulario"
           @guardar="guardar"
-          @cancelar="cerrarFormulario"
+          @cancelar="pedirCerrarFormulario"
         >
           <template #extra>
             <div class="campo-opcional flex items-center gap-2">
@@ -1504,6 +1549,13 @@ async function guardar(): Promise<void> {
         </FormularioTarea>
       </template>
     </DetalleTarea>
+
+    <DialogoDescartarCambios
+      :abierto="confirmandoDescarteFormulario"
+      @update:abierto="descarteFormulario.alCambiarConfirmacion"
+      @descartar="descarteFormulario.descartar"
+      @cierre-foco="descarteFormulario.alDevolverFoco"
+    />
 
     <ModalTareasRelacionadas
       :seleccion="tareasRelacionadas.seleccion.value"
