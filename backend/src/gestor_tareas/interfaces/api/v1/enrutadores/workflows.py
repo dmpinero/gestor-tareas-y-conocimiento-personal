@@ -14,8 +14,16 @@ from gestor_tareas.aplicacion.workflow.casos_uso import (
     RenombrarWorkflow,
     ReordenarPasos,
 )
+from gestor_tareas.aplicacion.workflow.sincronizar_tareas import (
+    SincronizarTareas,
+    VerCambiosDeLasTareas,
+)
 from gestor_tareas.dominio.excepciones import OrdenDePasosInvalidoError
 from gestor_tareas.dominio.workflow.entidades import Workflow
+from gestor_tareas.dominio.workflow.sincronizacion import CambiosDeTarea
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (  # noqa: E501
+    RepositorioTareasSqlAlchemy,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflows_sqlalchemy import (  # noqa: E501
     RepositorioWorkflowsSqlAlchemy,
 )
@@ -26,8 +34,11 @@ from gestor_tareas.interfaces.api.respuestas_error import (
     RESPUESTA_NO_ENCONTRADO,
 )
 from gestor_tareas.interfaces.api.v1.esquemas.workflows import (
+    CambiosDeLasTareasEsquema,
+    CambiosDeTareaEsquema,
     OrdenPasosEsquema,
     PasoWorkflowEsquema,
+    RenombreSubtareaEsquema,
     WorkflowEsquema,
     WorkflowSalidaEsquema,
 )
@@ -158,3 +169,60 @@ def reordenar_pasos(
             [{"type": "value_error", "loc": ("body", "ids"), "msg": str(error), "input": datos.ids}]
         ) from error
     return _a_esquema(workflow)
+
+
+def _cambios_a_esquema(cambios: list[CambiosDeTarea]) -> CambiosDeLasTareasEsquema:
+    return CambiosDeLasTareasEsquema(
+        tareas=[
+            CambiosDeTareaEsquema(
+                id=c.id_tarea,
+                nombre=c.nombre_tarea,
+                subtareas_a_anadir=[p.nombre for p in c.pasos_nuevos],
+                subtareas_a_renombrar=[
+                    RenombreSubtareaEsquema(
+                        id=r.id_subtarea, nombre_actual=r.nombre_actual, nombre_nuevo=r.nombre_nuevo
+                    )
+                    for r in c.renombres
+                ],
+            )
+            for c in cambios
+        ]
+    )
+
+
+_RUTA_SINCRONIZACION = "/{id_workflow:int}/sincronizacion"
+
+
+@enrutador.get(
+    _RUTA_SINCRONIZACION,
+    response_model=CambiosDeLasTareasEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO},
+)
+def ver_cambios_de_las_tareas(
+    id_workflow: int, sesion: Session = Depends(obtener_sesion)
+) -> CambiosDeLasTareasEsquema:
+    """Devuelve, sin modificar nada, qué cambiaría al sincronizar las tareas no
+    completadas del workflow con sus pasos actuales: los pasos sin subtarea vinculada
+    (se añadirían) y las subtareas vinculadas cuyo nombre no es el de su paso (se
+    renombrarían). Las subtareas de pasos eliminados, las añadidas a mano, las tareas
+    completadas y las de otros workflows no cambian. 404 si el workflow no existe."""
+    caso = VerCambiosDeLasTareas(_repositorio(sesion), RepositorioTareasSqlAlchemy(sesion))
+    return _cambios_a_esquema(caso.ejecutar(id_workflow))
+
+
+@enrutador.post(
+    _RUTA_SINCRONIZACION,
+    response_model=CambiosDeLasTareasEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO},
+)
+def sincronizar_tareas(
+    id_workflow: int, sesion: Session = Depends(obtener_sesion)
+) -> CambiosDeLasTareasEsquema:
+    """Sincroniza las tareas no completadas del workflow con sus pasos actuales y
+    devuelve lo que ha cambiado (mismo formato que la consulta). Cada paso sin
+    subtarea vinculada da una subtarea pendiente, sin persona ni prioridad, con su
+    nombre y una copia de sus comentarios, que se muestra en la posición del paso; cada
+    subtarea vinculada toma el nombre actual de su paso. Repetirlo no cambia nada (la
+    lista vuelve vacía). 404 si el workflow no existe."""
+    caso = SincronizarTareas(_repositorio(sesion), RepositorioTareasSqlAlchemy(sesion))
+    return _cambios_a_esquema(caso.ejecutar(id_workflow))

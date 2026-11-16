@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 
 from gestor_tareas.aplicacion.comentario.anadir_comentario import (
@@ -11,6 +11,7 @@ from gestor_tareas.dominio.tarea.entidades import (
     Subtarea,
     Tarea,
 )
+from gestor_tareas.dominio.workflow.entidades import PasoWorkflow
 from gestor_tareas.dominio.workflow.errores import workflow_no_asignable
 from gestor_tareas.dominio.workflow.repositorio import RepositorioWorkflows
 
@@ -59,15 +60,21 @@ class WorkflowPedido:
         if anterior == self._workflow.id:
             return []
         pasos = sorted(self._workflow.pasos, key=lambda paso: paso.numero or 0)
-        copia = instante_de_comentario(self._reloj)
-        return [
-            Subtarea(
-                nombre=paso.nombre,
-                paso_id=paso.id,
-                comentarios_iniciales=[
-                    ComentarioInicial(texto=texto, creado=copia)
-                    for texto in paso.comentarios_para_copiar
-                ],
-            )
-            for paso in pasos
-        ]
+        return subtareas_de_pasos(pasos, instante_de_comentario(self._reloj))
+
+
+def subtareas_de_pasos(pasos: Iterable[PasoWorkflow], copia: datetime) -> list[Subtarea]:
+    """Una subtarea pendiente, sin persona ni prioridad, por cada paso y en ese orden:
+    con el nombre del paso, vinculada a él y con una copia de sus comentarios
+    (``comentarios_para_copiar``) en su orden, fechados en ``copia`` y sin editar."""
+    return [
+        Subtarea(
+            nombre=paso.nombre,
+            paso_id=paso.id,
+            comentarios_iniciales=[
+                ComentarioInicial(texto=texto, creado=copia)
+                for texto in paso.comentarios_para_copiar
+            ],
+        )
+        for paso in pasos
+    ]

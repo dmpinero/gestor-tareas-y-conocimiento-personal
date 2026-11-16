@@ -32,6 +32,7 @@ def test_la_api_expone_salud_tareas_catalogos_workflows_y_grupos_de_estados_bajo
         "/api/v1/workflows/{id_workflow}/pasos/{id_paso}/comentarios",
         "/api/v1/workflows/{id_workflow}/pasos/{id_paso}/comentarios/{id_comentario}",
         "/api/v1/workflows/{id_workflow}/orden",
+        "/api/v1/workflows/{id_workflow}/sincronizacion",
         "/api/v1/grupos-estados",
         "/api/v1/grupos-estados/{id_grupo}",
         "/api/v1/grupos-estados/{id_grupo}/estados",
@@ -60,6 +61,7 @@ def test_la_api_publica_los_metodos_de_cada_ruta_nueva_o_cambiada() -> None:
     assert set(rutas[f"{workflows}/{{id_workflow}}/pasos"]) == {"post"}
     assert set(rutas[f"{workflows}/{{id_workflow}}/pasos/{{id_paso}}"]) == {"put", "delete"}
     assert set(rutas[f"{workflows}/{{id_workflow}}/orden"]) == {"put"}
+    assert set(rutas[f"{workflows}/{{id_workflow}}/sincronizacion"]) == {"get", "post"}
 
 
 def test_las_operaciones_de_los_pasos_devuelven_el_workflow_completo() -> None:

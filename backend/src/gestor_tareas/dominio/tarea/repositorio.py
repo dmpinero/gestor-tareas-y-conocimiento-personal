@@ -1,7 +1,12 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from gestor_tareas.dominio.tarea.entidades import ReferenciaEstado, Subtarea, Tarea
+from gestor_tareas.dominio.tarea.entidades import (
+    ReferenciaEstado,
+    Subtarea,
+    SubtareasSincronizadas,
+    Tarea,
+)
 
 
 class RepositorioTareas(Protocol):
@@ -119,4 +124,26 @@ class RepositorioTareas(Protocol):
     def eliminar_subtarea(self, id_tarea: int, id_subtarea: int) -> Tarea | None:
         """Borra la subtarea y devuelve la tarea, o ``None`` si la tarea no tiene
         una subtarea con ese id (como en ``cambiar_resuelta_subtarea``)."""
+        ...
+
+    def listar_abiertas_de_workflow(
+        self, id_workflow: int, para_modificar: bool = False
+    ) -> list[Tarea]:
+        """Las tareas no completadas con ese workflow, por id ascendente.
+
+        Con ``para_modificar``, la lectura ve lo último confirmado e impide que otra
+        petición cambie o borre esas tareas o sus subtareas hasta que termine la
+        transacción de quien lee, que debe guardar los cambios con
+        ``sincronizar_subtareas``. No confirma.
+        """
+        ...
+
+    def sincronizar_subtareas(self, cambios: Sequence[SubtareasSincronizadas]) -> None:
+        """Guarda en una sola transacción los cambios de las subtareas de cada tarea,
+        leídas antes con ``listar_abiertas_de_workflow(..., para_modificar=True)``, y
+        confirma (también sin cambios, para liberar los bloqueos).
+
+        Las subtareas nuevas se guardan como en ``actualizar``; las renombradas solo
+        cambian de nombre. El resto de datos de las tareas no cambia.
+        """
         ...
