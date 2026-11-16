@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 
 import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
 import type { TipoRelacion } from '@/composables/useTareasRelacionadas'
+import { proveerBorradores, useConfirmarDescarte } from '@/composables/useConfirmarDescarte'
 import {
   CLASE_PILDORA,
   PILDORA_COMPLETADA,
@@ -20,6 +21,7 @@ import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
+import DialogoDescartarCambios from '@/componentes/compartido/DialogoDescartarCambios.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import SubtareasTarea from '@/componentes/compartido/SubtareasTarea.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
@@ -42,8 +44,16 @@ import {
 // mientras `editando` sea cierto, la columna de los datos muestra el slot
 // `edicion` (el formulario, que pone quien la usa) y los comentarios siguen a
 // la vista. Las zonas (cabecera, tarjetas de campos, subtareas y comentarios)
-// son superficies que destacan sobre el lienzo de la modal.
-const props = defineProps<{ tarea: Tarea | null; error?: string | null; editando?: boolean }>()
+// son superficies que destacan sobre el lienzo de la modal. Si al cerrarla hay
+// cambios sin guardar (`hayCambios`, el formulario de quien la usa, o un
+// comentario o una subtarea a medio escribir), pide confirmación antes de
+// emitir `cerrar`.
+const props = defineProps<{
+  tarea: Tarea | null
+  error?: string | null
+  editando?: boolean
+  hayCambios?: boolean
+}>()
 const emit = defineEmits<{ cerrar: []; eliminar: []; editar: [] }>()
 
 // Se conserva la última tarea mostrada para que el contenido no desaparezca
@@ -177,8 +187,12 @@ const CLASE_TARJETA = 'bg-card text-card-foreground rounded-xl border p-4 shadow
 const CLASE_TITULO_TARJETA =
   'text-muted-foreground mb-3 text-xs font-semibold tracking-wide uppercase'
 
+const hayBorradores = proveerBorradores()
+const descarte = useConfirmarDescarte(() => (props.hayCambios ?? false) || hayBorradores())
+const { confirmando: confirmandoDescarte } = descarte
+
 function alCambiarApertura(abierta: boolean): void {
-  if (!abierta) emit('cerrar')
+  if (!abierta) descarte.pedirCierre(() => emit('cerrar'))
 }
 </script>
 
@@ -405,4 +419,11 @@ function alCambiarApertura(abierta: boolean): void {
       </DialogFooter>
     </DialogContent>
   </Dialog>
+
+  <DialogoDescartarCambios
+    :abierto="confirmandoDescarte"
+    @update:abierto="descarte.alCambiarConfirmacion"
+    @descartar="descarte.descartar"
+    @cierre-foco="descarte.alDevolverFoco"
+  />
 </template>

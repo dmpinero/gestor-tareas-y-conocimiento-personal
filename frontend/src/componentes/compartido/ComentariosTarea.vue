@@ -20,6 +20,7 @@ import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 import { clienteApi, ErrorApi } from '@/api/cliente'
 import { Button } from '@/componentes/ui/button'
 import EditorComentario from '@/componentes/compartido/EditorComentario.vue'
+import { registrarBorrador } from '@/composables/useConfirmarDescarte'
 import {
   agruparComentariosPorDia,
   formatearEdicionComentario,
@@ -137,6 +138,8 @@ async function enviar(): Promise<void> {
 // abierta a la vez; abrir otra descarta la anterior.
 const idEditando = ref<number | null>(null)
 const textoEdicion = ref('')
+// Texto del comentario al abrir su edición, para saber si se ha cambiado.
+let textoAntesDeEditar = ''
 const longitudEdicion = computed(() => [...textoVisible(textoEdicion.value)].length)
 const confirmandoEdicion = ref(false)
 const idConfirmandoEliminar = ref<number | null>(null)
@@ -178,7 +181,16 @@ function abrirEdicion(comentario: ComentarioMostrado): void {
   idEditando.value = comentario.id
   // El editor se enfoca solo al crearse (`autoenfoque`).
   textoEdicion.value = htmlComentarioEditable(comentario.texto)
+  textoAntesDeEditar = textoEdicion.value
 }
+
+// Si la modal que lo contiene se cierra, se perdería el comentario a medio
+// escribir o la edición cambiada: la modal pide confirmación.
+registrarBorrador(
+  () =>
+    textoVisible(texto.value) !== '' ||
+    (idEditando.value !== null && textoEdicion.value !== textoAntesDeEditar),
+)
 
 async function cancelarEdicion(id: number): Promise<void> {
   cerrarAcciones()

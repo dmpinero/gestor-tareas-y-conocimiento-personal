@@ -1,3 +1,4 @@
+import type { Editor } from '@tiptap/vue-3'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -6,6 +7,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { clienteApi } from '@/api/cliente'
 import type { Tarea } from '@/api/tipos'
 import DetalleTarea from '../DetalleTarea.vue'
+import EditorComentario from '../EditorComentario.vue'
 
 // Los comentarios (columna derecha) se cargan desde la API; las subtareas usan
 // el almacén de tareas.
@@ -487,6 +489,192 @@ describe('DetalleTarea', () => {
       expect(
         [...modal().querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Editar'),
       ).toBe(false)
+    })
+  })
+
+  describe('avisar antes de descartar los cambios', () => {
+    const SUBTAREA = {
+      id: 30,
+      nombre: 'Revisar datos',
+      asignado: null,
+      prioridad: null,
+      resuelta: false,
+      comentarios: 0,
+    }
+    const CON_SUBTAREA: Tarea = { ...TAREA_SIN_TIPO, subtareas: [SUBTAREA] }
+    const COMENTARIO = {
+      id: 5,
+      texto: '<p>Primer comentario</p>',
+      creado: '2026-11-18T10:00:00Z',
+      editado: null,
+    }
+
+    function confirmacionDescarte(): HTMLElement | null {
+      return document.body.querySelector<HTMLElement>('[role="alertdialog"]')
+    }
+
+    function botonEn(contenedor: HTMLElement, texto: string): HTMLButtonElement {
+      const encontrado = [...contenedor.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === texto,
+      )
+      if (!encontrado) throw new Error(`No se encontró el botón "${texto}"`)
+      return encontrado
+    }
+
+    async function pulsarEn(contenedor: HTMLElement, texto: string): Promise<void> {
+      botonEn(contenedor, texto).click()
+      await flushPromises()
+    }
+
+    // reka-ui escucha el clic fuera tras un ciclo del bucle de eventos.
+    async function pulsarFuera(): Promise<void> {
+      await new Promise((resolver) => setTimeout(resolver, 0))
+      const fondo = document.body.querySelector<HTMLElement>('[data-slot="dialog-overlay"]')
+      if (!fondo) throw new Error('No se encontró el fondo de la modal')
+      fondo.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+      await flushPromises()
+    }
+
+    // ProseMirror no admite escribir en jsdom: se fija el contenido con el
+    // editor que expone EditorComentario, lo que dispara su v-model.
+    async function escribirEnEditor(envoltorio: VueWrapper, etiqueta: string, html: string) {
+      const editor = envoltorio
+        .findAllComponents(EditorComentario)
+        .find((componente) => componente.props('etiqueta') === etiqueta)
+      if (!editor) throw new Error(`No hay editor «${etiqueta}»`)
+      ;(editor.vm as unknown as { editor: Editor }).editor.commands.setContent(html, {
+        emitUpdate: true,
+      })
+      await flushPromises()
+    }
+
+    function campoPorEtiqueta(etiqueta: string): HTMLInputElement {
+      const etiquetaCampo = [...modal().querySelectorAll('label')].find(
+        (l) => l.textContent?.trim() === etiqueta,
+      )
+      const campo = etiquetaCampo && document.getElementById(etiquetaCampo.htmlFor)
+      if (!campo) throw new Error(`No hay campo «${etiqueta}»`)
+      return campo as HTMLInputElement
+    }
+
+    async function escribirCampo(etiqueta: string, valor: string): Promise<void> {
+      const campo = campoPorEtiqueta(etiqueta)
+      campo.value = valor
+      campo.dispatchEvent(new Event('input'))
+      await flushPromises()
+    }
+
+    it('con un comentario a medio escribir, Escape pide confirmación y no cierra', async () => {
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await escribirEnEditor(envoltorio, 'Escribe un comentario', '<p>Borrador</p>')
+
+      modal().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await flushPromises()
+
+      const confirmacion = confirmacionDescarte()
+      expect(confirmacion?.textContent).toContain('¿Descartar los cambios?')
+      expect(confirmacion?.textContent).toContain('Los datos que has introducido se perderán.')
+      expect(envoltorio.emitted('cerrar')).toBeUndefined()
+    })
+
+    it('"Seguir editando" conserva el comentario y "Descartar" cierra', async () => {
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await escribirEnEditor(envoltorio, 'Escribe un comentario', '<p>Borrador</p>')
+      await pulsarFuera()
+
+      await pulsarEn(confirmacionDescarte()!, 'Seguir editando')
+      expect(confirmacionDescarte()).toBeNull()
+      expect(envoltorio.emitted('cerrar')).toBeUndefined()
+      expect(modal().textContent).toContain('Borrador')
+      expect(modal().contains(document.activeElement)).toBe(true)
+
+      botonCerrar().click()
+      await flushPromises()
+      await pulsarEn(confirmacionDescarte()!, 'Descartar')
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+    })
+
+    it('con el formulario de edición cambiado (`hayCambios`), "Cerrar" pide confirmación', async () => {
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await envoltorio.setProps({ editando: true, hayCambios: true })
+
+      botonCerrar().click()
+      await flushPromises()
+
+      expect(confirmacionDescarte()).not.toBeNull()
+      expect(envoltorio.emitted('cerrar')).toBeUndefined()
+    })
+
+    it('editando sin cambios, "Cerrar" cierra sin preguntar', async () => {
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await envoltorio.setProps({ editando: true, hayCambios: false })
+
+      botonCerrar().click()
+      await flushPromises()
+
+      expect(confirmacionDescarte()).toBeNull()
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+    })
+
+    it('con una subtarea nueva a medio escribir, el clic fuera pide confirmación', async () => {
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await pulsarEn(modal(), 'Añadir subtarea')
+      await escribirCampo('Nombre de la subtarea', 'Llamar')
+
+      await pulsarFuera()
+
+      expect(confirmacionDescarte()).not.toBeNull()
+      expect(envoltorio.emitted('cerrar')).toBeUndefined()
+      expect(campoPorEtiqueta('Nombre de la subtarea').value).toBe('Llamar')
+    })
+
+    it('con la fila de alta de subtarea abierta pero vacía, el clic fuera cierra sin preguntar', async () => {
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await pulsarEn(modal(), 'Añadir subtarea')
+
+      await pulsarFuera()
+
+      expect(confirmacionDescarte()).toBeNull()
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+    })
+
+    it('con una subtarea en edición cambiada, "Cerrar" pide confirmación; sin cambios, no', async () => {
+      const envoltorio = await montar(CON_SUBTAREA)
+      const editar = modal().querySelector<HTMLButtonElement>(
+        'button[aria-label="Editar subtarea Revisar datos"]',
+      )!
+      editar.click()
+      await flushPromises()
+
+      botonCerrar().click()
+      await flushPromises()
+      expect(confirmacionDescarte()).toBeNull()
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+
+      await escribirCampo('Nuevo nombre de la subtarea Revisar datos', 'Revisar todo')
+      botonCerrar().click()
+      await flushPromises()
+      expect(confirmacionDescarte()).not.toBeNull()
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+    })
+
+    it('con un comentario en edición cambiado, el clic fuera pide confirmación; sin cambios, no', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValueOnce([COMENTARIO])
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      const editar = modal().querySelector<HTMLButtonElement>(
+        'button[aria-label^="Editar comentario "]',
+      )!
+      editar.click()
+      await flushPromises()
+
+      await pulsarFuera()
+      expect(confirmacionDescarte()).toBeNull()
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+
+      await escribirEnEditor(envoltorio, 'Nuevo texto del comentario', '<p>Cambiado</p>')
+      await pulsarFuera()
+      expect(confirmacionDescarte()).not.toBeNull()
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
     })
   })
 })

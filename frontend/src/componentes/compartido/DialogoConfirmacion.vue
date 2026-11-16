@@ -19,6 +19,7 @@ import { Button } from '@/componentes/ui/button'
 // quien la usa pueda llevarlo a otro sitio (`preventDefault`) si el elemento
 // que la abrió ya no existe. El contenido por defecto (slot) va bajo la
 // descripción, p. ej. para elegir una opción antes de confirmar.
+// `textoCancelar` cambia el texto de "Cancelar".
 const props = defineProps<{
   abierto: boolean
   titulo: string
@@ -26,6 +27,7 @@ const props = defineProps<{
   textoConfirmar: string
   procesando?: boolean
   error?: string | null
+  textoCancelar?: string
 }>()
 const emit = defineEmits<{
   'update:abierto': [abierto: boolean]
@@ -61,7 +63,7 @@ const emit = defineEmits<{
         <p v-if="props.error" class="text-destructive text-sm" role="alert">{{ props.error }}</p>
         <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <AlertDialogCancel as-child>
-            <Button type="button" variant="outline">Cancelar</Button>
+            <Button type="button" variant="outline">{{ props.textoCancelar ?? 'Cancelar' }}</Button>
           </AlertDialogCancel>
           <Button
             type="button"

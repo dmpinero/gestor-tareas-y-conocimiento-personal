@@ -22,6 +22,7 @@ import {
   MAX_NOMBRE_SUBTAREA,
   validarNombreSubtarea,
 } from '@/lib/subtareas'
+import { registrarBorrador } from '@/composables/useConfirmarDescarte'
 import { useTiendaTareas } from '@/stores/tareas'
 
 // Subtareas de una tarea: listado, alta en línea, edición en línea (con
@@ -308,6 +309,29 @@ async function confirmarEdicion(subtarea: Subtarea): Promise<void> {
     guardandoEdicion.value = false
   }
 }
+
+// --- Cambios sin guardar ---------------------------------------------------
+// Si la modal que lo contiene se cierra, se perdería la subtarea a medio
+// escribir o la edición cambiada: la modal pide confirmación.
+function textoCampo(valor: string | number | null | undefined): string {
+  return String(valor ?? '').trim()
+}
+
+registrarBorrador(() => {
+  const altaEscrita =
+    anadiendo.value &&
+    [formulario.nombre, formulario.asignado, formulario.prioridad].some(
+      (valor) => textoCampo(valor) !== '',
+    )
+  if (altaEscrita) return true
+  const original = props.tarea.subtareas.find((subtarea) => subtarea.id === idEditando.value)
+  if (!original) return false
+  return (
+    textoCampo(edicion.nombre) !== textoCampo(original.nombre) ||
+    textoCampo(edicion.asignado) !== textoCampo(original.asignado) ||
+    textoCampo(edicion.prioridad) !== textoCampo(original.prioridad)
+  )
+})
 </script>
 
 <template>
