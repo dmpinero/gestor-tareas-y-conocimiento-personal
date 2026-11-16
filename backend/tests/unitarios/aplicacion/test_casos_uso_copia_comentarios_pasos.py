@@ -139,3 +139,20 @@ def test_cambiar_los_comentarios_del_paso_despues_no_cambia_las_copias() -> None
     EliminarComentarioPaso(entorno.comentarios).ejecutar(id_workflow, id_paso, dos.id)
 
     assert entorno.copiados(tarea)["Contacto"] == _copias("Uno", "Dos")
+
+
+def test_cada_subtarea_que_nace_de_un_paso_guarda_el_paso_del_que_viene() -> None:
+    entorno = _Entorno()
+    tarea = entorno.crear("Ventas")
+
+    editada = entorno.editar(tarea, "Compras")
+
+    pasos = {
+        nombre: entorno.workflows.paso(workflow, nombre).id
+        for workflow, nombre in (
+            ("Ventas", "Contacto"),
+            ("Ventas", "Cierre"),
+            ("Compras", "Pedido"),
+        )
+    }
+    assert {s.nombre: s.paso_id for s in editada.subtareas} == pasos

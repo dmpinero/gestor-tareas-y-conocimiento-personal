@@ -119,7 +119,11 @@ class ComentarioSubtareaModelo(Base):
 
 class SubtareaModelo(Base):
     """Subtarea de una tarea. Borrar la tarea borra sus subtareas; borrar una persona
-    asignada a alguna lo impide la clave ajena (RESTRICT por defecto)."""
+    asignada a alguna lo impide la clave ajena (RESTRICT por defecto).
+
+    ``paso_id`` es el paso del workflow del que nace, o NULL si se añadió a mano:
+    borrar el paso (o su workflow) conserva la subtarea y la deja sin paso.
+    """
 
     __tablename__ = "subtareas"
     __table_args__ = (
@@ -139,6 +143,15 @@ class SubtareaModelo(Base):
         Boolean, nullable=False, default=False, server_default=false()
     )
     asignado: Mapped[PersonaModelo | None] = relationship(lazy="selectin")
+    paso_id: Mapped[int | None] = mapped_column(
+        ForeignKey("pasos_workflow.id", name="fk_subtareas_paso", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Solo para leer el workflow y el número del paso, que deciden el orden de la
+    # subtarea en su tarea; "selectin" los carga para todo un listado en una consulta.
+    paso: Mapped["PasoWorkflowModelo | None"] = relationship(
+        lazy="selectin", viewonly=True, foreign_keys=[paso_id]
+    )
     # Solo para dar de alta los comentarios con los que nace la subtarea en la misma
     # transacción ("write_only": nunca se cargan). Al borrar la subtarea los borra el
     # ON DELETE CASCADE.
@@ -337,8 +350,9 @@ class TareaModelo(Base):
     completada: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
-    # Subtareas por orden de alta. Al borrar la tarea las borra el ON DELETE CASCADE,
-    # y con ellas sus comentarios.
+    # Subtareas por orden de alta (el repositorio las ordena después por los pasos de
+    # su workflow). Al borrar la tarea las borra el ON DELETE CASCADE, y con ellas sus
+    # comentarios.
     subtareas: Mapped[list[SubtareaModelo]] = relationship(
         lazy="selectin",
         cascade="all, delete-orphan",

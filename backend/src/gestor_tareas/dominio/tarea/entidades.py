@@ -75,6 +75,10 @@ class Subtarea:
     calcula el repositorio y se ignora al guardarla). ``comentarios_iniciales`` son
     los comentarios que recibe al darla de alta, en ese orden; solo se usan al
     guardar una subtarea nueva (al leerla va vacío).
+
+    ``paso_id`` es el id del paso del workflow del que nace la subtarea, o ``None``
+    si se añadió a mano o su paso ya no existe. Se fija al darla de alta y no cambia
+    al renombrar el paso ni la subtarea.
     """
 
     nombre: str
@@ -84,6 +88,7 @@ class Subtarea:
     comentarios: int = 0
     id: int | None = None
     comentarios_iniciales: list[ComentarioInicial] = field(default_factory=list)
+    paso_id: int | None = None
 
 
 @dataclass
@@ -100,10 +105,13 @@ class Tarea:
 
     ``completada`` indica si la tarea está hecha; una tarea nueva está pendiente.
 
-    ``subtareas`` son las subtareas de la tarea por orden de alta. Solo cambian con
-    sus propias operaciones y al asignar a la tarea un workflow distinto del que
-    tenía, que le añade al final una subtarea por cada paso del workflow, en su
-    orden. El tipo de la tarea no añade subtareas.
+    ``subtareas`` son las subtareas de la tarea: primero las que nacen de un paso
+    de su workflow, en el orden actual de esos pasos, y después las demás (añadidas
+    a mano, de un paso eliminado o de otro workflow) por orden de alta. Solo cambian
+    con sus propias operaciones y al asignar a la tarea un workflow distinto del que
+    tenía, que le añade una subtarea por cada paso del workflow; reordenar o
+    eliminar los pasos del workflow cambia su orden. El tipo de la tarea no añade
+    subtareas.
 
     ``workflow`` es el workflow de la tarea (opcional).
 

@@ -115,7 +115,8 @@ def crear(
 
     Con `workflow_id`, la tarea recibe en `subtareas` una subtarea por cada paso
     vigente del workflow, en su orden, pendiente y sin persona ni prioridad; son
-    subtareas como cualquier otra, y cambiar el workflow después no las altera. 422
+    subtareas como cualquier otra (renombrar o añadir pasos después no las altera),
+    pero se muestran en el orden actual de los pasos del workflow de la tarea. 422
     si el workflow no existe. El tipo de la tarea no le añade subtareas.
 
     Con `grupo_estados_id`, la tarea queda en el primer estado del grupo; 422 si el

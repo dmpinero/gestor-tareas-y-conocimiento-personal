@@ -51,7 +51,7 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         tipo=TipoTarea(modelo.tipo) if modelo.tipo is not None else None,
         oportunidad=_a_oportunidad(modelo.oportunidad),
         completada=modelo.completada,
-        subtareas=[_a_subtarea(s) for s in sorted(modelo.subtareas, key=lambda s: s.id)],
+        subtareas=[_a_subtarea(s) for s in _ordenar_subtareas(modelo)],
         grupo_estados=(
             ReferenciaGrupoEstados(id=modelo.grupo_estados.id, nombre=modelo.grupo_estados.nombre)
             if modelo.grupo_estados is not None
@@ -70,6 +70,20 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
     )
 
 
+def _ordenar_subtareas(modelo: TareaModelo) -> list[SubtareaModelo]:
+    """Primero las subtareas que nacen de un paso del workflow de la tarea, por el
+    número actual del paso; después las demás (añadidas a mano, de un paso que ya no
+    existe o de otro workflow), por orden de alta."""
+
+    def clave(subtarea: SubtareaModelo) -> tuple[int, int, int]:
+        paso = subtarea.paso
+        if paso is not None and paso.workflow_id == modelo.workflow_id:
+            return (0, paso.numero, subtarea.id)
+        return (1, 0, subtarea.id)
+
+    return sorted(modelo.subtareas, key=clave)
+
+
 def _a_subtarea(modelo: SubtareaModelo) -> Subtarea:
     return Subtarea(
         id=modelo.id,
@@ -78,6 +92,7 @@ def _a_subtarea(modelo: SubtareaModelo) -> Subtarea:
         prioridad=modelo.prioridad,
         resuelta=modelo.resuelta,
         comentarios=modelo.numero_comentarios,
+        paso_id=modelo.paso_id,
     )
 
 
@@ -146,6 +161,7 @@ class RepositorioTareasSqlAlchemy:
             asignado=persona,
             prioridad=subtarea.prioridad,
             resuelta=subtarea.resuelta,
+            paso_id=subtarea.paso_id,
             comentarios=[
                 nuevo_comentario_subtarea(c.texto, c.creado) for c in subtarea.comentarios_iniciales
             ],

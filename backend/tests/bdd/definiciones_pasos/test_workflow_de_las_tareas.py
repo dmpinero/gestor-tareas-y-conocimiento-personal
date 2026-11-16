@@ -18,7 +18,7 @@ _DATOS = {"descripcion": "d", "fecha_creacion": "2026-11-10T09:00:00"}
 
 _CLAVES_SUBTAREA = {"id", "nombre", "asignado", "prioridad", "resuelta", "comentarios"}
 
-# (nombre, resuelta) de cada subtarea, en orden de alta.
+# (nombre, resuelta) de cada subtarea, en el orden en que se muestra.
 Subtarea = tuple[str, bool]
 
 
@@ -58,25 +58,38 @@ def _crear_workflow(cliente: TestClient, nombre: str, pasos: list[str]) -> None:
 
 
 def _subtareas(tarea: dict) -> list[Subtarea]:
-    """Subtareas de la respuesta: sin persona ni prioridad, sin comentarios y por id."""
+    """Subtareas de la respuesta, en su orden: sin persona ni prioridad y sin
+    comentarios."""
     subtareas = tarea["subtareas"]
     assert all(set(s) == _CLAVES_SUBTAREA for s in subtareas)
     assert all(s["comentarios"] == 0 for s in subtareas)
     assert all(s["asignado"] is None and s["prioridad"] is None for s in subtareas)
     ids = [s["id"] for s in subtareas]
-    assert ids == sorted(set(ids))
+    assert len(ids) == len(set(ids))
     return [(s["nombre"], s["resuelta"]) for s in subtareas]
 
 
 def _subtareas_guardadas(id_tarea: int) -> list[Subtarea]:
+    """Subtareas guardadas de la tarea, ordenadas por nombre y estado: el orden en que
+    se muestran no es el de las filas, así que solo se compara qué hay guardado."""
     sesion = FabricaSesiones()
     try:
-        consulta = (
-            select(SubtareaModelo.nombre, SubtareaModelo.resuelta)
-            .where(SubtareaModelo.tarea_id == id_tarea)
-            .order_by(SubtareaModelo.id)
+        consulta = select(SubtareaModelo.nombre, SubtareaModelo.resuelta).where(
+            SubtareaModelo.tarea_id == id_tarea
         )
-        return [(fila.nombre, fila.resuelta) for fila in sesion.execute(consulta)]
+        return sorted((fila.nombre, fila.resuelta) for fila in sesion.execute(consulta))
+    finally:
+        sesion.close()
+
+
+def _pasos_guardados(id_tarea: int) -> dict[str, int | None]:
+    """Paso del que viene cada subtarea guardada de la tarea, por nombre."""
+    sesion = FabricaSesiones()
+    try:
+        consulta = select(SubtareaModelo.nombre, SubtareaModelo.paso_id).where(
+            SubtareaModelo.tarea_id == id_tarea
+        )
+        return {fila.nombre: fila.paso_id for fila in sesion.execute(consulta)}
     finally:
         sesion.close()
 
@@ -156,6 +169,7 @@ def existe_el_workflow_sin_pasos(cliente: TestClient, nombre: str) -> None:
 
 
 @given(parsers.parse('que reordeno los pasos del workflow "{nombre}" como "{pasos}"'))
+@when(parsers.parse('reordeno los pasos del workflow "{nombre}" como "{pasos}"'))
 def reordenar_workflow(cliente: TestClient, nombre: str, pasos: str) -> None:
     workflow = _workflow(cliente, nombre)
     por_nombre = {p["nombre"]: p["id"] for p in workflow["pasos"]}
@@ -279,6 +293,28 @@ def anadir_paso(cliente: TestClient, paso: str, nombre: str) -> None:
     assert cliente.post(ruta, json={"nombre": paso}).status_code == 201
 
 
+def _paso(cliente: TestClient, workflow: str, paso: str) -> str:
+    datos = _workflow(cliente, workflow)
+    id_paso = next(p["id"] for p in datos["pasos"] if p["nombre"] == paso)
+    return f"{_WORKFLOWS}/{datos['id']}/pasos/{id_paso}"
+
+
+@when(parsers.parse('elimino el paso "{paso}" del workflow "{workflow}"'))
+def eliminar_paso(cliente: TestClient, paso: str, workflow: str) -> None:
+    assert cliente.delete(_paso(cliente, workflow, paso)).status_code == 200
+
+
+@when(parsers.parse('renombro el paso "{paso}" del workflow "{workflow}" a "{nuevo}"'))
+def renombrar_paso(cliente: TestClient, paso: str, workflow: str, nuevo: str) -> None:
+    assert cliente.put(_paso(cliente, workflow, paso), json={"nombre": nuevo}).status_code == 200
+
+
+@when(parsers.parse('renombro la subtarea "{subtarea}" de "{tarea}" a "{nuevo}"'))
+def renombrar_subtarea(cliente: TestClient, subtarea: str, tarea: str, nuevo: str) -> None:
+    ruta = _ruta_subtarea(cliente, tarea, subtarea)
+    assert cliente.put(ruta, json={"nombre": nuevo}).status_code == 200
+
+
 # --- Entonces ---------------------------------------------------------------
 
 
@@ -301,7 +337,7 @@ def responde_con_workflow_y_pendientes(
     assert tarea["nombre"] == nombre
     _comprobar_workflow(tarea, workflow, cliente)
     assert _subtareas(tarea) == _pendientes(subtareas)
-    assert _subtareas_guardadas(tarea["id"]) == _pendientes(subtareas)
+    assert _subtareas_guardadas(tarea["id"]) == sorted(_pendientes(subtareas))
 
 
 @then(
@@ -323,7 +359,7 @@ def responde_con_workflow_y_subtareas(
     assert tarea["nombre"] == nombre
     _comprobar_workflow(tarea, workflow, cliente)
     assert _subtareas(tarea) == _esperadas(subtareas)
-    assert _subtareas_guardadas(tarea["id"]) == _esperadas(subtareas)
+    assert _subtareas_guardadas(tarea["id"]) == sorted(_esperadas(subtareas))
 
 
 @then(
@@ -370,7 +406,7 @@ def listado_con_workflow_y_pendientes(
     tarea = _tarea(cliente, nombre)
     _comprobar_workflow(tarea, workflow, cliente)
     assert _subtareas(tarea) == _pendientes(subtareas)
-    assert _subtareas_guardadas(tarea["id"]) == _pendientes(subtareas)
+    assert _subtareas_guardadas(tarea["id"]) == sorted(_pendientes(subtareas))
 
 
 @then(
@@ -385,7 +421,7 @@ def listado_con_workflow_y_subtareas(
     tarea = _tarea(cliente, nombre)
     _comprobar_workflow(tarea, workflow, cliente)
     assert _subtareas(tarea) == _esperadas(subtareas)
-    assert _subtareas_guardadas(tarea["id"]) == _esperadas(subtareas)
+    assert _subtareas_guardadas(tarea["id"]) == sorted(_esperadas(subtareas))
 
 
 @then(
@@ -418,7 +454,7 @@ def listado_sin_workflow_con_pendientes(cliente: TestClient, nombre: str, subtar
     tarea = _tarea(cliente, nombre)
     _comprobar_workflow(tarea, None, cliente)
     assert _subtareas(tarea) == _pendientes(subtareas)
-    assert _subtareas_guardadas(tarea["id"]) == _pendientes(subtareas)
+    assert _subtareas_guardadas(tarea["id"]) == sorted(_pendientes(subtareas))
 
 
 @then("la API responde 422 porque el workflow no existe")
@@ -449,3 +485,27 @@ def hay_tareas(total: int) -> None:
         assert sesion.scalar(select(func.count()).select_from(TareaModelo)) == total
     finally:
         sesion.close()
+
+
+@then(parsers.parse('la tarea "{nombre}" se lee con las subtareas "{subtareas}"'))
+def se_lee_con_las_subtareas(cliente: TestClient, nombre: str, subtareas: str) -> None:
+    tarea = _tarea(cliente, nombre)
+    assert _subtareas(tarea) == _esperadas(subtareas)
+    assert _subtareas_guardadas(tarea["id"]) == sorted(_esperadas(subtareas))
+
+
+@then(
+    parsers.parse(
+        'las subtareas "{subtareas}" de "{tarea}" están vinculadas a sus pasos del workflow '
+        '"{workflow}"'
+    )
+)
+def vinculadas_a_sus_pasos(cliente: TestClient, subtareas: str, tarea: str, workflow: str) -> None:
+    pasos = {p["nombre"]: p["id"] for p in _workflow(cliente, workflow)["pasos"]}
+    guardados = _pasos_guardados(_tarea(cliente, tarea)["id"])
+    assert {n: guardados[n] for n in _lista(subtareas)} == {n: pasos[n] for n in _lista(subtareas)}
+
+
+@then(parsers.parse('la subtarea "{subtarea}" de "{tarea}" no está vinculada a ningún paso'))
+def sin_vinculo(cliente: TestClient, subtarea: str, tarea: str) -> None:
+    assert _pasos_guardados(_tarea(cliente, tarea)["id"])[subtarea] is None
