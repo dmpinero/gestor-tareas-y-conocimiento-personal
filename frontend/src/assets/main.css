@@ -100,6 +100,7 @@
 
 @theme inline {
   --animate-campana: campana 1.8s ease-in-out infinite;
+  --animate-campana-urgente: campana 0.9s ease-in-out infinite;
   --color-lienzo: var(--lienzo);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
