@@ -164,6 +164,34 @@ export interface Workflow {
   pasos: PasoWorkflow[]
 }
 
+/** Subtarea vinculada a un paso cuyo nombre ya no es el del paso. */
+export interface RenombreSubtarea {
+  /** Id de la subtarea. */
+  id: number
+  nombre_actual: string
+  /** Nombre actual del paso. */
+  nombre_nuevo: string
+}
+
+/** Cambios de una tarea al sincronizarla con su workflow. */
+export interface CambiosDeTarea {
+  /** Id de la tarea. */
+  id: number
+  nombre: string
+  /** Nombres de los pasos sin subtarea vinculada, por número. */
+  subtareas_a_anadir: string[]
+  subtareas_a_renombrar: RenombreSubtarea[]
+}
+
+/**
+ * Respuesta de `GET /workflows/{id}/sincronizacion` (cambios pendientes, sin
+ * modificar nada) y de `POST /workflows/{id}/sincronizacion` (cambios
+ * aplicados). Solo incluye las tareas no completadas del workflow que cambian.
+ */
+export interface CambiosDeLasTareas {
+  tareas: CambiosDeTarea[]
+}
+
 /** Referencia a otro recurso por su id y su nombre. */
 export interface ReferenciaNombre {
   id: number

@@ -11,6 +11,7 @@ from gestor_tareas.dominio.tarea.entidades import (
     ReferenciaGrupoEstados,
     ReferenciaWorkflow,
     Subtarea,
+    SubtareasSincronizadas,
     Tarea,
     TipoTarea,
 )
@@ -351,3 +352,48 @@ class RepositorioTareasSqlAlchemy:
             self._sesion.delete(subtarea)
             self._sesion.commit()
         return self._tarea_tras_confirmar(id_tarea)
+
+    def listar_abiertas_de_workflow(
+        self, id_workflow: int, para_modificar: bool = False
+    ) -> list[Tarea]:
+        consulta = (
+            select(TareaModelo)
+            .where(TareaModelo.workflow_id == id_workflow, TareaModelo.completada.is_(False))
+            .order_by(TareaModelo.id)
+        )
+        if not para_modificar:
+            return [_a_entidad(m) for m in self._sesion.scalars(consulta)]
+        # Sin confirmar: los bloqueos duran hasta que se guarden los cambios. Primero
+        # las tareas y después sus subtareas, en orden de clave primaria: quien
+        # renombra o borra una subtarea a la vez espera (o se le espera) sin cruzarse.
+        with traducir_conflictos(self._sesion):
+            consulta = consulta.with_for_update().execution_options(populate_existing=True)
+            modelos = list(self._sesion.scalars(consulta))
+            if modelos:
+                subtareas = (
+                    select(SubtareaModelo)
+                    .where(SubtareaModelo.tarea_id.in_([m.id for m in modelos]))
+                    .order_by(SubtareaModelo.id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+                self._sesion.scalars(subtareas).all()
+                for modelo in modelos:
+                    # Recarga la lista con lo último confirmado (ya bloqueado).
+                    self._sesion.expire(modelo, ["subtareas"])
+            return [_a_entidad(m) for m in modelos]
+
+    def sincronizar_subtareas(self, cambios: Sequence[SubtareasSincronizadas]) -> None:
+        with traducir_conflictos(self._sesion):
+            for cambio in cambios:
+                modelo = self._sesion.get(TareaModelo, cambio.id_tarea)
+                if modelo is None:
+                    self._sesion.rollback()
+                    raise EntidadNoEncontradaError(f"No existe la tarea con id {cambio.id_tarea}")
+                por_id = {s.id: s for s in modelo.subtareas}
+                for id_subtarea, nombre in cambio.nombres.items():
+                    por_id[id_subtarea].nombre = nombre
+                # Al final de las que ya tiene, en el orden de la lista (como en
+                # ``actualizar``).
+                modelo.subtareas.extend(self._subtarea_nueva(s) for s in cambio.nuevas)
+            self._sesion.commit()

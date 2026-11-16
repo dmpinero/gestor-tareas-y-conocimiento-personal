@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { clienteApi } from '@/api/cliente'
-import type { Workflow } from '@/api/tipos'
+import type { CambiosDeLasTareas, Workflow } from '@/api/tipos'
 
 const RUTA = '/workflows'
 
@@ -114,6 +114,17 @@ export const useTiendaWorkflows = defineStore('workflows', () => {
     if (paso) paso.comentarios = total
   }
 
+  // Las tareas no completadas del workflow no cambian al editar sus pasos: se
+  // ponen al día solo a petición. Ninguna de las dos guarda el error en
+  // `error`: quien las usa decide qué mostrar.
+  function cambiosDeLasTareas(idWorkflow: number): Promise<CambiosDeLasTareas> {
+    return clienteApi.obtener<CambiosDeLasTareas>(`${RUTA}/${idWorkflow}/sincronizacion`)
+  }
+
+  function sincronizarTareas(idWorkflow: number): Promise<CambiosDeLasTareas> {
+    return clienteApi.crear<CambiosDeLasTareas>(`${RUTA}/${idWorkflow}/sincronizacion`, undefined)
+  }
+
   return {
     workflows,
     cargando,
@@ -127,5 +138,7 @@ export const useTiendaWorkflows = defineStore('workflows', () => {
     eliminarPaso,
     reordenarPasos,
     fijarComentariosPaso,
+    cambiosDeLasTareas,
+    sincronizarTareas,
   }
 })

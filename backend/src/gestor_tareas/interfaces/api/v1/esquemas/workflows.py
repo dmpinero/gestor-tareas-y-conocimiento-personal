@@ -78,3 +78,31 @@ class WorkflowSalidaEsquema(BaseModel):
 class WorkflowDeTareaEsquema(BaseModel):
     id: int
     nombre: str
+
+
+class RenombreSubtareaEsquema(BaseModel):
+    id: int = Field(description="Id de la subtarea.")
+    nombre_actual: str
+    nombre_nuevo: str = Field(description="Nombre actual del paso al que está vinculada.")
+
+
+class CambiosDeTareaEsquema(BaseModel):
+    id: int = Field(description="Id de la tarea.")
+    nombre: str = Field(description="Nombre de la tarea.")
+    subtareas_a_anadir: list[str] = Field(
+        description=(
+            "Nombres de los pasos sin subtarea vinculada, por número: cada uno da una "
+            "subtarea pendiente con una copia de los comentarios del paso."
+        )
+    )
+    subtareas_a_renombrar: list[RenombreSubtareaEsquema] = Field(
+        description="Subtareas vinculadas a un paso cuyo nombre ya no es el del paso."
+    )
+
+
+class CambiosDeLasTareasEsquema(BaseModel):
+    tareas: list[CambiosDeTareaEsquema] = Field(
+        description=(
+            "Tareas no completadas del workflow que cambian, por id; vacía si todas están al día."
+        )
+    )

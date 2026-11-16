@@ -19,7 +19,10 @@ import { Button } from '@/componentes/ui/button'
 // quien la usa pueda llevarlo a otro sitio (`preventDefault`) si el elemento
 // que la abrió ya no existe. El contenido por defecto (slot) va bajo la
 // descripción, p. ej. para elegir una opción antes de confirmar.
-// `textoCancelar` cambia el texto de "Cancelar".
+// `textoCancelar` cambia el texto de "Cancelar". Con `textoAlternativa` aparece
+// un tercer botón, entre los otros dos, que emite `alternativa` (tampoco la
+// cierra). `confirmarSinPeligro` muestra "Confirmar" como acción principal y no
+// como destructiva.
 const props = defineProps<{
   abierto: boolean
   titulo: string
@@ -28,10 +31,13 @@ const props = defineProps<{
   procesando?: boolean
   error?: string | null
   textoCancelar?: string
+  textoAlternativa?: string
+  confirmarSinPeligro?: boolean
 }>()
 const emit = defineEmits<{
   'update:abierto': [abierto: boolean]
   confirmar: []
+  alternativa: []
   cierreFoco: [evento: Event]
 }>()
 </script>
@@ -66,8 +72,16 @@ const emit = defineEmits<{
             <Button type="button" variant="outline">{{ props.textoCancelar ?? 'Cancelar' }}</Button>
           </AlertDialogCancel>
           <Button
+            v-if="props.textoAlternativa"
             type="button"
-            variant="destructive"
+            variant="outline"
+            :disabled="props.procesando"
+            @click="emit('alternativa')"
+            >{{ props.textoAlternativa }}</Button
+          >
+          <Button
+            type="button"
+            :variant="props.confirmarSinPeligro ? 'default' : 'destructive'"
             :disabled="props.procesando"
             @click="emit('confirmar')"
             >{{ props.textoConfirmar }}</Button

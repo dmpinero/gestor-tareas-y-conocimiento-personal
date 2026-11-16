@@ -17,6 +17,7 @@ import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vu
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
+import { useSincronizarTareasAlSalir } from '@/composables/useSincronizarTareasAlSalir'
 import { useTiendaWorkflows } from '@/stores/workflows'
 
 // Workflows de Ajustes: cada uno es una secuencia de pasos que se copian como
@@ -30,6 +31,39 @@ const workflows = computed(() => tienda.workflows)
 onMounted(() => {
   void tienda.cargar()
 })
+
+// --- Poner al día las tareas al salir ---------------------------------------
+// Cambiar los pasos de un workflow no altera las subtareas de sus tareas. Al
+// salir de la página se pregunta si se actualizan las tareas sin completar de
+// los workflows cuyos pasos se han cambiado en esta visita, si alguna cambiaría.
+const sincronizacion = useSincronizarTareasAlSalir({
+  consultar: tienda.cambiosDeLasTareas,
+  sincronizar: tienda.sincronizarTareas,
+  nombreDe: (id) => tienda.workflows.find((workflow) => workflow.id === id)?.nombre,
+})
+
+function plural(cantidad: number, singular: string, varios: string): string {
+  return `${cantidad} ${cantidad === 1 ? singular : varios}`
+}
+
+// Una línea por workflow: cuántas tareas cambian y qué se les hará.
+const resumenSincronizacion = computed(() =>
+  sincronizacion.pendientes.value.map(({ idWorkflow, nombre, cambios }) => {
+    const anadir = cambios.tareas.reduce((total, t) => total + t.subtareas_a_anadir.length, 0)
+    const renombrar = cambios.tareas.reduce((total, t) => total + t.subtareas_a_renombrar.length, 0)
+    const que = [
+      anadir > 0 && `${plural(anadir, 'subtarea nueva', 'subtareas nuevas')}`,
+      renombrar > 0 && `${plural(renombrar, 'subtarea renombrada', 'subtareas renombradas')}`,
+    ].filter(Boolean)
+    return {
+      idWorkflow,
+      texto: `${nombre}: ${plural(cambios.tareas.length, 'tarea', 'tareas')} (${que.join(' y ')})`,
+    }
+  }),
+)
+
+const DESCRIPCION_SINCRONIZAR =
+  'Has cambiado los pasos de un workflow. Puedes actualizar también las tareas sin completar que lo usan: los pasos nuevos se añaden como subtareas pendientes y los renombrados cambian el nombre de su subtarea. Las subtareas de los pasos eliminados se conservan.'
 
 function idPasoNuevo(workflow: Workflow): string {
   return `paso-nuevo-${workflow.id}`
@@ -71,7 +105,10 @@ async function anadirPaso(workflow: Workflow): Promise<void> {
   const nombre = (nombresPasoNuevo[workflow.id] ?? '').trim()
   erroresPasoNuevo[workflow.id] = validarNombre(nombre, 'paso')
   if (erroresPasoNuevo[workflow.id]) return
-  if (await tienda.anadirPaso(workflow.id, nombre)) nombresPasoNuevo[workflow.id] = ''
+  if (await tienda.anadirPaso(workflow.id, nombre)) {
+    nombresPasoNuevo[workflow.id] = ''
+    sincronizacion.marcarEditado(workflow.id)
+  }
 }
 
 // --- Renombrar en línea ----------------------------------------------------
@@ -107,7 +144,10 @@ async function guardarPaso(workflow: Workflow, paso: PasoWorkflow): Promise<void
   const nombre = nombreEditando.value.trim()
   errorEdicion.value = validarNombre(nombre, 'paso')
   if (errorEdicion.value) return
-  if (await tienda.renombrarPaso(workflow.id, paso.id, nombre)) edicion.value = null
+  if (await tienda.renombrarPaso(workflow.id, paso.id, nombre)) {
+    edicion.value = null
+    sincronizacion.marcarEditado(workflow.id)
+  }
 }
 
 // --- Comentarios de cada paso ----------------------------------------------
@@ -184,6 +224,7 @@ async function confirmarEliminarWorkflow(): Promise<void> {
   procesando.value = true
   const correcto = await tienda.eliminar(workflow.id)
   procesando.value = false
+  if (correcto) sincronizacion.olvidar(workflow.id)
   await terminarEliminacion(correcto, ID_WORKFLOW_NUEVO)
 }
 
@@ -193,6 +234,7 @@ async function confirmarEliminarPaso(): Promise<void> {
   procesando.value = true
   const correcto = await tienda.eliminarPaso(seleccion.workflow.id, seleccion.paso.id)
   procesando.value = false
+  if (correcto) sincronizacion.marcarEditado(seleccion.workflow.id)
   await terminarEliminacion(correcto, idPasoNuevo(seleccion.workflow))
 }
 
@@ -249,6 +291,7 @@ async function mover(
   const correcto = await tienda.reordenarPasos(workflow.id, ids)
   reordenando.value = false
   if (!correcto) return
+  sincronizacion.marcarEditado(workflow.id)
   const actualizado = tienda.workflows.find((w) => w.id === workflow.id)
   const movido = actualizado?.pasos.find((p) => p.id === paso.id)
   if (!actualizado || !movido) return
@@ -596,5 +639,24 @@ function esArrastrado(workflow: Workflow, indice: number): boolean {
       @confirmar="confirmarEliminarPaso"
       @cierre-foco="alDevolverFoco"
     />
+
+    <DialogoConfirmacion
+      :abierto="sincronizacion.abierto.value"
+      titulo="¿Actualizar las tareas existentes?"
+      :descripcion="DESCRIPCION_SINCRONIZAR"
+      texto-confirmar="Actualizar tareas"
+      texto-alternativa="Salir sin actualizar"
+      texto-cancelar="Cancelar"
+      confirmar-sin-peligro
+      :procesando="sincronizacion.procesando.value"
+      :error="sincronizacion.error.value"
+      @update:abierto="sincronizacion.alCambiarApertura"
+      @confirmar="sincronizacion.actualizar"
+      @alternativa="sincronizacion.salirSinActualizar"
+    >
+      <ul class="grid gap-1 text-sm" aria-label="Tareas que se actualizarán">
+        <li v-for="linea in resumenSincronizacion" :key="linea.idWorkflow">{{ linea.texto }}</li>
+      </ul>
+    </DialogoConfirmacion>
   </section>
 </template>

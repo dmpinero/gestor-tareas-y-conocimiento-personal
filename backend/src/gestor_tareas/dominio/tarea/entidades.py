@@ -92,6 +92,20 @@ class Subtarea:
 
 
 @dataclass
+class SubtareasSincronizadas:
+    """Cambios en las subtareas de una tarea al sincronizarla con su workflow.
+
+    ``nuevas`` se añaden, pendientes y en ese orden, después de las que ya tiene, con
+    sus ``comentarios_iniciales``; ``nombres`` da el nombre nuevo de cada subtarea
+    que se renombra, por id.
+    """
+
+    id_tarea: int
+    nuevas: list[Subtarea] = field(default_factory=list)
+    nombres: dict[int, str] = field(default_factory=dict)
+
+
+@dataclass
 class Tarea:
     """Tarea de la persona usuaria. La prioridad va de 1 (más prioritaria) a 5.
 
