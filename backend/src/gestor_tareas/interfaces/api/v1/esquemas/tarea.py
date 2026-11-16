@@ -228,10 +228,10 @@ class TareaCrearEsquema(BaseModel):
         default=None,
         description=(
             "Opcional. Workflow de la tarea: si es distinto del que tenía (también si no "
-            "tenía ninguno), la tarea recibe al final una subtarea pendiente por cada paso "
-            "del workflow, en su orden; con el mismo workflow, o sin él (o null), sus "
-            "subtareas no cambian. Sin él, la tarea queda sin workflow. 422 si el "
-            "workflow no existe."
+            "tenía ninguno), la tarea recibe una subtarea pendiente por cada paso del "
+            "workflow, que se muestran en el orden de los pasos; con el mismo workflow, "
+            "o sin él (o null), sus subtareas no cambian. Sin él, la tarea queda sin "
+            "workflow. 422 si el workflow no existe."
         ),
     )
 
@@ -325,9 +325,12 @@ class TareaSalidaEsquema(BaseModel):
     oportunidad: OportunidadSalidaEsquema | None
     completada: bool
     subtareas: list[SubtareaSalidaEsquema] = Field(
-        description="Subtareas por orden de alta; vacía si no tiene. Al asignarle un "
-        "workflow distinto del que tenía, la tarea recibe al final una subtarea por "
-        "cada paso del workflow, en su orden."
+        description="Subtareas de la tarea; vacía si no tiene. Primero las que nacen "
+        "de un paso de su workflow, en el orden actual de esos pasos (reordenar los "
+        "pasos del workflow las reordena); después las demás (añadidas a mano, de un "
+        "paso eliminado o de otro workflow), por orden de alta. Al asignarle un "
+        "workflow distinto del que tenía, la tarea recibe una subtarea por cada paso "
+        "del workflow."
     )
     grupo_estados: GrupoEstadosDeTareaEsquema | None = Field(
         description="Grupo de estados de la tarea, o null si no tiene."

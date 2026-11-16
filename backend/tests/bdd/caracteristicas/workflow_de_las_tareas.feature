@@ -38,18 +38,21 @@ Característica: Workflow de las tareas
     Cuando creo la tarea "Leer" con el workflow "Vacío"
     Entonces al consultar las tareas "Leer" tiene el workflow "Vacío" y ninguna subtarea
 
-  Escenario: Editar una tarea sin workflow para darle uno le añade sus pasos tras las subtareas que tenía
+  Escenario: Editar una tarea sin workflow para darle uno le añade sus pasos, que se muestran antes de las subtareas que tenía
     Dado que existe la tarea "Venta" sin workflow
     Y la tarea "Venta" tiene la subtarea "Llamar" resuelta
     Cuando edito "Venta" con el workflow "Ventas"
-    Entonces la API responde 200 con la tarea "Venta", el workflow "Ventas" y las subtareas "Llamar: resuelta; Contacto: pendiente; Propuesta: pendiente; Cierre: pendiente"
-    Y al consultar las tareas "Venta" tiene el workflow "Ventas" y las subtareas "Llamar: resuelta; Contacto: pendiente; Propuesta: pendiente; Cierre: pendiente"
+    Entonces la API responde 200 con la tarea "Venta", el workflow "Ventas" y las subtareas "Contacto: pendiente; Propuesta: pendiente; Cierre: pendiente; Llamar: resuelta"
+    Y al consultar las tareas "Venta" tiene el workflow "Ventas" y las subtareas "Contacto: pendiente; Propuesta: pendiente; Cierre: pendiente; Llamar: resuelta"
+    Y las subtareas "Contacto, Propuesta, Cierre" de "Venta" están vinculadas a sus pasos del workflow "Ventas"
+    Y la subtarea "Llamar" de "Venta" no está vinculada a ningún paso
 
-  Escenario: Cambiar a otro workflow añade sus pasos y conserva los anteriores
+  Escenario: Cambiar a otro workflow añade sus pasos y conserva los anteriores, que se muestran después
     Dado que existe la tarea "Venta" con el workflow "Ventas"
     Y la subtarea "Contacto" de "Venta" está resuelta
     Cuando edito "Venta" con el workflow "Compras"
-    Entonces al consultar las tareas "Venta" tiene el workflow "Compras" y las subtareas "Contacto: resuelta; Propuesta: pendiente; Cierre: pendiente; Pedido: pendiente; Factura: pendiente"
+    Entonces al consultar las tareas "Venta" tiene el workflow "Compras" y las subtareas "Pedido: pendiente; Factura: pendiente; Contacto: resuelta; Propuesta: pendiente; Cierre: pendiente"
+    Y las subtareas "Pedido, Factura" de "Venta" están vinculadas a sus pasos del workflow "Compras"
 
   Escenario: Editar con el mismo workflow no toca las subtareas
     Dado que existe la tarea "Venta" con el workflow "Ventas"
@@ -115,3 +118,32 @@ Característica: Workflow de las tareas
     Y creo la tarea "Otra venta" con el workflow "Ventas"
     Entonces al consultar las tareas "Venta" tiene el workflow "Ventas" y las subtareas "Contacto, Propuesta, Cierre" pendientes
     Y al consultar las tareas "Otra venta" tiene el workflow "Ventas" y las subtareas "Contacto, Propuesta, Cierre, Seguimiento" pendientes
+
+  Escenario: Las subtareas del workflow siguen el orden de sus pasos y las añadidas a mano van después, por orden de alta
+    Dado que existe la tarea "Venta" con el workflow "Ventas"
+    Y la tarea "Venta" tiene la subtarea "Llamar" resuelta
+    Y la tarea "Venta" tiene la subtarea "Enviar correo" resuelta
+    Cuando reordeno los pasos del workflow "Ventas" como "Cierre, Contacto, Propuesta"
+    Entonces la tarea "Venta" se lee con las subtareas "Cierre: pendiente; Contacto: pendiente; Propuesta: pendiente; Llamar: resuelta; Enviar correo: resuelta"
+
+  Escenario: Reordenar los pasos del workflow reordena las subtareas de todas sus tareas
+    Dado que existe la tarea "Venta" con el workflow "Ventas"
+    Y que existe la tarea "Otra venta" con el workflow "Ventas"
+    Cuando reordeno los pasos del workflow "Ventas" como "Propuesta, Cierre, Contacto"
+    Entonces al consultar las tareas "Venta" tiene el workflow "Ventas" y las subtareas "Propuesta, Cierre, Contacto" pendientes
+    Y al consultar las tareas "Otra venta" tiene el workflow "Ventas" y las subtareas "Propuesta, Cierre, Contacto" pendientes
+
+  Escenario: Eliminar un paso del workflow conserva su subtarea, que pasa al final como una añadida a mano
+    Dado que existe la tarea "Venta" con el workflow "Ventas"
+    Y la tarea "Venta" tiene la subtarea "Llamar" resuelta
+    Cuando elimino el paso "Contacto" del workflow "Ventas"
+    Entonces la tarea "Venta" se lee con las subtareas "Propuesta: pendiente; Cierre: pendiente; Contacto: pendiente; Llamar: resuelta"
+    Y la subtarea "Contacto" de "Venta" no está vinculada a ningún paso
+    Y las subtareas "Propuesta, Cierre" de "Venta" están vinculadas a sus pasos del workflow "Ventas"
+
+  Escenario: Renombrar un paso o la subtarea no rompe el vínculo
+    Dado que existe la tarea "Venta" con el workflow "Ventas"
+    Cuando renombro el paso "Contacto" del workflow "Ventas" a "Primer contacto"
+    Y renombro la subtarea "Propuesta" de "Venta" a "Oferta"
+    Y reordeno los pasos del workflow "Ventas" como "Cierre, Propuesta, Primer contacto"
+    Entonces al consultar las tareas "Venta" tiene el workflow "Ventas" y las subtareas "Cierre, Oferta, Contacto" pendientes

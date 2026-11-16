@@ -27,7 +27,8 @@ class Workflow:
     """Conjunto de pasos con nombre que se añaden como subtareas a una tarea.
 
     ``pasos`` va por número. Las tareas guardan una copia de los pasos (sus
-    subtareas): cambiar el workflow después no las altera.
+    subtareas): renombrar o añadir pasos después no las altera, pero cada subtarea
+    recuerda su paso y se muestra en el orden actual de los pasos.
     """
 
     nombre: str

@@ -91,7 +91,9 @@ export interface Tarea {
   /** `true` si la tarea está completada. Solo cambia con
    * `PATCH /tareas/{id}/completada`; `POST` y `PUT` no lo reciben. */
   completada: boolean
-  /** Subtareas por orden de alta; vacía si no tiene. */
+  /** Subtareas en el orden de la API: primero las de los pasos del workflow de la
+   * tarea, en el orden de esos pasos, y después las demás por orden de alta; vacía
+   * si no tiene. */
   subtareas: Subtarea[]
   /** Grupo de estados al que apunta la tarea; `null` si no tiene. */
   grupo_estados: ReferenciaNombre | null

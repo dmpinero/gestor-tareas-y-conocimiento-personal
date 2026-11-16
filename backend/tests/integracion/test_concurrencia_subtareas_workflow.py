@@ -149,13 +149,17 @@ def test_las_altas_crean_las_subtareas_en_un_orden_completo_aunque_se_reordene_a
 
     tareas = [r for r in resultados if isinstance(r, Tarea)]
     assert len(tareas) == _ALTAS
+    orden_final = [nombre for _, nombre in _pasos_guardados(id_workflow)]
     for tarea in tareas:
-        assert [s.nombre for s in tarea.subtareas] in nombres_validos
+        # La copia, por orden de alta, sigue un orden completo del workflow.
+        copia = sorted(tarea.subtareas, key=lambda s: s.id or 0)
+        assert [s.nombre for s in copia] in nombres_validos
         assert not any(s.resuelta for s in tarea.subtareas)
         assert all(s.asignado is None and s.prioridad is None for s in tarea.subtareas)
-        ids = [s.id for s in tarea.subtareas]
-        assert ids == sorted(ids)
-        assert _guardada(tarea.id).subtareas == tarea.subtareas
+        # Y se muestra en el orden que tienen ahora los pasos del workflow.
+        guardada = _guardada(tarea.id).subtareas
+        assert [s.nombre for s in guardada] == orden_final
+        assert sorted(guardada, key=lambda s: s.id or 0) == copia
 
 
 @pytest.mark.usefixtures("sesion_bd")

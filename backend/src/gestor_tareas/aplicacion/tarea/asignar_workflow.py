@@ -43,9 +43,10 @@ class WorkflowPedido:
         ninguno), recibe una subtarea pendiente, sin persona ni prioridad, por cada
         paso del workflow en su orden, con una copia de los comentarios del paso en
         su orden (mismo texto, fechados en el instante de la copia y sin editar);
-        con el mismo workflow o sin workflow, no recibe ninguna. Es una copia fija:
-        las subtareas y sus comentarios no guardan relación con los pasos, así que
-        cambiar el workflow o sus comentarios después no las altera. Lanza
+        con el mismo workflow o sin workflow, no recibe ninguna. Cada subtarea
+        guarda el paso del que nace, que solo decide su orden: su nombre y sus
+        comentarios son una copia fija, así que renombrar el paso o cambiar sus
+        comentarios después no la altera. Lanza
         ``AsignacionDeWorkflowInvalidaError`` si el workflow no existe.
         """
         if self._id_workflow is None:
@@ -62,6 +63,7 @@ class WorkflowPedido:
         return [
             Subtarea(
                 nombre=paso.nombre,
+                paso_id=paso.id,
                 comentarios_iniciales=[
                     ComentarioInicial(texto=texto, creado=copia)
                     for texto in paso.comentarios_para_copiar

@@ -19,7 +19,8 @@ from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
 from tests.integracion.tablas import vaciar_tablas
 
 _RAIZ = Path(__file__).resolve().parents[2]
-_REVISION = "a9c4e1f7b3d2"
+# Revisión más reciente: la del paso de las subtareas, posterior a esta.
+_ULTIMA = "c5e1b8f4a2d7"
 _ANTERIOR = "d2a8e5c3f7b1"
 _TABLAS = ("comentarios", "comentarios_subtarea", "comentarios_paso_workflow")
 _CREADO = "2026-11-10 16:30:05"
@@ -110,7 +111,7 @@ def test_la_migracion_pasa_los_comentarios_a_html_y_se_deshace_a_texto_plano() -
     padres = _ids_padre()
     largo = f"<p><em>{'a' * 600}</em></p>"
     _insertar(padres, [_HTML, _FORMATO, largo])
-    assert _estado() == (_REVISION, _todas("TEXT", [_HTML, _FORMATO, largo]))
+    assert _estado() == (_ULTIMA, _todas("TEXT", [_HTML, _FORMATO, largo]))
 
     try:
         # Al deshacerla, el HTML pasa a texto plano y se trunca a 500 caracteres.
@@ -126,7 +127,7 @@ def test_la_migracion_pasa_los_comentarios_a_html_y_se_deshace_a_texto_plano() -
     # Al aplicarla, cada texto plano pasa a un párrafo escapado por línea; el formato
     # perdido al deshacerla no vuelve.
     assert _estado() == (
-        _REVISION,
+        _ULTIMA,
         _todas(
             "TEXT",
             [
