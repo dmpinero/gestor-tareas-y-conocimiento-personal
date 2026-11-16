@@ -4,39 +4,78 @@ import { computed } from 'vue'
 
 import { useAhora } from '@/composables/useAhora'
 import { calcularCuentaAtras } from '@/lib/cuentaAtras'
+import { isoAFechaLocal } from '@/lib/fechas'
 
-// Aviso de vencimiento próximo: una campana que se balancea cuando a la tarea
-// le quedan menos de 2 días y dos campanas cuando le queda menos de 1 día. No
-// avisa de tareas completadas, ya vencidas o sin fecha de vencimiento.
+// Aviso de vencimiento próximo:
+// - menos de 2 días: una campana naranja que se balancea;
+// - menos de 1 día: dos campanas rojas;
+// - menos de 4 horas: una campana blanca más grande sobre un círculo rojo que
+//   late, con un balanceo más rápido, para marcar que la tarea es urgente.
+// No avisa de tareas completadas, ya vencidas o sin fecha de vencimiento.
 const props = defineProps<{
   vencimiento: string | null
   completada: boolean
 }>()
 
+type Nivel = 'ninguno' | 'menos-de-48h' | 'menos-de-24h' | 'urgente'
+
+const SEGUNDOS_URGENTE = 4 * 60 * 60
+
 const { ahora } = useAhora()
 
-const numeroCampanas = computed<0 | 1 | 2>(() => {
-  if (props.completada || props.vencimiento === null) return 0
-  const { nivel } = calcularCuentaAtras(props.vencimiento, ahora.value)
-  if (nivel === 'menos-de-24h') return 2
-  if (nivel === 'menos-de-48h') return 1
-  return 0
+const nivel = computed<Nivel>(() => {
+  if (props.completada || props.vencimiento === null) return 'ninguno'
+  const cuenta = calcularCuentaAtras(props.vencimiento, ahora.value)
+  if (cuenta.nivel === 'menos-de-24h') {
+    const fecha = isoAFechaLocal(props.vencimiento)
+    const restantes =
+      fecha === null ? Infinity : Math.floor((fecha.getTime() - ahora.value.getTime()) / 1000)
+    return restantes < SEGUNDOS_URGENTE ? 'urgente' : 'menos-de-24h'
+  }
+  if (cuenta.nivel === 'menos-de-48h') return 'menos-de-48h'
+  return 'ninguno'
 })
 
-const texto = computed(() =>
-  numeroCampanas.value === 2 ? 'Vence en menos de 1 día' : 'Vence en menos de 2 días',
-)
+const numeroCampanas = computed(() => (nivel.value === 'menos-de-24h' ? 2 : 1))
+
+const TEXTOS: Record<Exclude<Nivel, 'ninguno'>, string> = {
+  urgente: 'Vence en menos de 4 horas',
+  'menos-de-24h': 'Vence en menos de 1 día',
+  'menos-de-48h': 'Vence en menos de 2 días',
+}
+const texto = computed(() => (nivel.value === 'ninguno' ? '' : TEXTOS[nivel.value]))
 
 // Mismos tonos que la cuenta atrás: rojo con menos de 24 h y naranja con
 // menos de 48 h, con contraste suficiente en los dos temas.
 const color = computed(() =>
-  numeroCampanas.value === 2 ? 'text-destructive' : 'text-orange-600 dark:text-orange-400',
+  nivel.value === 'menos-de-24h' ? 'text-destructive' : 'text-orange-600 dark:text-orange-400',
 )
 </script>
 
 <template>
   <span
-    v-if="numeroCampanas > 0"
+    v-if="nivel === 'urgente'"
+    role="img"
+    :aria-label="texto"
+    :title="texto"
+    data-aviso-vencimiento
+    data-urgente
+    data-campanas="1"
+    class="bg-destructive relative inline-flex size-6 shrink-0 items-center justify-center rounded-full align-middle text-white shadow-sm"
+  >
+    <span
+      aria-hidden="true"
+      class="bg-destructive absolute inset-0 rounded-full opacity-60 motion-safe:animate-ping"
+    />
+    <BellRing
+      data-campana
+      aria-hidden="true"
+      class="motion-safe:animate-campana-urgente relative size-4 origin-top"
+      :stroke-width="2.5"
+    />
+  </span>
+  <span
+    v-else-if="nivel !== 'ninguno'"
     role="img"
     :aria-label="texto"
     :title="texto"

@@ -43,6 +43,32 @@ describe('AvisoVencimiento', () => {
     expect(envoltorio.get('[role="img"]').attributes('aria-label')).toBe('Vence en menos de 1 día')
   })
 
+  it('con menos de 4 horas muestra una campana urgente más grande sobre fondo rojo', () => {
+    const envoltorio = montar('2026-11-13T15:59:59')
+    const aviso = envoltorio.get('[role="img"]')
+    expect(aviso.attributes('aria-label')).toBe('Vence en menos de 4 horas')
+    expect(aviso.attributes('title')).toBe('Vence en menos de 4 horas')
+    expect(aviso.attributes('data-urgente')).toBeDefined()
+    expect(aviso.classes()).toContain('bg-destructive')
+    expect(campanas(envoltorio)).toHaveLength(1)
+    expect(campanas(envoltorio)[0]!.classes()).toContain('motion-safe:animate-campana-urgente')
+  })
+
+  it('con 4 horas justas sigue mostrando dos campanas', () => {
+    const envoltorio = montar('2026-11-13T16:00:00')
+    expect(campanas(envoltorio)).toHaveLength(2)
+    expect(envoltorio.find('[data-urgente]').exists()).toBe(false)
+  })
+
+  it('pasa a la campana urgente sola cuando baja de 4 h', async () => {
+    const envoltorio = montar('2026-11-13T16:00:05')
+    expect(envoltorio.find('[data-urgente]').exists()).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(envoltorio.find('[data-urgente]').exists()).toBe(true)
+  })
+
   it('con 2 días o más no muestra nada', () => {
     expect(montar('2026-11-15T12:00:00').html()).toBe('<!--v-if-->')
   })
