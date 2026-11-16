@@ -1346,8 +1346,12 @@ async function guardar(): Promise<void> {
                 :class="claseFilaTarea(indice)"
                 @click="alPulsarFila($event, tarea.id)"
               >
+                <!--
+                  Ancho mínimo para que la casilla y las campanas no estrechen el
+                  nombre, que se parte entre palabras salvo si una sola no cabe.
+                -->
                 <TableCell
-                  :class="claseCelda(tarea, `${TEXTO_AJUSTABLE} border-l-4 ${grupo.borde}`)"
+                  :class="claseCelda(tarea, `whitespace-normal min-w-56 border-l-4 ${grupo.borde}`)"
                 >
                   <div class="flex items-start gap-2">
                     <Checkbox
@@ -1357,7 +1361,9 @@ async function guardar(): Promise<void> {
                       :title="tarea.completada ? 'Completada' : 'Pendiente'"
                       @update:model-value="tienda.alternarCompletada(tarea.id)"
                     />
-                    <span>{{ tarea.nombre }}</span>
+                    <span data-nombre-tarea class="min-w-0 flex-1 break-words">{{
+                      tarea.nombre
+                    }}</span>
                     <AvisoVencimiento
                       class="mt-0.5"
                       :vencimiento="tarea.fecha_vencimiento"

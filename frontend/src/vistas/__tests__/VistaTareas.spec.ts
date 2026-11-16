@@ -4599,4 +4599,17 @@ describe('VistaTareas', () => {
       })
     })
   })
+
+  describe('ancho de la columna Nombre', () => {
+    it('la celda del nombre tiene un ancho mínimo y el nombre solo se parte entre palabras', async () => {
+      await montar()
+      const fila = document.body.querySelector<HTMLElement>('tr[data-fila-tarea]')!
+      const celda = fila.querySelector('td')!
+      expect(celda.className).toContain('min-w-56')
+      expect(celda.className).not.toContain('[overflow-wrap:anywhere]')
+      const nombre = celda.querySelector('[data-nombre-tarea]')!
+      expect(nombre.textContent).toBe('Escribir informe')
+      expect(nombre.className).toContain('break-words')
+    })
+  })
 })
