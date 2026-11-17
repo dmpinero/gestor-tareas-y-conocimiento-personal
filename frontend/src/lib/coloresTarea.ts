@@ -141,12 +141,26 @@ export function colorAvatar(nombre: string): string {
   return PALETA_AVATARES[indiceEstable(nombre, PALETA_AVATARES.length)]!
 }
 
-/** Iniciales de una persona: las de sus dos primeras palabras, o "?" sin nombre. */
+/**
+ * Iniciales de una persona: las de sus dos primeras palabras, o "?" sin nombre.
+ * Un nombre de una sola palabra corta (2 o 3 caracteres) que es una sigla o un
+ * código (todo en mayúsculas o con algún dígito, como "MS3" o "TI") se muestra
+ * entero, en mayúsculas.
+ */
 export function inicialesDe(nombre: string): string {
   const palabras = nombre.trim().split(/\s+/).filter(Boolean)
   if (palabras.length === 0) return '?'
+  if (palabras.length === 1 && esSiglaCorta(palabras[0]!)) {
+    return palabras[0]!.toLocaleUpperCase('es')
+  }
   return palabras
     .slice(0, 2)
     .map((palabra) => [...palabra][0]!.toLocaleUpperCase('es'))
     .join('')
+}
+
+function esSiglaCorta(palabra: string): boolean {
+  const longitud = [...palabra].length
+  if (longitud < 2 || longitud > 3) return false
+  return /\d/.test(palabra) || palabra === palabra.toLocaleUpperCase('es')
 }

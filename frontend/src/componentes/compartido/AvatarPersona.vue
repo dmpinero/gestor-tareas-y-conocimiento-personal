@@ -18,7 +18,9 @@ const iniciales = computed(() => inicialesDe(props.nombre))
     class="ring-background inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-2 select-none"
     :class="colorAvatar(props.nombre)"
   >
-    <span aria-hidden="true">{{ iniciales }}</span>
+    <span aria-hidden="true" :class="iniciales.length > 2 && 'text-[10px] tracking-tighter'">{{
+      iniciales
+    }}</span>
     <span class="sr-only">{{ props.nombre }}</span>
   </span>
 </template>
