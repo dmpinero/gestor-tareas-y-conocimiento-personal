@@ -37,6 +37,11 @@ describe('inicialesDe', () => {
     ['  María José   Pérez Gil ', 'MJ'],
     ['Álvaro', 'Á'],
     ['', '?'],
+    ['MS3', 'MS3'],
+    ['TI', 'TI'],
+    ['ms3', 'MS3'],
+    ['Usua', 'U'],
+    ['ABCD', 'A'],
   ])('%s → %s', (nombre, esperado) => {
     expect(inicialesDe(nombre)).toBe(esperado)
   })
