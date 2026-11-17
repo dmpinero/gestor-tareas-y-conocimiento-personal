@@ -11,11 +11,16 @@ import { isoAFechaLocal } from '@/lib/fechas'
 // - menos de 1 día: dos campanas rojas;
 // - menos de 4 horas: una campana blanca más grande sobre un círculo rojo que
 //   late, con un balanceo más rápido, para marcar que la tarea es urgente.
-// No avisa de tareas completadas, ya vencidas o sin fecha de vencimiento.
-const props = defineProps<{
-  vencimiento: string | null
-  completada: boolean
-}>()
+// No avisa de tareas completadas, con el contador congelado (`congeladaEn`: la
+// tarea está completada o en DONE), ya vencidas o sin fecha de vencimiento.
+const props = withDefaults(
+  defineProps<{
+    vencimiento: string | null
+    completada: boolean
+    congeladaEn?: string | null
+  }>(),
+  { congeladaEn: null },
+)
 
 type Nivel = 'ninguno' | 'menos-de-48h' | 'menos-de-24h' | 'urgente'
 
@@ -24,7 +29,7 @@ const SEGUNDOS_URGENTE = 4 * 60 * 60
 const { ahora } = useAhora()
 
 const nivel = computed<Nivel>(() => {
-  if (props.completada || props.vencimiento === null) return 'ninguno'
+  if (props.completada || props.congeladaEn !== null || props.vencimiento === null) return 'ninguno'
   const cuenta = calcularCuentaAtras(props.vencimiento, ahora.value)
   if (cuenta.nivel === 'menos-de-24h') {
     const fecha = isoAFechaLocal(props.vencimiento)

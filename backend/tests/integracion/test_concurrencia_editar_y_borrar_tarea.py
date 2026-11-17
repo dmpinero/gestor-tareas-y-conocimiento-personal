@@ -5,7 +5,7 @@ borrado se confirmaba entre la lectura y la escritura, el UPDATE no encontraba l
 fila y la API respondía 500 en lugar de 404.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -51,4 +51,4 @@ def test_completar_una_tarea_borrada_tras_leerla_indica_que_no_existe(sesion_bd)
     assert repositorio.obtener_por_id(id_tarea) is not None
     _borrar_en_otra_sesion(id_tarea)
 
-    assert repositorio.cambiar_completada(id_tarea, True) is None
+    assert repositorio.cambiar_completada(id_tarea, True, datetime.now(UTC)) is None

@@ -51,11 +51,12 @@ class RepositorioTareasFalso:
     def obtener_para_modificar(self, id_tarea: int) -> Tarea | None:
         return self.obtener_por_id(id_tarea)
 
-    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado) -> Tarea:
+    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado, ahora: datetime) -> Tarea:
         tarea = self._tareas.get(id_tarea)
         if tarea is None:
             raise EntidadNoEncontradaError(f"No existe la tarea con id {id_tarea}")
         tarea.estado = replace(estado)
+        tarea.ajustar_congelacion(ahora)
         return deepcopy(tarea)
 
     def actualizar(self, tarea: Tarea, subtareas_nuevas: Sequence[Subtarea] = ()) -> Tarea:
@@ -71,11 +72,12 @@ class RepositorioTareasFalso:
         self._tareas[tarea.id] = deepcopy(tarea)
         return tarea
 
-    def cambiar_completada(self, id_tarea: int, completada: bool) -> Tarea | None:
+    def cambiar_completada(self, id_tarea: int, completada: bool, ahora: datetime) -> Tarea | None:
         tarea = self._tareas.get(id_tarea)
         if tarea is None:
             return None
         tarea.completada = completada
+        tarea.ajustar_congelacion(ahora)
         return deepcopy(tarea)
 
     def eliminar(self, id_tarea: int) -> bool:

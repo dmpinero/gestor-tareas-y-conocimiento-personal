@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -188,7 +188,31 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "grupo_estados": None,
         "estado": None,
         "workflow": None,
+        "congelada_en": None,
     }
+
+
+def test_salida_serializa_el_instante_de_congelacion_en_utc_con_z() -> None:
+    salida = TareaSalidaEsquema(
+        id=1,
+        nombre="Tarea",
+        prioridad=None,
+        descripcion="Texto",
+        fecha_creacion=datetime(2026, 11, 9, 10, 30, 0),
+        fecha_vencimiento=datetime(2026, 11, 20, 18, 0, 0),
+        etiquetas=[],
+        asignados=[],
+        tipo=None,
+        oportunidad=None,
+        completada=True,
+        subtareas=[],
+        grupo_estados=None,
+        estado=None,
+        workflow=None,
+        congelada_en=datetime(2026, 11, 17, 13, 30, 5, tzinfo=timezone(timedelta(hours=1))),
+    )
+
+    assert salida.model_dump(mode="json")["congelada_en"] == "2026-11-17T12:30:05Z"
 
 
 def test_salida_serializa_la_fecha_de_vencimiento_ausente_como_null() -> None:

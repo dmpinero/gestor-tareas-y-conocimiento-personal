@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Protocol
 
 from gestor_tareas.dominio.grupo_estados.entidades import GrupoEstados
@@ -29,24 +30,37 @@ class RepositorioGruposEstados(Protocol):
         """Cambia el nombre del grupo; sus estados no cambian."""
         ...
 
-    def eliminar(self, id_grupo: int) -> None:
-        """Elimina el grupo con sus estados; sus tareas quedan sin grupo ni estado."""
+    def eliminar(self, id_grupo: int, ahora: datetime) -> None:
+        """Elimina el grupo con sus estados; sus tareas quedan sin grupo ni estado.
+
+        Las que estaban en DONE sin estar completadas dejan de estar congeladas (ver
+        ``Tarea.ajustar_congelacion``; ``ahora`` es el instante del cambio)."""
         ...
 
     def anadir_estado(self, id_grupo: int, nombre: str) -> GrupoEstados:
         """Añade un estado al final del grupo (posición = última + 1)."""
         ...
 
-    def renombrar_estado(self, id_grupo: int, id_estado: int, nombre: str) -> GrupoEstados:
-        """Cambia el nombre del estado; su posición no cambia."""
+    def renombrar_estado(
+        self, id_grupo: int, id_estado: int, nombre: str, ahora: datetime
+    ) -> GrupoEstados:
+        """Cambia el nombre del estado; su posición no cambia.
+
+        Si pasa a llamarse DONE o deja de llamarse así, sus tareas se congelan o
+        dejan de estarlo en la misma transacción (ver ``Tarea.ajustar_congelacion``;
+        ``ahora`` es el instante del cambio)."""
         ...
 
-    def eliminar_estado(self, id_grupo: int, id_estado: int, mover_a: int | None) -> GrupoEstados:
+    def eliminar_estado(
+        self, id_grupo: int, id_estado: int, mover_a: int | None, ahora: datetime
+    ) -> GrupoEstados:
         """Elimina el estado y renumera los siguientes.
 
-        Antes mueve sus tareas al estado ``mover_a``, en la misma transacción. Lo que
-        valga como destino lo decide ``comprobar_destino_de_las_tareas``, con el
-        número de tareas leído en esa transacción; si no vale, no cambia nada.
+        Antes mueve sus tareas al estado ``mover_a``, en la misma transacción, y con
+        ello se congelan o dejan de estarlo (ver ``Tarea.ajustar_congelacion``;
+        ``ahora`` es el instante del cambio). Lo que valga como destino lo decide
+        ``comprobar_destino_de_las_tareas``, con el número de tareas leído en esa
+        transacción; si no vale, no cambia nada.
         """
         ...
 

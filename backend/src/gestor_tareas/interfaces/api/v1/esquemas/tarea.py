@@ -14,6 +14,7 @@ from pydantic import (
 )
 
 from gestor_tareas.dominio.tarea.entidades import TipoTarea
+from gestor_tareas.interfaces.api.v1.esquemas.comentario import InstanteUtc
 from gestor_tareas.interfaces.api.v1.esquemas.grupo_estados import (
     EstadoDeTareaEsquema,
     GrupoEstadosDeTareaEsquema,
@@ -340,4 +341,14 @@ class TareaSalidaEsquema(BaseModel):
     )
     workflow: WorkflowDeTareaEsquema | None = Field(
         description="Workflow de la tarea, o null si no tiene."
+    )
+    congelada_en: InstanteUtc | None = Field(
+        default=None,
+        description="Instante en UTC desde el que el contador de vencimiento de la "
+        "tarea está congelado, o null si no lo está. Una tarea está congelada mientras "
+        "está completada o en un estado llamado DONE (sin distinguir mayúsculas, en "
+        "cualquier grupo); lo pone el servidor al congelarse, se conserva al pasar de "
+        "completada a DONE o al revés y al cambiar el vencimiento, y vuelve a null al "
+        "dejar de estar completada y en DONE. El tiempo congelado es la diferencia "
+        "entre `fecha_vencimiento` (hora local) y este instante.",
     )

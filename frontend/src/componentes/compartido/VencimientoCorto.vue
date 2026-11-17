@@ -7,14 +7,19 @@ import { calcularCuentaAtras } from '@/lib/cuentaAtras'
 import { formatearFechaCorta, formatearFechaHora } from '@/lib/fechas'
 
 // Vencimiento corto para la tabla ("13 nov"), con un ✓ si la tarea está
-// completada o un ! rojo si ya venció. La fecha y hora completas quedan en el
-// title y en el texto para lectores de pantalla.
-const props = defineProps<{ vencimiento: string; completada: boolean }>()
+// completada o un ! rojo si ya venció (salvo con el contador congelado,
+// `congeladaEn`: la tarea está en DONE y ya no urge). La fecha y hora completas
+// quedan en el title y en el texto para lectores de pantalla.
+const props = withDefaults(
+  defineProps<{ vencimiento: string; completada: boolean; congeladaEn?: string | null }>(),
+  { congeladaEn: null },
+)
 
 const { ahora } = useAhora()
 
 const icono = computed<'completada' | 'vencida' | undefined>(() => {
   if (props.completada) return 'completada'
+  if (props.congeladaEn !== null) return undefined
   return calcularCuentaAtras(props.vencimiento, ahora.value).vencida ? 'vencida' : undefined
 })
 const fechaCompleta = computed(() => formatearFechaHora(props.vencimiento))

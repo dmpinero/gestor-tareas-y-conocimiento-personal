@@ -5,8 +5,13 @@ import ContadorVencimiento from '../ContadorVencimiento.vue'
 
 const VENCIMIENTO = '2026-11-20T18:00:00'
 
-function montar(vencimiento = VENCIMIENTO) {
-  return mount(ContadorVencimiento, { props: { vencimiento } })
+function montar(vencimiento = VENCIMIENTO, congeladaEn: string | null = null) {
+  return mount(ContadorVencimiento, { props: { vencimiento, congeladaEn } })
+}
+
+// Instante en UTC, como lo da la API ("YYYY-MM-DDTHH:MM:SSZ"), de una hora local.
+function instanteUtc(fechaLocal: Date): string {
+  return fechaLocal.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
 describe('ContadorVencimiento', () => {
@@ -111,5 +116,85 @@ describe('ContadorVencimiento', () => {
     expect(span().classes()).toContain('text-destructive')
     expect(span().attributes('data-nivel')).toBe('menos-de-24h')
     contador.unmount()
+  })
+
+  describe('congelado (tarea completada o en DONE)', () => {
+    // Se congeló el 19/11/2026 a las 16:49:50, hora local.
+    const CONGELADA_EN = instanteUtc(new Date(2026, 10, 19, 16, 49, 50))
+
+    it('muestra fijo lo que faltaba al congelarse, sin color de urgencia y con un icono de pausa', () => {
+      vi.setSystemTime(new Date(2026, 10, 18, 14, 44, 40))
+
+      const contador = montar(VENCIMIENTO, CONGELADA_EN)
+
+      const span = contador.get('[data-testid="contador-vencimiento"]')
+      expect(span.attributes('role')).toBe('timer')
+      expect(span.attributes('data-congelado')).toBe('true')
+      expect(span.get('[data-testid="contador-texto"]').text()).toBe(
+        'Vence en 1 d 01 h 10 min 10 s',
+      )
+      expect(span.find('[data-icono-pausa]').exists()).toBe(true)
+      expect(span.find('[data-icono-pausa]').attributes('aria-hidden')).toBe('true')
+      expect(span.get('.sr-only').text()).toBe('(contador detenido)')
+      expect(span.attributes('title')).toBe('Contador detenido: la tarea está completada o en DONE')
+      expect(span.classes()).toContain('text-muted-foreground')
+      expect(span.classes()).not.toContain('text-destructive')
+      expect(span.classes()).not.toContain('text-green-700')
+      contador.unmount()
+    })
+
+    it('no avanza con el paso del tiempo', async () => {
+      vi.setSystemTime(new Date(2026, 10, 18, 14, 44, 40))
+      const contador = montar(VENCIMIENTO, CONGELADA_EN)
+
+      vi.advanceTimersByTime(5000)
+      await contador.vm.$nextTick()
+
+      expect(contador.get('[data-testid="contador-texto"]').text()).toBe(
+        'Vence en 1 d 01 h 10 min 10 s',
+      )
+      contador.unmount()
+    })
+
+    it('si ya había vencido al congelarse muestra fijo cuánto hacía que venció', () => {
+      vi.setSystemTime(new Date(2026, 10, 25, 9, 0, 0))
+
+      const contador = montar(VENCIMIENTO, instanteUtc(new Date(2026, 10, 21, 20, 30, 0)))
+
+      const span = contador.get('[data-testid="contador-vencimiento"]')
+      expect(span.get('[data-testid="contador-texto"]').text()).toBe('Vencida hace 1 d 02 h 30 min')
+      expect(span.attributes('data-vencida')).toBe('true')
+      expect(span.classes()).toContain('text-muted-foreground')
+      expect(span.classes()).not.toContain('text-destructive')
+      contador.unmount()
+    })
+
+    it('al cambiar el vencimiento recalcula el valor fijo desde el mismo instante', async () => {
+      vi.setSystemTime(new Date(2026, 10, 18, 14, 44, 40))
+      const contador = montar(VENCIMIENTO, CONGELADA_EN)
+
+      await contador.setProps({ vencimiento: '2026-11-19T18:00:00' })
+
+      expect(contador.get('[data-testid="contador-texto"]').text()).toBe(
+        'Vence en 01 h 10 min 10 s',
+      )
+      contador.unmount()
+    })
+
+    it('al descongelarse vuelve a contar en vivo desde el vencimiento', async () => {
+      vi.setSystemTime(new Date(2026, 10, 20, 17, 59, 15))
+      const contador = montar(VENCIMIENTO, CONGELADA_EN)
+
+      await contador.setProps({ congeladaEn: null })
+
+      const span = contador.get('[data-testid="contador-vencimiento"]')
+      expect(span.text()).toBe('Vence en 00 h 00 min 45 s')
+      expect(span.attributes('data-congelado')).toBeUndefined()
+      expect(span.find('[data-icono-pausa]').exists()).toBe(false)
+      vi.advanceTimersByTime(1000)
+      await contador.vm.$nextTick()
+      expect(span.text()).toBe('Vence en 00 h 00 min 44 s')
+      contador.unmount()
+    })
   })
 })

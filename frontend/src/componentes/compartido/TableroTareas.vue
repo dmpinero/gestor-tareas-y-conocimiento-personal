@@ -332,6 +332,7 @@ function terminarArrastre(): void {
                         class="mt-0.5"
                         :vencimiento="tarea.fecha_vencimiento"
                         :completada="tarea.completada"
+                        :congelada-en="tarea.congelada_en"
                       />
                     </div>
 
@@ -358,9 +359,13 @@ function terminarArrastre(): void {
                         <VencimientoCorto
                           :vencimiento="tarea.fecha_vencimiento"
                           :completada="tarea.completada"
+                          :congelada-en="tarea.congelada_en"
                           class="text-foreground"
                         />
-                        <ContadorVencimiento :vencimiento="tarea.fecha_vencimiento" />
+                        <ContadorVencimiento
+                          :vencimiento="tarea.fecha_vencimiento"
+                          :congelada-en="tarea.congelada_en"
+                        />
                       </span>
                     </div>
 

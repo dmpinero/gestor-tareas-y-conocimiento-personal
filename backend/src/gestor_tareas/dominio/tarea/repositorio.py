@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Protocol
 
 from gestor_tareas.dominio.tarea.entidades import (
@@ -21,7 +22,8 @@ class RepositorioTareas(Protocol):
         ``tarea.workflow`` (que debe existir) y sus ``tarea.subtareas`` en ese orden
         (a las que asigna id; su ``asignado`` debe existir ya en el catálogo de
         personas, y se ignora ``comentarios``). Cada subtarea se guarda con sus
-        ``comentarios_iniciales``, en ese orden y en la misma transacción."""
+        ``comentarios_iniciales``, en ese orden y en la misma transacción. Guarda
+        ``tarea.congelada_en`` tal cual (ver ``Tarea.ajustar_congelacion``)."""
         ...
 
     def listar(self) -> list[Tarea]:
@@ -58,7 +60,8 @@ class RepositorioTareas(Protocol):
         El estado completada no cambia (se ignora ``tarea.completada``): solo lo
         cambia ``cambiar_completada``. El grupo de estados y el estado sí se
         guardan: ``tarea.estado`` debe ser un estado de ``tarea.grupo_estados``.
-        También el workflow (``tarea.workflow``), que debe existir.
+        También el workflow (``tarea.workflow``), que debe existir, y
+        ``tarea.congelada_en`` tal cual (ver ``Tarea.ajustar_congelacion``).
 
         Las subtareas que ya tiene no cambian (se ignora ``tarea.subtareas``),
         tampoco al cambiar el tipo de la tarea. ``subtareas_nuevas`` se añaden,
@@ -71,17 +74,21 @@ class RepositorioTareas(Protocol):
         """
         ...
 
-    def cambiar_completada(self, id_tarea: int, completada: bool) -> Tarea | None:
+    def cambiar_completada(self, id_tarea: int, completada: bool, ahora: datetime) -> Tarea | None:
         """Guarda el estado completada de la tarea y la devuelve, o ``None`` si no existe.
 
-        El resto de datos de la tarea no cambia.
+        Con él congela, conserva o descongela su contador de vencimiento
+        (``Tarea.ajustar_congelacion``), siendo ``ahora`` el instante del cambio. El
+        resto de datos de la tarea no cambia.
         """
         ...
 
-    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado) -> Tarea:
+    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado, ahora: datetime) -> Tarea:
         """Guarda el estado de la tarea, que debe ser de su grupo, y la devuelve.
 
-        El resto de datos de la tarea no cambia. Lanza ``EntidadNoEncontradaError``
+        Con él congela, conserva o descongela su contador de vencimiento
+        (``Tarea.ajustar_congelacion``), siendo ``ahora`` el instante del cambio. El
+        resto de datos de la tarea no cambia. Lanza ``EntidadNoEncontradaError``
         si otra petición ha borrado la tarea mientras tanto.
         """
         ...
