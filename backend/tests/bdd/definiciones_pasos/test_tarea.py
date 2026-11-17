@@ -59,6 +59,7 @@ _OPCIONALES_POR_DEFECTO = {
     "grupo_estados": None,
     "estado": None,
     "workflow": None,
+    "congelada_en": None,
 }
 
 
@@ -588,7 +589,10 @@ def la_api_responde_con_el_estado(
 ) -> None:
     assert respuesta.status_code == 200
     previa = next(t for t in tareas_previas if t["nombre"] == nombre)
-    assert respuesta.json() == {**previa, "completada": _ESTADOS[estado]}
+    cuerpo = respuesta.json()
+    # Completada, su contador queda congelado desde ese instante; pendiente, no.
+    assert (cuerpo["congelada_en"] is not None) is _ESTADOS[estado]
+    assert {**cuerpo, "congelada_en": None} == {**previa, "completada": _ESTADOS[estado]}
 
 
 @then(
@@ -644,7 +648,10 @@ def la_tarea_editada_sigue_completada(peticion: dict, nombre: str) -> None:
     respuesta = peticion["respuesta"]
     assert respuesta.status_code == 200
     sin_estado = {k: v for k, v in peticion["datos"].items() if k != "completada"}
-    assert respuesta.json() == {
+    cuerpo = respuesta.json()
+    # Sigue completada, así que su contador sigue congelado.
+    assert cuerpo["congelada_en"] is not None
+    assert {**cuerpo, "congelada_en": None} == {
         "id": peticion["id"],
         **_OPCIONALES_POR_DEFECTO,
         **sin_estado,

@@ -1,7 +1,10 @@
 from collections.abc import Callable
 from datetime import datetime
 
-from gestor_tareas.aplicacion.comentario.anadir_comentario import ahora_en_utc
+from gestor_tareas.aplicacion.comentario.anadir_comentario import (
+    ahora_en_utc,
+    instante_de_comentario,
+)
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.asignar_grupo_estados import GrupoPedido
 from gestor_tareas.aplicacion.tarea.asignar_workflow import WorkflowPedido
@@ -20,6 +23,9 @@ class CrearTarea:
     Una tarea creada con un workflow recibe una subtarea por cada paso vigente del
     workflow, en su orden, pendiente y sin persona ni prioridad (ver
     ``WorkflowPedido``). El tipo de la tarea no le añade subtareas.
+
+    Si nace en el estado DONE (el primero de su grupo), nace congelada desde este
+    instante (ver ``Tarea.ajustar_congelacion``).
     """
 
     def __init__(
@@ -70,6 +76,7 @@ class CrearTarea:
             )
             tarea.subtareas = workflow.asignar(tarea)
             grupo.asignar(tarea)
+            tarea.ajustar_congelacion(instante_de_comentario(self._reloj))
             return self._repositorio.crear(tarea)
 
         # Leer el workflow y el grupo de estados, dar de alta en los catálogos y

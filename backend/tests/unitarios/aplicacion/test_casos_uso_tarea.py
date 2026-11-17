@@ -348,12 +348,16 @@ def test_marcar_completada_cambia_el_estado_y_lo_guarda() -> None:
         descripcion="Primera",
         fecha_creacion=_FECHA_CREACION,
         completada=True,
+        # Completada, su contador queda congelado desde ese instante.
+        congelada_en=completada.congelada_en,
     )
+    assert completada.congelada_en is not None
     assert repos.tareas.listar()[0].completada is True
 
     pendiente = repos.marcar_completada().ejecutar(creada.id, completada=False)
 
     assert pendiente.completada is False
+    assert pendiente.congelada_en is None
     assert repos.tareas.listar()[0].completada is False
 
 

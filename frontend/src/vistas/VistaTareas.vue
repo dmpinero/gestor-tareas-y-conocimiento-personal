@@ -1368,6 +1368,7 @@ async function guardar(): Promise<void> {
                       class="mt-0.5"
                       :vencimiento="tarea.fecha_vencimiento"
                       :completada="tarea.completada"
+                      :congelada-en="tarea.congelada_en"
                     />
                   </div>
                 </TableCell>
@@ -1432,9 +1433,11 @@ async function guardar(): Promise<void> {
                     <VencimientoCorto
                       :vencimiento="tarea.fecha_vencimiento"
                       :completada="tarea.completada"
+                      :congelada-en="tarea.congelada_en"
                     />
                     <ContadorVencimiento
                       :vencimiento="tarea.fecha_vencimiento"
+                      :congelada-en="tarea.congelada_en"
                       :class="claseCelda(tarea, 'block text-xs')"
                     />
                   </template>

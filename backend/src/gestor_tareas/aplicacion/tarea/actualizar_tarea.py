@@ -1,7 +1,10 @@
 from collections.abc import Callable
 from datetime import datetime
 
-from gestor_tareas.aplicacion.comentario.anadir_comentario import ahora_en_utc
+from gestor_tareas.aplicacion.comentario.anadir_comentario import (
+    ahora_en_utc,
+    instante_de_comentario,
+)
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.asignar_grupo_estados import GrupoPedido
 from gestor_tareas.aplicacion.tarea.asignar_workflow import WorkflowPedido
@@ -29,7 +32,10 @@ class ActualizarTarea:
     ``WorkflowPedido``).
 
     El grupo de estados también se sustituye: con el mismo grupo, la tarea conserva
-    su estado; con otro, queda en su primer estado, y sin grupo, sin estado.
+    su estado; con otro, queda en su primer estado, y sin grupo, sin estado. Con el
+    estado en que queda, la tarea se congela, conserva su instante de congelación o
+    deja de estar congelada (ver ``Tarea.ajustar_congelacion``); cambiar solo el
+    vencimiento no cambia ese instante.
     """
 
     def __init__(
@@ -85,6 +91,7 @@ class ActualizarTarea:
             tarea.oportunidad = oportunidad
             subtareas_nuevas = workflow.asignar(tarea)
             grupo.asignar(tarea)
+            tarea.ajustar_congelacion(instante_de_comentario(self._reloj))
             return self._repositorio.actualizar(tarea, subtareas_nuevas)
 
         # Leer la tarea, dar de alta en los catálogos y guardar es una sola

@@ -13,7 +13,8 @@ def ahora_en_utc() -> datetime:
 
 def instante_de_comentario(reloj: Callable[[], datetime]) -> datetime:
     """El instante actual del reloj como lo guardan los comentarios (de tareas,
-    subtareas y pasos): en UTC y sin fracción de segundo."""
+    subtareas y pasos) y el instante en que se congela una tarea: en UTC y sin
+    fracción de segundo."""
     return reloj().astimezone(UTC).replace(microsecond=0)
 
 

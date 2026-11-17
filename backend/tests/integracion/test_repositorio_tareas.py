@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import delete, insert, select
@@ -22,6 +22,7 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalo
 )
 
 _FECHA_CREACION = datetime(2026, 11, 9, 10, 30, 0)
+_AHORA = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
 
 
 def test_crear_persiste_la_tarea_y_le_asigna_id(sesion_bd) -> None:
@@ -413,7 +414,7 @@ def test_cambiar_completada_persiste_el_estado_y_devuelve_la_tarea(sesion_bd) ->
         Tarea(nombre="Dos", descripcion="Segunda", fecha_creacion=_FECHA_CREACION)
     )
 
-    completada = repositorio.cambiar_completada(creada.id, True)
+    completada = repositorio.cambiar_completada(creada.id, True, _AHORA)
 
     assert completada == Tarea(
         id=creada.id,
@@ -421,12 +422,13 @@ def test_cambiar_completada_persiste_el_estado_y_devuelve_la_tarea(sesion_bd) ->
         descripcion="Primera",
         fecha_creacion=_FECHA_CREACION,
         completada=True,
+        congelada_en=_AHORA,
     )
     sesion_bd.expire_all()
     assert sesion_bd.get(TareaModelo, creada.id).completada is True
     assert repositorio.obtener_por_id(otra.id).completada is False
 
-    assert repositorio.cambiar_completada(creada.id, False).completada is False
+    assert repositorio.cambiar_completada(creada.id, False, _AHORA).completada is False
     sesion_bd.expire_all()
     assert sesion_bd.get(TareaModelo, creada.id).completada is False
 
@@ -434,7 +436,7 @@ def test_cambiar_completada_persiste_el_estado_y_devuelve_la_tarea(sesion_bd) ->
 def test_cambiar_completada_de_una_tarea_inexistente_devuelve_none(sesion_bd) -> None:
     repositorio = RepositorioTareasSqlAlchemy(sesion_bd)
 
-    assert repositorio.cambiar_completada(999999, True) is None
+    assert repositorio.cambiar_completada(999999, True, _AHORA) is None
 
 
 def test_actualizar_conserva_el_estado_completada(sesion_bd) -> None:
@@ -442,7 +444,7 @@ def test_actualizar_conserva_el_estado_completada(sesion_bd) -> None:
     creada = repositorio.crear(
         Tarea(nombre="Uno", descripcion="Primera", fecha_creacion=_FECHA_CREACION)
     )
-    repositorio.cambiar_completada(creada.id, True)
+    repositorio.cambiar_completada(creada.id, True, _AHORA)
 
     # La entidad que llega a la edición dice "pendiente": la edición no cambia el estado.
     actualizada = repositorio.actualizar(

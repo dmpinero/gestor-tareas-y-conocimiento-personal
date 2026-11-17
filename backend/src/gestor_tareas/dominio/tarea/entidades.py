@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
+from gestor_tareas.dominio.tarea.congelacion import instante_de_congelacion
+
 
 class TipoTarea(StrEnum):
     """Tipos de tarea. Una tarea puede no tener tipo.
@@ -132,6 +134,11 @@ class Tarea:
     ``grupo_estados`` es el grupo de estados de la tarea (opcional) y ``estado`` el
     estado del grupo en el que está: los dos son ``None`` o el estado es de ese
     grupo.
+
+    ``congelada_en`` es el instante (en UTC, sin fracción de segundo) desde el que
+    su contador de vencimiento está congelado, o ``None`` si no lo está (ver
+    ``gestor_tareas.dominio.tarea.congelacion``). Lo mantiene ``ajustar_congelacion``
+    tras cada cambio de ``completada`` o de ``estado``.
     """
 
     nombre: str
@@ -148,4 +155,15 @@ class Tarea:
     grupo_estados: ReferenciaGrupoEstados | None = None
     estado: ReferenciaEstado | None = None
     workflow: ReferenciaWorkflow | None = None
+    congelada_en: datetime | None = None
     id: int | None = None
+
+    def ajustar_congelacion(self, ahora: datetime) -> None:
+        """Congela, conserva o descongela el contador según cómo ha quedado la tarea
+        (``completada`` y ``estado``); ``ahora`` es el instante del cambio."""
+        self.congelada_en = instante_de_congelacion(
+            self.congelada_en,
+            self.completada,
+            self.estado.nombre if self.estado is not None else None,
+            ahora,
+        )

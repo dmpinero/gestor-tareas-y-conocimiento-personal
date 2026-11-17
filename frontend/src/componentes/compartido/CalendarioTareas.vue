@@ -170,6 +170,7 @@ const plantillaTareasDia = createReusableTemplate<{ dia: Dia }>()
           class="mt-0.5"
           :vencimiento="tarea.fecha_vencimiento"
           :completada="tarea.completada"
+          :congelada-en="tarea.congelada_en"
         />
       </li>
     </ul>

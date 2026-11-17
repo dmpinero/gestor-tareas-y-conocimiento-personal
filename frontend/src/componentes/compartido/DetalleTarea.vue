@@ -213,6 +213,7 @@ function alCambiarApertura(abierta: boolean): void {
             class="mt-1.5"
             :vencimiento="tareaMostrada.fecha_vencimiento"
             :completada="tareaMostrada.completada"
+            :congelada-en="tareaMostrada.congelada_en"
           />
         </div>
         <ul
@@ -254,9 +255,13 @@ function alCambiarApertura(abierta: boolean): void {
               <VencimientoCorto
                 :vencimiento="tareaMostrada.fecha_vencimiento"
                 :completada="tareaMostrada.completada"
+                :congelada-en="tareaMostrada.congelada_en"
               />
               <span aria-hidden="true">·</span>
-              <ContadorVencimiento :vencimiento="tareaMostrada.fecha_vencimiento" />
+              <ContadorVencimiento
+                :vencimiento="tareaMostrada.fecha_vencimiento"
+                :congelada-en="tareaMostrada.congelada_en"
+              />
             </span>
           </li>
         </ul>

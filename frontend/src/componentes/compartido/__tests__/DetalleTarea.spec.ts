@@ -41,6 +41,7 @@ const TAREA_SIN_TIPO: Tarea = {
   grupo_estados: null,
   estado: null,
   workflow: null,
+  congelada_en: null,
 }
 
 const TAREA_OPORTUNIDAD: Tarea = {
@@ -63,6 +64,7 @@ const TAREA_OPORTUNIDAD: Tarea = {
   grupo_estados: null,
   estado: null,
   workflow: null,
+  congelada_en: null,
 }
 
 let contenedor: VueWrapper | null = null
@@ -354,6 +356,34 @@ describe('DetalleTarea', () => {
     const contador = modal().querySelector('[data-testid="contador-vencimiento"]')
     expect(contador?.textContent?.trim()).toBe('Vencida hace 1 d 02 h 05 min')
     expect(contador?.classList.contains('text-destructive')).toBe(true)
+  })
+
+  it('con la tarea en DONE muestra la cuenta atrás detenida y sin campanas ni marca de vencida', async () => {
+    // Se congeló el 21/11/2026 a las 20:05:59 (hora local), ya vencida.
+    const congeladaEn = new Date(2026, 10, 21, 20, 5, 59).toISOString().replace(/\.\d{3}Z$/, 'Z')
+    vi.setSystemTime(new Date(2026, 10, 25, 9, 0, 0))
+    await montar({
+      ...TAREA_OPORTUNIDAD,
+      grupo_estados: { id: 1, nombre: 'Flujo' },
+      estado: { id: 13, nombre: 'DONE' },
+      congelada_en: congeladaEn,
+    })
+
+    const contador = modal().querySelector('[data-testid="contador-vencimiento"]')!
+    expect(contador.getAttribute('data-congelado')).toBe('true')
+    expect(contador.querySelector('[data-testid="contador-texto"]')?.textContent).toBe(
+      'Vencida hace 1 d 02 h 05 min',
+    )
+    expect(cabecera().querySelector('[data-aviso-vencimiento]')).toBeNull()
+    expect(
+      modal().querySelector('[data-testid="vencimiento-corto"]')?.getAttribute('data-icono'),
+    ).toBeNull()
+
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(contador.querySelector('[data-testid="contador-texto"]')?.textContent).toBe(
+      'Vencida hace 1 d 02 h 05 min',
+    )
   })
 
   it('sin fecha de vencimiento no muestra cuenta atrás', async () => {

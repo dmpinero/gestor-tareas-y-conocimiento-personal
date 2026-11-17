@@ -380,6 +380,10 @@ class TareaModelo(Base):
     workflow: Mapped[WorkflowModelo | None] = relationship(
         lazy="selectin", viewonly=True, foreign_keys=[workflow_id]
     )
+    # Instante desde el que su contador de vencimiento está congelado (completada o en
+    # el estado DONE), o NULL si no lo está. DATETIME sin zona horaria con el instante
+    # en UTC (la columna no guarda la zona).
+    congelada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
 
 __all__ = [

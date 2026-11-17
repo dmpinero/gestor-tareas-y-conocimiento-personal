@@ -4,14 +4,27 @@ Cada operación es una transacción completa del repositorio: si choca con otra
 petición simultánea, se repite entera.
 """
 
+from collections.abc import Callable
+from datetime import datetime
+
+from gestor_tareas.aplicacion.comentario.anadir_comentario import (
+    ahora_en_utc,
+    instante_de_comentario,
+)
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.dominio.grupo_estados.entidades import GrupoEstados
 from gestor_tareas.dominio.grupo_estados.repositorio import RepositorioGruposEstados
 
 
 class _CasoDeUsoGrupos:
-    def __init__(self, repositorio: RepositorioGruposEstados) -> None:
+    def __init__(
+        self,
+        repositorio: RepositorioGruposEstados,
+        reloj: Callable[[], datetime] = ahora_en_utc,
+    ) -> None:
         self._repositorio = repositorio
+        # Para el instante en que se congelan o descongelan sus tareas.
+        self._reloj = reloj
 
 
 class ListarGruposEstados(_CasoDeUsoGrupos):
@@ -36,10 +49,13 @@ class RenombrarGrupoEstados(_CasoDeUsoGrupos):
 
 
 class EliminarGrupoEstados(_CasoDeUsoGrupos):
-    """Elimina el grupo con sus estados; sus tareas quedan sin grupo ni estado."""
+    """Elimina el grupo con sus estados; sus tareas quedan sin grupo ni estado (y
+    las que estaban en DONE sin estar completadas, sin congelar)."""
 
     def ejecutar(self, id_grupo: int) -> None:
-        reintentar_si_hay_conflicto(lambda: self._repositorio.eliminar(id_grupo))
+        reintentar_si_hay_conflicto(
+            lambda: self._repositorio.eliminar(id_grupo, instante_de_comentario(self._reloj))
+        )
 
 
 class AnadirEstado(_CasoDeUsoGrupos):
@@ -52,11 +68,14 @@ class AnadirEstado(_CasoDeUsoGrupos):
 
 
 class RenombrarEstado(_CasoDeUsoGrupos):
-    """Cambia el nombre de un estado del grupo; su posición no cambia."""
+    """Cambia el nombre de un estado del grupo; su posición no cambia. Si pasa a
+    llamarse DONE o deja de llamarse así, sus tareas se congelan o dejan de estarlo."""
 
     def ejecutar(self, id_grupo: int, id_estado: int, nombre: str) -> GrupoEstados:
         return reintentar_si_hay_conflicto(
-            lambda: self._repositorio.renombrar_estado(id_grupo, id_estado, nombre)
+            lambda: self._repositorio.renombrar_estado(
+                id_grupo, id_estado, nombre, instante_de_comentario(self._reloj)
+            )
         )
 
 
@@ -71,7 +90,9 @@ class EliminarEstado(_CasoDeUsoGrupos):
 
     def ejecutar(self, id_grupo: int, id_estado: int, mover_a: int | None) -> GrupoEstados:
         return reintentar_si_hay_conflicto(
-            lambda: self._repositorio.eliminar_estado(id_grupo, id_estado, mover_a)
+            lambda: self._repositorio.eliminar_estado(
+                id_grupo, id_estado, mover_a, instante_de_comentario(self._reloj)
+            )
         )
 
 

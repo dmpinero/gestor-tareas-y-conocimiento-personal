@@ -23,6 +23,7 @@ simultánea se cruza y MySQL detecta un interbloqueo, se traduce en
 """
 
 from collections.abc import Callable, Sequence
+from datetime import datetime
 
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
@@ -46,6 +47,9 @@ from gestor_tareas.infraestructura.persistencia.modelos import (
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import traducir_conflictos
 from gestor_tareas.infraestructura.persistencia.repositorios.nombres_unicos import nombre_unico
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_sqlalchemy import (  # noqa: E501
+    ajustar_congelacion_de_tareas,
+)
 
 _Grupo = GrupoEstadosModelo
 _Estado = EstadoGrupoModelo
@@ -184,10 +188,14 @@ class RepositorioGruposEstadosSqlAlchemy:
 
         return self._modificar(id_grupo, renombrar)
 
-    def eliminar(self, id_grupo: int) -> None:
+    def eliminar(self, id_grupo: int, ahora: datetime) -> None:
         with traducir_conflictos(self._sesion):
             try:
                 grupo = self._grupo_bloqueado(id_grupo)
+                # Sin estado, solo siguen congeladas las completadas.
+                ajustar_congelacion_de_tareas(
+                    self._sesion, TareaModelo.grupo_estados_id == id_grupo, None, ahora
+                )
                 # Primero sus tareas quedan sin grupo ni estado (los dos en la misma
                 # sentencia, por el CHECK); después el ON DELETE CASCADE borra los
                 # estados con el grupo.
@@ -225,13 +233,19 @@ class RepositorioGruposEstadosSqlAlchemy:
             raise estado_no_encontrado(grupo.id, id_estado)
         return estado
 
-    def renombrar_estado(self, id_grupo: int, id_estado: int, nombre: str) -> GrupoEstados:
+    def renombrar_estado(
+        self, id_grupo: int, id_estado: int, nombre: str, ahora: datetime
+    ) -> GrupoEstados:
         def renombrar(grupo: GrupoEstadosModelo, estados: list[EstadoGrupoModelo]) -> None:
             estado = self._estado_del_grupo(grupo, estados, id_estado)
             nombre_grupo = grupo.nombre
             with nombre_unico(lambda: estado_duplicado(nombre, nombre_grupo)):
                 estado.nombre = nombre
                 self._sesion.flush()
+            # Con el nombre nuevo, sus tareas pueden pasar a estar o no en DONE.
+            ajustar_congelacion_de_tareas(
+                self._sesion, self._de_la_pareja(grupo.id, id_estado), nombre, ahora
+            )
 
         return self._modificar(id_grupo, renombrar)
 
@@ -248,13 +262,20 @@ class RepositorioGruposEstadosSqlAlchemy:
         consulta = select(TareaModelo.id).where(self._de_la_pareja(id_grupo, id_estado))
         return list(self._sesion.scalars(consulta.with_for_update()))
 
-    def eliminar_estado(self, id_grupo: int, id_estado: int, mover_a: int | None) -> GrupoEstados:
+    def eliminar_estado(
+        self, id_grupo: int, id_estado: int, mover_a: int | None, ahora: datetime
+    ) -> GrupoEstados:
         def eliminar(grupo: GrupoEstadosModelo, estados: list[EstadoGrupoModelo]) -> None:
             eliminado = self._estado_del_grupo(grupo, estados, id_estado)
             tareas = len(self._ids_tareas_del_estado_bloqueadas(grupo.id, id_estado))
             como_entidad = self._a_entidad(grupo, estados, {id_estado: tareas})
             comprobar_destino_de_las_tareas(como_entidad, como_entidad.estado(id_estado), mover_a)
             if tareas:
+                # En el estado de destino, sus tareas pueden pasar a estar o no en DONE.
+                destino = self._estado_del_grupo(grupo, estados, mover_a)
+                ajustar_congelacion_de_tareas(
+                    self._sesion, self._de_la_pareja(grupo.id, id_estado), destino.nombre, ahora
+                )
                 self._ejecutar(
                     update(TareaModelo)
                     .where(self._de_la_pareja(grupo.id, id_estado))

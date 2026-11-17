@@ -17,6 +17,8 @@ from tests.integracion.tablas import vaciar_tablas
 _RAIZ = Path(__file__).resolve().parents[2]
 _REVISION = "c5e1b8f4a2d7"
 _ANTERIOR = "a9c4e1f7b3d2"
+# La última revisión, a la que llega "head".
+_ULTIMA = "e2c7a9f4b1d6"
 
 
 def _alembic() -> Config:
@@ -149,7 +151,7 @@ def test_la_migracion_vincula_las_subtareas_con_el_paso_del_mismo_nombre_de_su_w
     command.upgrade(_alembic(), "head")
 
     assert _estado()[0] is True
-    assert _estado()[2] == _REVISION
+    assert _estado()[2] == _ULTIMA
     assert _pasos_de_las_subtareas() == {
         contacto: ventas["Contacto"],
         # Varias con el nombre del mismo paso: solo la de menor id.
@@ -187,7 +189,7 @@ def test_deshacer_la_migracion_quita_solo_la_columna() -> None:
     _tarea("Venta", ventas["__workflow__"], "Cierre", "Contacto", "Llamar")
     _ejecutar("UPDATE subtareas SET paso_id = :p WHERE nombre = 'Contacto'", p=ventas["Contacto"])
     _, subtareas, revision = _estado()
-    assert revision == _REVISION
+    assert revision == _ULTIMA
 
     try:
         command.downgrade(_alembic(), _ANTERIOR)
@@ -196,7 +198,7 @@ def test_deshacer_la_migracion_quita_solo_la_columna() -> None:
         command.upgrade(_alembic(), "head")
 
     # Al volver a aplicarla se vinculan de nuevo por su nombre.
-    assert _estado() == (True, subtareas, _REVISION)
+    assert _estado() == (True, subtareas, _ULTIMA)
     ids = [s[0] for s in subtareas]
     assert _pasos_de_las_subtareas() == {
         ids[0]: ventas["Cierre"],

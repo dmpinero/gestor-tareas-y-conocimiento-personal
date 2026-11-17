@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
@@ -19,6 +19,8 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_tareas_
     RepositorioTareasSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
+
+_AHORA = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
 
 
 def _filas(sql: str, **parametros) -> list[tuple]:
@@ -117,10 +119,10 @@ def test_renombrar_un_grupo_con_el_nombre_de_otro_no_cambia_nada(sesion_bd) -> N
     "operacion",
     [
         lambda r: r.renombrar(999999, "X"),
-        lambda r: r.eliminar(999999),
+        lambda r: r.eliminar(999999, _AHORA),
         lambda r: r.anadir_estado(999999, "X"),
-        lambda r: r.renombrar_estado(999999, 1, "X"),
-        lambda r: r.eliminar_estado(999999, 1, None),
+        lambda r: r.renombrar_estado(999999, 1, "X", _AHORA),
+        lambda r: r.eliminar_estado(999999, 1, None, _AHORA),
         lambda r: r.reordenar_estados(999999, []),
     ],
 )
@@ -161,7 +163,7 @@ def test_renombrar_un_estado_conserva_su_posicion(sesion_bd) -> None:
     grupo = _grupo(sesion_bd, "Desarrollo", "Pendiente", "Hecha")
 
     resultado = RepositorioGruposEstadosSqlAlchemy(sesion_bd).renombrar_estado(
-        grupo.id, grupo.estados[0].id, "Por hacer"
+        grupo.id, grupo.estados[0].id, "Por hacer", _AHORA
     )
 
     assert [(e.posicion, e.nombre) for e in resultado.estados] == [(1, "Por hacer"), (2, "Hecha")]
@@ -179,9 +181,9 @@ def test_un_estado_de_otro_grupo_lanza_no_encontrado(sesion_bd, operacion) -> No
         match=f"^No existe el estado con id {ajeno} en el grupo de estados con id {grupo.id}$",
     ):
         if operacion == "renombrar":
-            repositorio.renombrar_estado(grupo.id, ajeno, "X")
+            repositorio.renombrar_estado(grupo.id, ajeno, "X", _AHORA)
         else:
-            repositorio.eliminar_estado(grupo.id, ajeno, None)
+            repositorio.eliminar_estado(grupo.id, ajeno, None, _AHORA)
 
     assert _filas("SELECT nombre FROM estados_grupo WHERE id = :e", e=ajeno) == [("Nueva",)]
 
@@ -192,7 +194,7 @@ def test_eliminar_un_estado_renumera_los_siguientes(sesion_bd, posicion) -> None
     grupo = _grupo(sesion_bd, "G", *nombres)
 
     resultado = RepositorioGruposEstadosSqlAlchemy(sesion_bd).eliminar_estado(
-        grupo.id, grupo.estados[posicion].id, None
+        grupo.id, grupo.estados[posicion].id, None, _AHORA
     )
 
     quedan = [n for i, n in enumerate(nombres) if i != posicion]
@@ -225,7 +227,7 @@ def test_un_estado_con_tareas_no_se_elimina_sin_destino(sesion_bd) -> None:
 
     with pytest.raises(EntidadConDependenciasError):
         RepositorioGruposEstadosSqlAlchemy(sesion_bd).eliminar_estado(
-            grupo.id, grupo.estados[0].id, None
+            grupo.id, grupo.estados[0].id, None, _AHORA
         )
 
     assert _estados_guardados(grupo.id) == [(1, "Pendiente"), (2, "Hecha")]
@@ -239,7 +241,7 @@ def test_eliminar_un_estado_mueve_antes_sus_tareas_al_destino(sesion_bd) -> None
     tareas = [_tarea(sesion_bd, grupo), _tarea(sesion_bd, grupo), _tarea(sesion_bd, grupo, 2)]
 
     resultado = RepositorioGruposEstadosSqlAlchemy(sesion_bd).eliminar_estado(
-        grupo.id, pendiente.id, hecha.id
+        grupo.id, pendiente.id, hecha.id, _AHORA
     )
 
     assert [(e.posicion, e.nombre, e.tareas) for e in resultado.estados] == [
@@ -255,7 +257,7 @@ def test_eliminar_un_grupo_deja_sus_tareas_sin_grupo_ni_estado(sesion_bd) -> Non
     otro = _grupo(sesion_bd, "Ventas", "Nueva")
     suya, ajena = _tarea(sesion_bd, grupo), _tarea(sesion_bd, otro)
 
-    RepositorioGruposEstadosSqlAlchemy(sesion_bd).eliminar(grupo.id)
+    RepositorioGruposEstadosSqlAlchemy(sesion_bd).eliminar(grupo.id, _AHORA)
 
     assert _filas("SELECT nombre FROM grupos_estados") == [("Ventas",)]
     assert _filas("SELECT nombre FROM estados_grupo") == [("Nueva",)]
@@ -374,11 +376,11 @@ def test_cambiar_estado_solo_cambia_el_estado(sesion_bd) -> None:
     b = grupo.estados[1]
 
     tarea = RepositorioTareasSqlAlchemy(sesion_bd).cambiar_estado(
-        creada.id, ReferenciaEstado(id=b.id, nombre=b.nombre)
+        creada.id, ReferenciaEstado(id=b.id, nombre=b.nombre), _AHORA
     )
 
     assert tarea.estado == ReferenciaEstado(id=b.id, nombre="B")
     assert {**vars(tarea), "estado": None} == {**vars(creada), "estado": None}
     assert _estado_de(creada.id) == (grupo.id, b.id)
     with pytest.raises(EntidadNoEncontradaError, match="^No existe la tarea con id 999999$"):
-        RepositorioTareasSqlAlchemy(sesion_bd).cambiar_estado(999999, tarea.estado)
+        RepositorioTareasSqlAlchemy(sesion_bd).cambiar_estado(999999, tarea.estado, _AHORA)

@@ -102,6 +102,11 @@ export interface Tarea {
   estado: ReferenciaNombre | null
   /** Workflow de la tarea; `null` si no tiene. */
   workflow: ReferenciaNombre | null
+  /** Instante en UTC (`YYYY-MM-DDTHH:MM:SSZ`) desde el que el contador de
+   * vencimiento está congelado, o `null` si no lo está. Lo pone el servidor: la
+   * tarea está congelada mientras está completada o en un estado llamado DONE, y
+   * el contador muestra lo que faltaba para `fecha_vencimiento` en ese instante. */
+  congelada_en: string | null
 }
 
 /**

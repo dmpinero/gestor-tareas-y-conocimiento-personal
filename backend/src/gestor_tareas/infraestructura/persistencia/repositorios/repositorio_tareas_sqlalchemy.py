@@ -1,10 +1,12 @@
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.orm import Session
 
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.nombres_catalogo import ordenar_nombres
+from gestor_tareas.dominio.tarea.congelacion import instante_de_congelacion
 from gestor_tareas.dominio.tarea.entidades import (
     Oportunidad,
     ReferenciaEstado,
@@ -29,6 +31,48 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_comenta
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     filas_obtenidas,
 )
+
+
+def _instante_de_columna(valor: datetime | None) -> datetime | None:
+    """La columna guarda el instante en UTC sin la zona: se le vuelve a poner."""
+    return valor.replace(tzinfo=UTC) if valor is not None else None
+
+
+def _instante_a_columna(instante: datetime | None) -> datetime | None:
+    """El instante en UTC sin la zona, como lo guarda la columna."""
+    return instante.astimezone(UTC).replace(tzinfo=None) if instante is not None else None
+
+
+def ajustar_congelacion_de_tareas(
+    sesion: Session,
+    condicion: ColumnElement[bool],
+    nombre_estado: str | None,
+    ahora: datetime,
+) -> None:
+    """Aplica la regla de congelación (``instante_de_congelacion``) a las tareas que
+    cumplen la condición, que van a quedar en el estado ``nombre_estado`` (``None``:
+    sin estado) sin cambiar su estado completada.
+
+    Las lee con bloqueo y guarda solo las que cambian; no confirma. Es para los
+    cambios de estado de muchas tareas a la vez (renombrar o eliminar un estado,
+    eliminar un grupo), dentro de su transacción.
+    """
+    consulta = (
+        select(TareaModelo.id, TareaModelo.completada, TareaModelo.congelada_en)
+        .where(condicion)
+        .order_by(TareaModelo.id)
+        .with_for_update()
+    )
+    for fila in sesion.execute(consulta).all():
+        anterior = _instante_de_columna(fila.congelada_en)
+        nuevo = instante_de_congelacion(anterior, fila.completada, nombre_estado, ahora)
+        if nuevo != anterior:
+            sesion.execute(
+                update(TareaModelo)
+                .where(TareaModelo.id == fila.id)
+                .values(congelada_en=_instante_a_columna(nuevo))
+                .execution_options(synchronize_session=False)
+            )
 
 
 def _a_oportunidad(modelo: OportunidadModelo | None) -> Oportunidad | None:
@@ -68,6 +112,7 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
             if modelo.workflow is not None
             else None
         ),
+        congelada_en=_instante_de_columna(modelo.congelada_en),
     )
 
 
@@ -134,6 +179,7 @@ class RepositorioTareasSqlAlchemy:
         modelo.grupo_estados_id = tarea.grupo_estados.id if tarea.grupo_estados else None
         modelo.estado_id = tarea.estado.id if tarea.estado else None
         modelo.workflow_id = tarea.workflow.id if tarea.workflow else None
+        modelo.congelada_en = _instante_a_columna(tarea.congelada_en)
 
     @staticmethod
     def _asignar_oportunidad(modelo: TareaModelo, oportunidad: Oportunidad | None) -> None:
@@ -223,28 +269,34 @@ class RepositorioTareasSqlAlchemy:
             self._sesion.commit()
         return _a_entidad(modelo)
 
-    def cambiar_completada(self, id_tarea: int, completada: bool) -> Tarea | None:
+    def cambiar_completada(self, id_tarea: int, completada: bool, ahora: datetime) -> Tarea | None:
         with traducir_conflictos(self._sesion):
             modelo = self._tarea_bloqueada(id_tarea)
             if modelo is None:
                 self._sesion.rollback()
                 return None
+            tarea = _a_entidad(modelo)
+            tarea.completada = completada
+            tarea.ajustar_congelacion(ahora)
             modelo.completada = completada
+            modelo.congelada_en = _instante_a_columna(tarea.congelada_en)
             self._sesion.commit()
         return _a_entidad(modelo)
 
-    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado) -> Tarea:
+    def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado, ahora: datetime) -> Tarea:
         with traducir_conflictos(self._sesion):
             modelo = self._tarea_bloqueada(id_tarea)
             if modelo is None:
                 self._sesion.rollback()
                 raise EntidadNoEncontradaError(f"No existe la tarea con id {id_tarea}")
-            modelo.estado_id = estado.id
-            self._sesion.flush()
-            # Antes de confirmar: después, otra petición podría haberla borrado. La
-            # relación con el estado aún no se ha recargado: se usa el nuevo.
+            # La relación con el estado aún no se ha recargado: se usa el nuevo.
             tarea = _a_entidad(modelo)
             tarea.estado = ReferenciaEstado(id=estado.id, nombre=estado.nombre)
+            tarea.ajustar_congelacion(ahora)
+            modelo.estado_id = estado.id
+            modelo.congelada_en = _instante_a_columna(tarea.congelada_en)
+            # Antes de confirmar: después, otra petición podría haberla borrado.
+            self._sesion.flush()
             self._sesion.commit()
         return tarea
 

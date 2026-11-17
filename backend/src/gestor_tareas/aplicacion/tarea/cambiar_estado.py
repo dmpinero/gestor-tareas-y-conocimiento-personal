@@ -1,3 +1,10 @@
+from collections.abc import Callable
+from datetime import datetime
+
+from gestor_tareas.aplicacion.comentario.anadir_comentario import (
+    ahora_en_utc,
+    instante_de_comentario,
+)
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.dominio.excepciones import (
     AsignacionDeEstadoInvalidaError,
@@ -13,14 +20,20 @@ class CambiarEstadoTarea:
     """Mueve una tarea a otro estado de su grupo de estados.
 
     Cualquier estado del grupo es alcanzable desde cualquier otro: no hay secuencia.
-    Solo cambia el estado; el resto de datos de la tarea se conserva.
+    Solo cambia el estado y, con él, el contador de vencimiento (se congela al
+    entrar en DONE y deja de estarlo al salir si no está completada; ver
+    ``Tarea.ajustar_congelacion``); el resto de datos de la tarea se conserva.
     """
 
     def __init__(
-        self, repositorio: RepositorioTareas, repositorio_grupos: RepositorioGruposEstados
+        self,
+        repositorio: RepositorioTareas,
+        repositorio_grupos: RepositorioGruposEstados,
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ) -> None:
         self._repositorio = repositorio
         self._repositorio_grupos = repositorio_grupos
+        self._reloj = reloj
 
     def ejecutar(self, id_tarea: int, id_estado: int) -> Tarea:
         def guardar() -> Tarea:
@@ -48,7 +61,9 @@ class CambiarEstadoTarea:
                 )
             estado = estado_de_destino(grupo, id_estado)
             return self._repositorio.cambiar_estado(
-                id_tarea, ReferenciaEstado(id=estado.id, nombre=estado.nombre)
+                id_tarea,
+                ReferenciaEstado(id=estado.id, nombre=estado.nombre),
+                instante_de_comentario(self._reloj),
             )
 
         # Si choca con otra petición simultánea (p. ej. el borrado del estado), se

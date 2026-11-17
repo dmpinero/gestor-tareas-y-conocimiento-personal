@@ -8,8 +8,8 @@ const AHORA = new Date(2026, 10, 13, 12, 0, 0)
 // Se desmontan al acabar cada test para que el reloj compartido se detenga.
 const montados: { unmount: () => void }[] = []
 
-function montar(vencimiento: string | null, completada = false) {
-  const envoltorio = mount(AvisoVencimiento, { props: { vencimiento, completada } })
+function montar(vencimiento: string | null, completada = false, congeladaEn: string | null = null) {
+  const envoltorio = mount(AvisoVencimiento, { props: { vencimiento, completada, congeladaEn } })
   montados.push(envoltorio)
   return envoltorio
 }
@@ -86,5 +86,11 @@ describe('AvisoVencimiento', () => {
     await vi.advanceTimersByTimeAsync(10_000)
 
     expect(campanas(envoltorio)).toHaveLength(2)
+  })
+
+  it('no avisa de una tarea con el contador congelado (en DONE) aunque venza pronto', () => {
+    const envoltorio = montar('2026-11-13T15:59:59', false, '2026-11-13T10:00:00Z')
+    expect(envoltorio.find('[data-aviso-vencimiento]').exists()).toBe(false)
+    expect(campanas(envoltorio)).toHaveLength(0)
   })
 })
