@@ -1212,6 +1212,38 @@ describe('VistaTareas', () => {
 
         expect(panelActual().textContent).toContain('EstadoCompletada')
       })
+
+      it('desde el detalle, "Marcar como completada" la completa y el botón pasa a "Desmarcar como completada"', async () => {
+        vi.mocked(clienteApi.parchear).mockImplementation((_ruta, cuerpo) =>
+          Promise.resolve({
+            ...structuredClone(TAREAS[0]),
+            completada: (cuerpo as { completada: boolean }).completada,
+          }),
+        )
+        const envoltorio = await montar([TAREAS[0]])
+        await pulsarAccionFila(envoltorio, 'Escribir informe', 'Ver detalle de la tarea')
+        await flushPromises()
+
+        panelActual()
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="Marcar como completada la tarea Escribir informe"]',
+          )!
+          .click()
+        await flushPromises()
+
+        expect(clienteApi.parchear).toHaveBeenLastCalledWith('/tareas/1/completada', {
+          completada: true,
+        })
+        expect(panelActual().textContent).toContain('EstadoCompletada')
+        expect(
+          panelActual().querySelector(
+            'button[aria-label="Desmarcar como completada la tarea Escribir informe"]',
+          ),
+        ).not.toBeNull()
+        expect(botonCompletar(envoltorio, 'Escribir informe').attributes('aria-checked')).toBe(
+          'true',
+        )
+      })
     })
 
     describe('avance de las subtareas', () => {

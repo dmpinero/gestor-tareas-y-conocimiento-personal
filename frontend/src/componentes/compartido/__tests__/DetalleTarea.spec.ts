@@ -464,6 +464,55 @@ describe('DetalleTarea', () => {
     })
   })
 
+  describe('marcar como completada', () => {
+    function botonesPie(): HTMLButtonElement[] {
+      return [...modal().querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button')]
+    }
+
+    it('una tarea pendiente tiene "Marcar como completada" justo antes de "Editar", que pide alternarla', async () => {
+      const envoltorio = await montar(TAREA_OPORTUNIDAD)
+
+      const textos = botonesPie().map((boton) => boton.textContent?.trim())
+      const indice = textos.indexOf('Marcar como completada')
+      expect(indice).toBeGreaterThanOrEqual(0)
+      expect(textos[indice + 1]).toBe('Editar')
+      const boton = botonesPie()[indice]!
+      expect(boton.getAttribute('aria-label')).toBe(
+        'Marcar como completada la tarea Escribir informe',
+      )
+      expect(boton.querySelector('svg')).not.toBeNull()
+      boton.click()
+      await flushPromises()
+
+      expect(envoltorio.emitted('alternarCompletada')).toEqual([[]])
+      expect(envoltorio.emitted('cerrar')).toBeUndefined()
+    })
+
+    it('una tarea completada tiene "Desmarcar como completada" justo antes de "Editar"', async () => {
+      const envoltorio = await montar({ ...TAREA_OPORTUNIDAD, completada: true })
+
+      const textos = botonesPie().map((boton) => boton.textContent?.trim())
+      const indice = textos.indexOf('Desmarcar como completada')
+      expect(indice).toBeGreaterThanOrEqual(0)
+      expect(textos[indice + 1]).toBe('Editar')
+      expect(textos).not.toContain('Marcar como completada')
+      botonesPie()[indice]!.click()
+      await flushPromises()
+
+      expect(envoltorio.emitted('alternarCompletada')).toEqual([[]])
+    })
+
+    it('mientras se edita no se muestra', async () => {
+      await montar(TAREA_OPORTUNIDAD)
+      await contenedor!.setProps({ editando: true })
+      await flushPromises()
+
+      const textos = botonesPie().map((boton) => boton.textContent?.trim())
+      expect(textos).not.toContain('Marcar como completada')
+      expect(textos).not.toContain('Desmarcar como completada')
+    })
+  })
+
   describe('subtareas y comentarios', () => {
     it('muestra las subtareas a la izquierda y los comentarios de la tarea a la derecha', async () => {
       vi.mocked(clienteApi.obtener).mockResolvedValue([
