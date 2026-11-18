@@ -3497,6 +3497,159 @@ describe('VistaTareas', () => {
         })
       })
 
+      describe('ordenar tarjetas', () => {
+        const CLAVE_ORDEN = 'gestor-tareas:orden-tablero'
+        const ARTICULO_PENDIENTE = { ...ARTICULO, estado: { id: 10, nombre: 'Pendiente' } }
+        const DOS_PENDIENTES = [INFORME, ARTICULO_PENDIENTE, SUELTA]
+
+        beforeEach(() => localStorage.removeItem(CLAVE_ORDEN))
+        afterEach(() => localStorage.removeItem(CLAVE_ORDEN))
+
+        function elementoTarjeta(nombreColumna: string, nombre: string): HTMLElement {
+          const tarjeta = [
+            ...columna(nombreColumna).querySelectorAll<HTMLElement>('[data-tarjeta]'),
+          ].find((t) => t.querySelector('[data-nombre-tarjeta]')?.textContent?.trim() === nombre)
+          if (!tarjeta) throw new Error(`No se encontró la tarjeta "${nombre}"`)
+          return tarjeta
+        }
+
+        // La tarjeta ocupa de y=100 a y=200: por encima de 150 es su mitad superior.
+        function arrastrarSobre(tarjeta: HTMLElement, dataTransfer: object, clientY: number) {
+          const elemento = tarjeta.closest('li')!
+          elemento.getBoundingClientRect = () =>
+            ({ top: 100, bottom: 200, height: 100, left: 0, right: 0, width: 0 }) as DOMRect
+          const evento = new Event('dragover', { bubbles: true, cancelable: true })
+          Object.defineProperty(evento, 'dataTransfer', { value: dataTransfer })
+          Object.defineProperty(evento, 'clientY', { value: clientY })
+          tarjeta.dispatchEvent(evento)
+        }
+
+        async function arrastrar(
+          origen: HTMLElement,
+          destino: HTMLElement,
+          clientY: number,
+          nombreColumna = 'Pendiente',
+        ): Promise<string | null> {
+          const dataTransfer = crearDataTransfer()
+          lanzarEventoArrastre(origen, 'dragstart', dataTransfer)
+          arrastrarSobre(destino, dataTransfer, clientY)
+          await flushPromises()
+          const indicador =
+            document.body.querySelector('[data-insertar]')?.getAttribute('data-insertar') ?? null
+          lanzarEventoArrastre(columna(nombreColumna), 'drop', dataTransfer)
+          lanzarEventoArrastre(origen, 'dragend', dataTransfer)
+          await flushPromises()
+          return indicador
+        }
+
+        it('arrastrar una tarjeta sobre la mitad superior de otra la coloca encima, sin llamar a la API', async () => {
+          await montarTablero(DOS_PENDIENTES)
+          expect(tarjetas('Pendiente')).toEqual(['Escribir informe', 'Leer artículo'])
+
+          const indicador = await arrastrar(
+            elementoTarjeta('Pendiente', 'Leer artículo'),
+            elementoTarjeta('Pendiente', 'Escribir informe'),
+            120,
+          )
+
+          expect(indicador).toBe('antes')
+          expect(tarjetas('Pendiente')).toEqual(['Leer artículo', 'Escribir informe'])
+          expect(clienteApi.parchear).not.toHaveBeenCalled()
+          expect(document.body.querySelector('[data-insertar]')).toBeNull()
+          expect(document.body.querySelector('[data-anuncio-tablero]')?.textContent).toBe(
+            'Leer artículo en la posición 1 de Pendiente',
+          )
+        })
+
+        it('soltar sobre la mitad inferior la coloca debajo', async () => {
+          await montarTablero(DOS_PENDIENTES)
+
+          const indicador = await arrastrar(
+            elementoTarjeta('Pendiente', 'Escribir informe'),
+            elementoTarjeta('Pendiente', 'Leer artículo'),
+            180,
+          )
+
+          expect(indicador).toBe('despues')
+          expect(tarjetas('Pendiente')).toEqual(['Leer artículo', 'Escribir informe'])
+        })
+
+        it('el orden se recuerda en este navegador al volver a abrir el tablero', async () => {
+          const envoltorio = await montarTablero(DOS_PENDIENTES)
+          await arrastrar(
+            elementoTarjeta('Pendiente', 'Leer artículo'),
+            elementoTarjeta('Pendiente', 'Escribir informe'),
+            120,
+          )
+          envoltorio.unmount()
+          document.body.innerHTML = ''
+
+          await montarTablero(DOS_PENDIENTES)
+
+          expect(tarjetas('Pendiente')).toEqual(['Leer artículo', 'Escribir informe'])
+        })
+
+        it('con un orden guardado ilegible se usa el orden de siempre', async () => {
+          localStorage.setItem(CLAVE_ORDEN, '{no es json')
+
+          await montarTablero(DOS_PENDIENTES)
+
+          expect(tarjetas('Pendiente')).toEqual(['Escribir informe', 'Leer artículo'])
+        })
+
+        it('"Mover a…" permite subir y bajar la tarjeta sin perder el foco', async () => {
+          await montarTablero(DOS_PENDIENTES)
+
+          const mover = botonEn(columna('Pendiente'), 'Mover a… (Leer artículo)')
+          mover.focus()
+          mover.click()
+          await flushPromises()
+          let menu = document.body.querySelector<HTMLElement>('[data-menu-mover]')!
+          // Es la última: solo se puede subir.
+          expect(menu.querySelector('button[aria-label^="Bajar"]')).toBeNull()
+          botonEn(menu, 'Subir Leer artículo una posición').click()
+          await flushPromises()
+
+          expect(tarjetas('Pendiente')).toEqual(['Leer artículo', 'Escribir informe'])
+          expect(clienteApi.parchear).not.toHaveBeenCalled()
+          expect(document.activeElement?.getAttribute('aria-label')).toBe(
+            'Mover a… (Leer artículo)',
+          )
+          expect(document.body.querySelector('[data-anuncio-tablero]')?.textContent).toBe(
+            'Leer artículo en la posición 1 de Pendiente',
+          )
+
+          botonEn(columna('Pendiente'), 'Mover a… (Leer artículo)').click()
+          await flushPromises()
+          menu = document.body.querySelector<HTMLElement>('[data-menu-mover]')!
+          expect(menu.querySelector('button[aria-label^="Subir"]')).toBeNull()
+          botonEn(menu, 'Bajar Leer artículo una posición').click()
+          await flushPromises()
+
+          expect(tarjetas('Pendiente')).toEqual(['Escribir informe', 'Leer artículo'])
+        })
+
+        it('arrastrar a otra columna sobre una tarjeta cambia el estado y la deja en esa posición', async () => {
+          // "Escribir informe" en Pendiente, "Leer artículo" en En curso.
+          await montarTablero()
+          vi.mocked(clienteApi.parchear).mockResolvedValue({
+            ...structuredClone(INFORME),
+            estado: { id: 11, nombre: 'En curso' },
+          })
+
+          await arrastrar(
+            elementoTarjeta('Pendiente', 'Escribir informe'),
+            elementoTarjeta('En curso', 'Leer artículo'),
+            180,
+            'En curso',
+          )
+
+          expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/estado', { estado_id: 11 })
+          expect(tarjetas('Pendiente')).toEqual([])
+          expect(tarjetas('En curso')).toEqual(['Leer artículo', 'Escribir informe'])
+        })
+      })
+
       describe('"Añadir tarea" en una columna', () => {
         it('abre el alta con el grupo del tablero y, en la primera columna, no recoloca la tarea', async () => {
           const envoltorio = await montarTablero()
