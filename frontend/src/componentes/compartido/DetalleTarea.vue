@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Pencil, Trash } from '@lucide/vue'
+import { CircleCheck, Pencil, Trash, Undo2 } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
 import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
@@ -43,7 +43,9 @@ import {
 // está abierta, el resto de la página queda oculto. "Editar" emite `editar`;
 // mientras `editando` sea cierto, la columna de los datos muestra el slot
 // `edicion` (el formulario, que pone quien la usa) y los comentarios siguen a
-// la vista. Las zonas (cabecera, tarjetas de campos, subtareas y comentarios)
+// la vista. Junto a "Editar", un botón destacado marca la tarea como completada
+// (o la desmarca) y emite `alternarCompletada`: el cambio lo hace quien la usa.
+// Las zonas (cabecera, tarjetas de campos, subtareas y comentarios)
 // son superficies que destacan sobre el lienzo de la modal. Si al cerrarla hay
 // cambios sin guardar (`hayCambios`, el formulario de quien la usa, o un
 // comentario o una subtarea a medio escribir), pide confirmación antes de
@@ -54,7 +56,12 @@ const props = defineProps<{
   editando?: boolean
   hayCambios?: boolean
 }>()
-const emit = defineEmits<{ cerrar: []; eliminar: []; editar: [] }>()
+const emit = defineEmits<{
+  cerrar: []
+  eliminar: []
+  editar: []
+  alternarCompletada: []
+}>()
 
 // Se conserva la última tarea mostrada para que el contenido no desaparezca
 // mientras dura la animación de cierre.
@@ -408,6 +415,30 @@ function alCambiarApertura(abierta: boolean): void {
           <Trash aria-hidden="true" />
           Eliminar
         </Button>
+        <template v-if="!props.editando">
+          <Button
+            v-if="tareaMostrada?.completada"
+            type="button"
+            variant="outline"
+            data-alternar-completada
+            :aria-label="`Desmarcar como completada la tarea ${tareaMostrada?.nombre ?? ''}`"
+            @click="emit('alternarCompletada')"
+          >
+            <Undo2 aria-hidden="true" />
+            Desmarcar como completada
+          </Button>
+          <Button
+            v-else
+            type="button"
+            data-alternar-completada
+            class="bg-green-700 text-white hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700"
+            :aria-label="`Marcar como completada la tarea ${tareaMostrada?.nombre ?? ''}`"
+            @click="emit('alternarCompletada')"
+          >
+            <CircleCheck aria-hidden="true" />
+            Marcar como completada
+          </Button>
+        </template>
         <Button
           v-if="!props.editando"
           type="button"

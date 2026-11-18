@@ -1520,6 +1520,7 @@ async function guardar(): Promise<void> {
       :hay-cambios="editandoEnDetalle && formularioCambiado"
       @cerrar="cerrarDetalle"
       @editar="editarEnDetalle"
+      @alternar-completada="tareaEnDetalle && tienda.alternarCompletada(tareaEnDetalle.id)"
       @eliminar="tareaEnDetalle && pedirEliminar(tareaEnDetalle)"
     >
       <template #edicion>
