@@ -431,7 +431,7 @@ function alCambiarApertura(abierta: boolean): void {
             v-else
             type="button"
             data-alternar-completada
-            class="bg-green-700 text-white hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700"
+            class="bg-green-700 text-white hover:bg-green-800"
             :aria-label="`Marcar como completada la tarea ${tareaMostrada?.nombre ?? ''}`"
             @click="emit('alternarCompletada')"
           >
