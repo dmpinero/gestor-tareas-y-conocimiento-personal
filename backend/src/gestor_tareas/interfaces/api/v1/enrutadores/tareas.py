@@ -32,6 +32,7 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflo
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     RepositorioEtiquetasSqlAlchemy,
     RepositorioPersonasSqlAlchemy,
+    RepositorioSubestadosSqlAlchemy,
 )
 from gestor_tareas.interfaces.api.dependencias import obtener_sesion
 from gestor_tareas.interfaces.api.respuestas_error import (
@@ -57,8 +58,11 @@ def _a_esquema(tarea: Tarea) -> TareaSalidaEsquema:
 
 
 def _argumentos(datos: TareaCrearEsquema) -> dict:
-    """Datos del cuerpo para el caso de uso, con la oportunidad como entidad."""
+    """Datos del cuerpo para el caso de uso, con la oportunidad como entidad. Si el
+    cuerpo no trae ``subestado``, no se pasa: en la edición, la tarea lo conserva."""
     argumentos = datos.model_dump(exclude={"oportunidad"})
+    if "subestado" not in datos.model_fields_set:
+        del argumentos["subestado"]
     if datos.oportunidad is not None:
         argumentos["oportunidad"] = Oportunidad(**datos.oportunidad.model_dump())
     return argumentos
@@ -121,6 +125,9 @@ def crear(
 
     Con `grupo_estados_id`, la tarea queda en el primer estado del grupo; 422 si el
     grupo no existe o no tiene estados. Sin él, no tiene grupo ni estado.
+
+    `subestado` (opcional, como mucho uno) se busca en el catálogo de subestados como
+    las etiquetas y se da de alta si no existe; sin él (o null), no tiene subestado.
     """
     caso_de_uso = CrearTarea(
         RepositorioTareasSqlAlchemy(sesion),
@@ -128,6 +135,7 @@ def crear(
         RepositorioPersonasSqlAlchemy(sesion),
         RepositorioWorkflowsSqlAlchemy(sesion),
         RepositorioGruposEstadosSqlAlchemy(sesion),
+        repositorio_subestados=RepositorioSubestadosSqlAlchemy(sesion),
     )
     tarea = _validando_grupo_y_workflow(datos, lambda: caso_de_uso.ejecutar(**_argumentos(datos)))
     return _a_esquema(tarea)
@@ -156,13 +164,18 @@ def actualizar(
 
     `grupo_estados_id` también se sustituye: con el mismo grupo que ya tenía, la tarea
     conserva su estado; con otro, queda en su primer estado, y si falta o es null,
-    queda sin grupo ni estado. 422 si el grupo no existe o no tiene estados."""
+    queda sin grupo ni estado. 422 si el grupo no existe o no tiene estados.
+
+    `subestado` es lo único que no se sustituye si falta: sin él, la tarea conserva
+    su subestado; con un nombre, se busca o se da de alta en el catálogo como en el
+    alta, y con null la tarea queda sin subestado."""
     caso_de_uso = ActualizarTarea(
         RepositorioTareasSqlAlchemy(sesion),
         RepositorioEtiquetasSqlAlchemy(sesion),
         RepositorioPersonasSqlAlchemy(sesion),
         RepositorioGruposEstadosSqlAlchemy(sesion),
         RepositorioWorkflowsSqlAlchemy(sesion),
+        repositorio_subestados=RepositorioSubestadosSqlAlchemy(sesion),
     )
     tarea = _validando_grupo_y_workflow(
         datos, lambda: caso_de_uso.ejecutar(id_tarea, **_argumentos(datos))

@@ -33,9 +33,9 @@ Característica: Comentarios de las subtareas
     Y los comentarios de la subtarea "Camión" de "Mudanza" son "Otra"
     Y al consultar las tareas la subtarea "Cajas" de "Mudanza" tiene 3 comentarios
 
-  Escenario: Se admite un comentario de 500 caracteres
-    Cuando comento un texto de 500 caracteres en la subtarea "Cajas" de "Mudanza"
-    Entonces la API responde 201 con un comentario de 500 caracteres
+  Escenario: Se admite un comentario de 5000 caracteres
+    Cuando comento un texto de 5000 caracteres en la subtarea "Cajas" de "Mudanza"
+    Entonces la API responde 201 con un comentario de 5000 caracteres
 
   Esquema del escenario: Se rechaza un comentario de subtarea con datos inválidos
     Cuando intento comentar en la subtarea "Cajas" de "Mudanza" con el cuerpo <cuerpo>
@@ -49,7 +49,7 @@ Característica: Comentarios de las subtareas
       | {"texto": " \\n\\t "}          |
       | {"texto": null}               |
       | {"texto": 5}                  |
-      | {"texto": "<501 caracteres>"} |
+      | {"texto": "<5001 caracteres>"} |
 
   Escenario: Editar un comentario de subtarea cambia su texto, conserva su fecha de alta y lo marca como editado
     Dado que la subtarea "Cajas" de "Mudanza" tiene los comentarios "Pedir cajas; Comprar cinta"
@@ -69,7 +69,7 @@ Característica: Comentarios de las subtareas
       | cuerpo                        |
       | {}                            |
       | {"texto": " "}                |
-      | {"texto": "<501 caracteres>"} |
+      | {"texto": "<5001 caracteres>"} |
 
   Escenario: Eliminar un comentario de subtarea lo quita del histórico
     Dado que la subtarea "Cajas" de "Mudanza" tiene los comentarios "Uno; Dos; Tres"

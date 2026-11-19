@@ -146,6 +146,7 @@ def test_actualizar_usa_el_mismo_cuerpo_y_validaciones_que_el_alta() -> None:
         "oportunidad": None,
         "grupo_estados_id": None,
         "workflow_id": None,
+        "subestado": None,
     }
     with pytest.raises(ValidationError):
         TareaActualizarEsquema(**_datos(fecha_creacion="2026-11-09T10:30:00Z"))
@@ -189,6 +190,7 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "estado": None,
         "workflow": None,
         "congelada_en": None,
+        "subestado": None,
     }
 
 

@@ -8,10 +8,11 @@ from gestor_tareas.aplicacion.comentario.anadir_comentario import (
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
 from gestor_tareas.aplicacion.tarea.asignar_grupo_estados import GrupoPedido
 from gestor_tareas.aplicacion.tarea.asignar_workflow import WorkflowPedido
-from gestor_tareas.aplicacion.tarea.resolver_catalogos import resolver_nombres
+from gestor_tareas.aplicacion.tarea.resolver_catalogos import resolver_nombre, resolver_nombres
 from gestor_tareas.dominio.etiqueta.repositorio import RepositorioEtiquetas
 from gestor_tareas.dominio.grupo_estados.repositorio import RepositorioGruposEstados
 from gestor_tareas.dominio.persona.repositorio import RepositorioPersonas
+from gestor_tareas.dominio.subestado.repositorio import RepositorioSubestados
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea, TipoTarea
 from gestor_tareas.dominio.tarea.repositorio import RepositorioTareas
 from gestor_tareas.dominio.workflow.repositorio import RepositorioWorkflows
@@ -23,6 +24,9 @@ class CrearTarea:
     Una tarea creada con un workflow recibe una subtarea por cada paso vigente del
     workflow, en su orden, pendiente y sin persona ni prioridad (ver
     ``WorkflowPedido``). El tipo de la tarea no le añade subtareas.
+
+    El subestado (opcional) se busca en su catálogo como las etiquetas y se da de
+    alta si no existe.
 
     Si nace en el estado DONE (el primero de su grupo), nace congelada desde este
     instante (ver ``Tarea.ajustar_congelacion``).
@@ -36,6 +40,8 @@ class CrearTarea:
         repositorio_workflows: RepositorioWorkflows,
         repositorio_grupos: RepositorioGruposEstados,
         reloj: Callable[[], datetime] = ahora_en_utc,
+        *,
+        repositorio_subestados: RepositorioSubestados | None = None,
     ) -> None:
         self._repositorio = repositorio
         self._repositorio_etiquetas = repositorio_etiquetas
@@ -43,6 +49,7 @@ class CrearTarea:
         self._repositorio_workflows = repositorio_workflows
         self._reloj = reloj
         self._repositorio_grupos = repositorio_grupos
+        self._repositorio_subestados = repositorio_subestados
 
     def ejecutar(
         self,
@@ -57,6 +64,7 @@ class CrearTarea:
         oportunidad: Oportunidad | None = None,
         grupo_estados_id: int | None = None,
         workflow_id: int | None = None,
+        subestado: str | None = None,
     ) -> Tarea:
         def guardar() -> Tarea:
             # Lo primero, para bloquear el workflow y el grupo antes que nada, en ese
@@ -73,6 +81,7 @@ class CrearTarea:
                 asignados=resolver_nombres(self._repositorio_personas, asignados or []),
                 tipo=tipo,
                 oportunidad=oportunidad,
+                subestado=resolver_nombre(self._repositorio_subestados, subestado),
             )
             tarea.subtareas = workflow.asignar(tarea)
             grupo.asignar(tarea)

@@ -93,8 +93,8 @@ def _id_comentario(cliente: TestClient, tarea: str, subtarea: str, texto: str) -
 
 def _cuerpo(cuerpo: str) -> dict:
     datos = json.loads(cuerpo)
-    if datos.get("texto") == "<501 caracteres>":
-        datos["texto"] = "a" * 501
+    if datos.get("texto") == "<5001 caracteres>":
+        datos["texto"] = "a" * 5001
     return datos
 
 
@@ -166,11 +166,11 @@ def comentar(cliente: TestClient, texto: str, subtarea: str, tarea: str) -> Resp
 
 
 @when(
-    _patron("comento un texto de 500 caracteres en la subtarea {subtarea} de {tarea}"),
+    _patron("comento un texto de 5000 caracteres en la subtarea {subtarea} de {tarea}"),
     target_fixture="respuesta",
 )
 def comentar_en_el_limite(cliente: TestClient, subtarea: str, tarea: str) -> Response:
-    return cliente.post(_ruta_de(cliente, tarea, subtarea), json={"texto": "á" * 500})
+    return cliente.post(_ruta_de(cliente, tarea, subtarea), json={"texto": "á" * 5000})
 
 
 @when(
@@ -327,10 +327,10 @@ def la_api_responde_con_el_comentario(respuesta: Response, texto: str) -> None:
     assert comentario["editado"] is None
 
 
-@then("la API responde 201 con un comentario de 500 caracteres")
+@then("la API responde 201 con un comentario de 5000 caracteres")
 def la_api_responde_en_el_limite(respuesta: Response) -> None:
     assert respuesta.status_code == 201
-    assert respuesta.json()["texto"] == f"<p>{'á' * 500}</p>"
+    assert respuesta.json()["texto"] == f"<p>{'á' * 5000}</p>"
 
 
 @then(_patron("la API responde 200 con el comentario editado {texto} con su fecha de alta"))

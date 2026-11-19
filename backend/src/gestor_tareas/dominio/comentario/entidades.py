@@ -7,8 +7,8 @@ class Comentario:
     """Comentario del histórico de una tarea. No tiene autor; se puede editar su
     texto y borrar.
 
-    ``texto`` es obligatorio: HTML ya saneado (hasta 500 caracteres de texto
-    visible y 10000 de HTML; lo valida la API). ``creado`` es el instante en que
+    ``texto`` es obligatorio: HTML ya saneado (hasta 5000 caracteres de texto
+    visible y 50000 de HTML; lo valida la API). ``creado`` es el instante en que
     se dio de alta y ``editado`` el de su última edición (``None`` si nunca se
     editó); ambos en UTC (con zona horaria) y con precisión de segundos, y los pone
     la aplicación, no la persona usuaria.

@@ -60,6 +60,7 @@ _OPCIONALES_POR_DEFECTO = {
     "estado": None,
     "workflow": None,
     "congelada_en": None,
+    "subestado": None,
 }
 
 
