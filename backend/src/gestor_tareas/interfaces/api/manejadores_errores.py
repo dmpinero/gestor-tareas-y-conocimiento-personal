@@ -12,6 +12,10 @@ from gestor_tareas.dominio.excepciones import (
     FiltroDeListadoInvalidoError,
     NombreDuplicadoError,
 )
+from gestor_tareas.dominio.imagen.errores import (
+    ImagenDemasiadoGrandeError,
+    ImagenNoAdmitidaError,
+)
 
 _METODOS_HTTP = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 
@@ -91,6 +95,14 @@ def registrar_manejadores_de_errores(aplicacion: FastAPI) -> None:
     @aplicacion.exception_handler(FiltroDeListadoInvalidoError)
     async def _filtro_invalido(_: Request, error: FiltroDeListadoInvalidoError) -> JSONResponse:
         return _respuesta(status.HTTP_422_UNPROCESSABLE_CONTENT, error)
+
+    @aplicacion.exception_handler(ImagenNoAdmitidaError)
+    async def _imagen_no_admitida(_: Request, error: ImagenNoAdmitidaError) -> JSONResponse:
+        return _respuesta(status.HTTP_422_UNPROCESSABLE_CONTENT, error)
+
+    @aplicacion.exception_handler(ImagenDemasiadoGrandeError)
+    async def _imagen_grande(_: Request, error: ImagenDemasiadoGrandeError) -> JSONResponse:
+        return _respuesta(status.HTTP_413_CONTENT_TOO_LARGE, error)
 
     @aplicacion.exception_handler(Exception)
     async def _error_no_controlado(_: Request, error: Exception) -> JSONResponse:

@@ -4,6 +4,8 @@ Los comentarios se escriben con un editor de texto enriquecido y se guardan como
 HTML saneado con una lista blanca: lo que no está en ella se elimina (no se
 rechaza). Un texto sin ninguna etiqueta (clientes de la API, datos antiguos) se
 convierte en párrafos, uno por línea, con sus caracteres especiales escapados.
+Las imágenes (`img`) solo se conservan si apuntan a una imagen guardada en la
+propia aplicación (`/api/v1/imagenes/<id>`).
 """
 
 import re
@@ -12,10 +14,12 @@ from html.parser import HTMLParser
 
 import nh3
 
+from gestor_tareas.interfaces.api.v1.esquemas.imagen import PATRON_URL_IMAGEN
+
 # Etiquetas que admite el editor: negrita, cursiva, subrayado, tachado, listas,
-# enlaces, color del texto (span) y resaltado (mark).
+# enlaces, color del texto (span), resaltado (mark) e imágenes guardadas (img).
 ETIQUETAS_PERMITIDAS = frozenset(
-    {"p", "br", "strong", "em", "u", "s", "ul", "ol", "li", "a", "span", "mark"}
+    {"p", "br", "strong", "em", "u", "s", "ul", "ol", "li", "a", "span", "mark", "img"}
 )
 
 # `rel` no figura: nh3 lo fija siempre en los enlaces (ver REL_ENLACES).
@@ -23,6 +27,7 @@ _ATRIBUTOS_PERMITIDOS = {
     "a": {"href", "target"},
     "span": {"style"},
     "mark": {"style", "data-color"},
+    "img": {"src", "alt"},
 }
 
 _ESQUEMAS_URL = {"http", "https", "mailto"}
@@ -43,11 +48,23 @@ _ETIQUETA = re.compile(r"</?[a-zA-Z]|<!")
 
 _SALTO_DE_LINEA = re.compile(r"\r\n|\r|\n")
 
+# Una imagen del HTML ya saneado. Su `src` (si lo tiene) ya está validado y su
+# `alt` no lleva `<` ni `>` (ver _filtrar_atributo), así que el primer `>` la cierra.
+_IMAGEN = re.compile(r"<img\b[^>]*>")
+_IMAGEN_CON_SRC = re.compile(r'<img\b[^>]*\ssrc="[^"]+"[^>]*>')
+
+_LONGITUD_MAXIMA_ALT = 200
+
 
 def _filtrar_atributo(etiqueta: str, atributo: str, valor: str) -> str | None:
     """Ajusta por etiqueta lo que nh3 solo sabe filtrar de forma global: el
-    `style` de cada etiqueta queda solo con su propiedad, y `target` solo admite
-    `_blank`."""
+    `style` de cada etiqueta queda solo con su propiedad, `target` solo admite
+    `_blank`, el `src` de una imagen solo puede ser la URL de una imagen guardada
+    y su `alt` pierde los signos de etiqueta y se acorta."""
+    if etiqueta == "img":
+        if atributo == "src":
+            return valor if PATRON_URL_IMAGEN.fullmatch(valor) else None
+        return re.sub(r"[<>]", "", valor)[:_LONGITUD_MAXIMA_ALT]
     if atributo == "style":
         propiedad = _PROPIEDAD_ESTILO.get(etiqueta)
         declaraciones = []
@@ -93,7 +110,16 @@ def sanear_html(texto: str) -> str:
         filter_style_properties=set(_PROPIEDAD_ESTILO.values()),
         strip_comments=True,
     )
+    # nh3 no sabe quitar una etiqueta por el valor de un atributo: una imagen a la
+    # que le ha quitado el `src` (externo, `data:`, otra ruta…) se elimina aquí.
+    saneado = _IMAGEN.sub(lambda m: m[0] if _IMAGEN_CON_SRC.fullmatch(m[0]) else "", saneado)
     return saneado if _ETIQUETA.search(saneado) else f"<p>{saneado}</p>"
+
+
+def contiene_imagenes(html: str) -> bool:
+    """Si el HTML ya saneado tiene alguna imagen guardada (cuenta como contenido
+    aunque no haya texto visible)."""
+    return _IMAGEN_CON_SRC.search(html) is not None
 
 
 class _ExtractorTexto(HTMLParser):

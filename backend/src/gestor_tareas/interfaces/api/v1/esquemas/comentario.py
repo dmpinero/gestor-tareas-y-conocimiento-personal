@@ -3,7 +3,11 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, Field, PlainSerializer, WithJsonSchema
 
-from gestor_tareas.interfaces.api.v1.esquemas.html_comentario import sanear_html, texto_visible
+from gestor_tareas.interfaces.api.v1.esquemas.html_comentario import (
+    contiene_imagenes,
+    sanear_html,
+    texto_visible,
+)
 from gestor_tareas.interfaces.api.v1.esquemas.texto import (
     PATRON_NO_VACIO,
     TextoObligatorio,
@@ -43,7 +47,8 @@ def _sanear_y_validar(texto: str) -> str:
     """Sanea el HTML y comprueba sus límites; devuelve el HTML saneado."""
     html = sanear_html(texto)
     visible = str(recortar_espacios(texto_visible(html)))
-    if not visible:
+    # Una imagen guardada cuenta como contenido: se admite un comentario sin texto.
+    if not visible and not contiene_imagenes(html):
         raise ValueError("El comentario no tiene texto visible")
     if len(visible) > LONGITUD_MAXIMA_VISIBLE:
         raise ValueError(
@@ -62,10 +67,14 @@ TextoComentario = Annotated[TextoObligatorio, AfterValidator(_sanear_y_validar)]
 
 _DESCRIPCION_TEXTO = (
     "HTML del comentario. Se sanea con una lista blanca (p, br, strong, em, u, s, ul, "
-    "ol, li, a, span, mark; enlaces http/https/mailto) y lo demás se elimina; un texto "
-    "sin etiquetas se convierte en un párrafo por línea. El texto visible (sin "
-    f"etiquetas, con las entidades decodificadas y recortado) debe tener de 1 a "
-    f"{LONGITUD_MAXIMA_VISIBLE} caracteres visibles, y el HTML saneado no puede pasar de "
+    "ol, li, a, span, mark, img; enlaces http/https/mailto; imágenes solo con `src` "
+    "y `alt`, y `src` solo puede ser la URL relativa de una imagen subida, "
+    "/api/v1/imagenes/{id}) y lo demás se elimina; un texto sin etiquetas se convierte "
+    "en un párrafo por línea. El texto visible (sin etiquetas, con las entidades "
+    "decodificadas y recortado) debe tener de 1 a "
+    f"{LONGITUD_MAXIMA_VISIBLE} caracteres visibles, salvo que el comentario tenga "
+    "alguna imagen (entonces puede no tener texto; las imágenes no cuentan), y el "
+    "HTML saneado no puede pasar de "
     f"{LONGITUD_MAXIMA_HTML} caracteres (422 si no)."
 )
 
