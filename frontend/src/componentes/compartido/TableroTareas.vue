@@ -605,7 +605,9 @@ function terminarArrastre(): void {
              desbordar la página en pantallas estrechas. `relative` hace que los
              textos sr-only (posición absoluta) de las columnas se recorten aquí:
              sin él se posicionaban respecto a un antecesor fuera del scroll y
-             ensanchaban la página. -->
+             ensanchaban la página. Los carriles se reparten el ancho por igual
+             (flex-1 basis-0) con un mínimo de 18rem: con pocos estados llenan el
+             tablero y con muchos desplazan en horizontal. -->
         <div class="relative flex max-w-full items-start gap-3 overflow-x-auto pb-2">
           <section
             v-for="estado in grupoActivo.estados"
@@ -613,7 +615,7 @@ function terminarArrastre(): void {
             :aria-label="`Estado ${estado.nombre}`"
             :data-destino="idColumnaDestino === estado.id ? 'true' : undefined"
             :class="[
-              'bg-muted relative flex w-72 shrink-0 flex-col rounded-lg border',
+              'bg-muted relative flex min-w-72 flex-1 basis-0 flex-col rounded-lg border',
               idColumnaDestino === estado.id && 'ring-primary ring-2',
             ]"
             @dragover="alArrastrarSobre($event, estado)"

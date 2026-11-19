@@ -204,3 +204,46 @@ test('muestra las tareas en un calendario según su fecha de vencimiento', async
   )
   expect(desborda).toBe(false)
 })
+
+test('los carriles del tablero ocupan todo el ancho disponible', async ({ page, request }) => {
+  const grupo = `Ancho ${Date.now()}`
+  const creado = await request.post('/api/v1/grupos-estados', { data: { nombre: grupo } })
+  expect(creado.status()).toBe(201)
+  const { id } = (await creado.json()) as { id: number }
+  for (const estado of ['Uno', 'Dos']) {
+    const respuesta = await request.post(`/api/v1/grupos-estados/${id}/estados`, {
+      data: { nombre: estado },
+    })
+    expect(respuesta.status()).toBe(201)
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Ver como tablero' }).click()
+  await page.getByRole('combobox', { name: 'Grupo del tablero' }).selectOption({ label: grupo })
+  const uno = page.getByRole('region', { name: 'Estado Uno' })
+  const dos = page.getByRole('region', { name: 'Estado Dos' })
+  await expect(dos).toBeVisible()
+
+  // Los dos carriles se reparten el ancho: mismo ancho y llegan al borde del contenedor.
+  const medidas = await uno.evaluate((carril) => {
+    const contenedor = carril.parentElement!
+    const carriles = [...contenedor.children].map((hijo) => hijo.getBoundingClientRect())
+    const caja = contenedor.getBoundingClientRect()
+    return {
+      anchos: carriles.map((r) => Math.round(r.width)),
+      huecoDerecho: Math.round(caja.right - carriles[carriles.length - 1]!.right),
+    }
+  })
+  expect(Math.abs(medidas.anchos[0]! - medidas.anchos[1]!)).toBeLessThanOrEqual(1)
+  expect(medidas.anchos[0]!).toBeGreaterThan(400)
+  expect(medidas.huecoDerecho).toBeLessThanOrEqual(1)
+  await page.screenshot({ path: 'e2e/capturas/grupos-05-tablero-ancho.png' })
+
+  // En un móvil siguen desplazándose dentro de su contenedor, sin desbordar la página.
+  await page.setViewportSize({ width: 390, height: 844 })
+  const desborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  )
+  expect(desborda).toBe(false)
+})
