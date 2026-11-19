@@ -200,6 +200,22 @@ Requisitos:
 Solo puede haber un alta a la vez. Los tests y la CI nunca abren un navegador
 contra Digital Desktop ni Notion: la automatización se sustituye por dobles.
 
+**Si la página dice «No existe el archivo de configuración» y el archivo sí
+existe** en `~/.config/gestor-tareas/alta_oportunidad.json`: con Docker Desktop
+y WSL, el montaje de esa carpeta en el contenedor puede quedar vacío. Recrea
+solo el servicio (no toca la base de datos ni la sesión guardada del
+navegador) y vuelve a cargar la página:
+
+```bash
+docker compose up -d --force-recreate automatizador
+```
+
+Para comprobar que el contenedor ya ve el archivo, sin mostrar su contenido:
+
+```bash
+docker compose exec automatizador test -r /config/alta_oportunidad.json && echo visible
+```
+
 
 ### Desarrollo sin Docker
 
