@@ -13,6 +13,17 @@ server {
     # cuando el backend tarda en estar disponible.
     resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
 
+    # El alta de oportunidades la sirve el servicio "automatizador" (Playwright),
+    # no el backend. Al ser el prefijo mas largo, nginx lo elige antes que
+    # /api/v1/. Si ese servicio no existe (p. ej. en Railway), solo esta ruta
+    # responde 502; el resto de la API no se ve afectada.
+    location /api/v1/alta-oportunidades {
+        set $automatizador ${URL_AUTOMATIZADOR};
+        proxy_pass $automatizador;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
     location /api/v1/ {
         # Con una variable en proxy_pass, nginx ignora la parte de ruta del
         # destino para el reemplazo del prefijo de location y reenvia la URI

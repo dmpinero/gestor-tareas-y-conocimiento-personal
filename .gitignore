@@ -1,6 +1,10 @@
 # Entornos y secretos
 .env
 *.env.local
+# Configuración local del alta de oportunidades (datos corporativos): solo se
+# versiona el ejemplo con valores de mentira.
+config/*.json
+!config/*.ejemplo.json
 
 # Python (backend)
 backend/.venv/

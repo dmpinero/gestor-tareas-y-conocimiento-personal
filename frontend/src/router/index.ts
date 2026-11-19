@@ -5,6 +5,7 @@ import VistaConocimiento from '@/vistas/VistaConocimiento.vue'
 import VistaAjustes from '@/vistas/VistaAjustes.vue'
 import VistaGruposEstados from '@/vistas/VistaGruposEstados.vue'
 import VistaWorkflows from '@/vistas/VistaWorkflows.vue'
+import VistaOportunidades from '@/vistas/VistaOportunidades.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,6 +19,11 @@ const router = createRouter({
       path: '/tareas',
       name: 'tareas',
       component: VistaTareas,
+    },
+    {
+      path: '/tareas/oportunidades',
+      name: 'oportunidades',
+      component: VistaOportunidades,
     },
     {
       path: '/conocimiento',

@@ -1,0 +1,20 @@
+{
+  "url_digital_desktop": "https://crm.ejemplo.invalid/",
+  "url_notion": "https://notas.ejemplo.invalid/datos-de-los-proyectos",
+  "titulo_pagina_notion": "Proyectos de ejemplo",
+  "perfil": "Persona Ejemplo",
+  "cliente_busqueda": "Cliente Ejemplo",
+  "cliente": "[CEJ] Cliente Ejemplo S.A.",
+  "grupo": "Grupo Ejemplo",
+  "tipo": "Tipo Ejemplo",
+  "segmentacion": "Segmentación Ejemplo",
+  "fase": "1 - Fase Ejemplo",
+  "probabilidad": "50",
+  "dias_fecha_limite": 7,
+  "tipo_servicio": "Servicio Ejemplo",
+  "lineas_negocio": [{ "nombre": "Línea Ejemplo", "porcentaje": "100" }],
+  "comunidades": [
+    { "nombre": "Comunidad A", "porcentaje": "80" },
+    { "nombre": "Comunidad B", "porcentaje": "20" }
+  ]
+}

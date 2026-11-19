@@ -55,7 +55,11 @@ Pull Requests y releases automáticos).
 ### Infraestructura y despliegue
 
 - **Docker** (multi-stage) para backend y frontend, orquestados con
-  `docker-compose.yml` en local (backend + frontend + MySQL).
+  `docker-compose.yml` en local (backend + frontend + MySQL + automatizador).
+- **Automatizador** (`backend/Dockerfile.automatizador`): servicio aparte con
+  Playwright y Chromium para el alta automática de oportunidades (ver
+  [Alta de oportunidades](#alta-de-oportunidades)). Solo existe en
+  docker-compose; el frontend le reenvía `/api/v1/alta-oportunidades`.
 - **nginx** sirve el build estático del frontend y actúa de reverse proxy
   hacia el backend (`/api/v1/*`), con resolución del hostname del backend
   parametrizable por variable de entorno — preparado para desplegarse como
@@ -134,19 +138,64 @@ ni MySQL de forma local: todo corre dentro de los contenedores.
    cp frontend/.env.example frontend/.env
    ```
 
-3. Levantar los tres servicios (MySQL, backend y frontend). La primera vez
-   tarda unos minutos porque construye las imágenes:
+3. Levantar los servicios (MySQL, backend, automatizador y frontend). La
+   primera vez tarda unos minutos porque construye las imágenes:
 
    ```bash
    docker compose up -d --build
    ```
 
-4. Comprobar que los tres contenedores están sanos (columna `STATUS` con
+4. Comprobar que los cuatro contenedores están sanos (columna `STATUS` con
    `(healthy)`; puede tardar hasta medio minuto):
 
    ```bash
    docker compose ps
    ```
+
+Todos los puertos se publican solo en `127.0.0.1`: la aplicación no tiene
+autenticación y el automatizador usa la sesión corporativa del navegador, así
+que no se puede abrir desde otros equipos de la red.
+
+### Alta de oportunidades
+
+La página **Tareas → Oportunidades** (`/tareas/oportunidades`) da de alta una
+oportunidad en Digital Desktop: rellenas los campos variables (código PRJ,
+descripción, duración, importe y coste), revisas el resumen y pulsas
+«Crear oportunidad». El servicio `automatizador` abre una ventana de Chromium,
+rellena el formulario paso a paso y te pregunta en la página todo lo que
+necesite (si ya existe una oportunidad con ese PRJ, si hace falta que actúes
+en el navegador, y al final si guardar o no). **Nada se guarda sin pulsar
+«Guardar»**; después la página muestra la captura del resultado.
+
+Requisitos:
+
+- **Configuración local fuera de git.** La URL, la persona responsable, el
+  cliente y el resto de valores fijos son datos corporativos y no están en el
+  repositorio. Crea tu archivo a partir del ejemplo y rellénalo con los
+  valores reales:
+
+  ```bash
+  mkdir -p ~/.config/gestor-tareas
+  cp config/alta_oportunidad.ejemplo.json ~/.config/gestor-tareas/alta_oportunidad.json
+  # edita ~/.config/gestor-tareas/alta_oportunidad.json
+  ```
+
+  Se monta en el servicio en solo lectura (`/config`) y se lee en cada alta,
+  así que los cambios no necesitan reiniciar nada. Si falta o no es válido,
+  la página explica el motivo y no deja lanzar el alta. Nunca la copies dentro
+  del repositorio (`config/*.json` está ignorado salvo el ejemplo).
+- **WSLg** (Windows 11 con WSL 2): la ventana del navegador se muestra en
+  Windows a través de la pantalla de WSL (`DISPLAY=:0` y `/tmp/.X11-unix`
+  montado en el servicio). Lanza `docker compose` desde WSL.
+- **VPN corporativa activa.** Sin ella Digital Desktop responde «Forbidden» y
+  la página lo indica.
+- **Primer inicio de sesión.** La primera vez inicia sesión en Digital Desktop
+  (y en Notion, si dejas la descripción vacía) en la ventana que se abre; la
+  página espera hasta 5 minutos. La sesión se guarda en el volumen
+  `perfil_navegador`, así que no hay que repetirlo.
+
+Solo puede haber un alta a la vez. Los tests y la CI nunca abren un navegador
+contra Digital Desktop ni Notion: la automatización se sustituye por dobles.
 
 
 ### Desarrollo sin Docker

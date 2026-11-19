@@ -23,6 +23,11 @@ class Configuracion(BaseSettings):
     sentry_dsn: str | None = None
     otel_endpoint_exportador: str | None = None
 
+    # Servicio "automatizador" (alta de oportunidades): la configuración con los
+    # datos corporativos es un JSON local que nunca se versiona, montado aquí.
+    ruta_configuracion_alta_oportunidad: str = "/config/alta_oportunidad.json"
+    directorio_perfil_navegador: str = "/perfil-navegador"
+
 
 @lru_cache
 def obtener_configuracion() -> Configuracion:
