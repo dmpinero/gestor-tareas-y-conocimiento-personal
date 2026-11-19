@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ListTree, MessageSquare, MoveRight, Plus } from '@lucide/vue'
+import { ArrowDown, ArrowUp, ListTree, MessageSquare, MoveRight, Plus } from '@lucide/vue'
 import { computed, nextTick, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
@@ -27,7 +27,9 @@ import { useTiendaTareas } from '@/stores/tareas'
 // orden de Ajustes. `tareas` llega ya filtrada y ordenada por quien lo usa.
 // Las tarjetas se mueven arrastrándolas o con "Mover a…" (teclado y lectores
 // de pantalla); se guarda con `PATCH /tareas/{id}/estado` y la tarjeta se
-// recoloca con la respuesta. Abrir el detalle y el alta son cosa del padre.
+// recoloca con la respuesta. Dentro de una columna también se reordenan
+// arrastrando o con "Subir"/"Bajar" del mismo menú; ese orden es solo visual
+// y se recuerda en este navegador. Abrir el detalle y el alta son cosa del padre.
 // Cada columna lleva una cabecera del color de su estado (por posición, como
 // la píldora de la tabla) y una barra resume cuántas tareas hay en cada uno.
 // Las subtareas se despliegan bajo su tarjeta, donde también se añaden.
@@ -60,8 +62,83 @@ const tareasDelGrupo = computed(() =>
   props.tareas.filter((tarea) => tarea.grupo_estados?.id === grupoActivo.value?.id),
 )
 
+// --- Orden de las tarjetas ---------------------------------------------------
+// Orden visual de cada columna, solo en este navegador: no cambia la tarea.
+// Por estado, la lista de ids en el orden elegido; las tarjetas que no están
+// en ella van detrás, en el orden en que llegan.
+const CLAVE_ORDEN = 'gestor-tareas:orden-tablero'
+type OrdenTablero = Record<string, number[]>
+
+function leerOrden(): OrdenTablero {
+  try {
+    const guardado: unknown = JSON.parse(localStorage.getItem(CLAVE_ORDEN) ?? '{}')
+    if (!guardado || typeof guardado !== 'object' || Array.isArray(guardado)) return {}
+    const orden: OrdenTablero = {}
+    for (const [estado, ids] of Object.entries(guardado)) {
+      if (Array.isArray(ids)) orden[estado] = ids.filter((id) => Number.isInteger(id))
+    }
+    return orden
+  } catch {
+    return {}
+  }
+}
+
+const orden = ref<OrdenTablero>(leerOrden())
+
+function guardarOrden(): void {
+  try {
+    localStorage.setItem(CLAVE_ORDEN, JSON.stringify(orden.value))
+  } catch {
+    // Sin almacenamiento (p. ej. navegación privada) el orden dura la sesión.
+  }
+}
+
 function tareasEn(estado: EstadoGrupo): Tarea[] {
-  return tareasDelGrupo.value.filter((tarea) => tarea.estado?.id === estado.id)
+  const ids = orden.value[estado.id] ?? []
+  const posicion = (tarea: Tarea) => {
+    const indice = ids.indexOf(tarea.id)
+    return indice === -1 ? Number.POSITIVE_INFINITY : indice
+  }
+  return tareasDelGrupo.value
+    .filter((tarea) => tarea.estado?.id === estado.id)
+    .sort((a, b) => posicion(a) - posicion(b))
+}
+
+// Coloca la tarea en la posición `indice` de las tarjetas visibles de la
+// columna (contadas sin ella). Las ocultas por los filtros conservan su orden
+// detrás de las visibles.
+function colocar(tarea: Tarea, estado: EstadoGrupo, indice: number): void {
+  const visibles = tareasEn(estado)
+    .filter((t) => t.id !== tarea.id)
+    .map((t) => t.id)
+  visibles.splice(Math.max(0, Math.min(indice, visibles.length)), 0, tarea.id)
+  const ocultas = (orden.value[estado.id] ?? []).filter((id) => !visibles.includes(id))
+  const nuevo: OrdenTablero = {}
+  for (const [clave, ids] of Object.entries(orden.value)) {
+    nuevo[clave] = ids.filter((id) => id !== tarea.id)
+  }
+  nuevo[estado.id] = [...visibles, ...ocultas]
+  orden.value = nuevo
+  guardarOrden()
+}
+
+function estadoDe(tarea: Tarea): EstadoGrupo | undefined {
+  return grupoActivo.value?.estados.find((estado) => estado.id === tarea.estado?.id)
+}
+
+function posicionEnColumna(tarea: Tarea): number {
+  const estado = estadoDe(tarea)
+  return estado ? tareasEn(estado).findIndex((t) => t.id === tarea.id) : -1
+}
+
+function puedeBajar(tarea: Tarea): boolean {
+  const estado = estadoDe(tarea)
+  return !!estado && posicionEnColumna(tarea) < tareasEn(estado).length - 1
+}
+
+function anunciarPosicion(tarea: Tarea, estado: EstadoGrupo): void {
+  const posicion = tareasEn(estado).findIndex((t) => t.id === tarea.id) + 1
+  anuncio.value = `${tarea.nombre} en la posición ${posicion} de ${estado.nombre}`
 }
 
 function otrosEstados(tarea: Tarea): EstadoGrupo[] {
@@ -108,12 +185,29 @@ function alDevolverFocoMenu(evento: Event): void {
   if (moviendo) evento.preventDefault()
 }
 
-async function mover(tarea: Tarea, estado: EstadoGrupo): Promise<void> {
+// Sube o baja la tarjeta una posición en su columna, desde "Mover a…".
+async function desplazar(tarea: Tarea, paso: -1 | 1): Promise<void> {
+  const estado = estadoDe(tarea)
+  if (!estado) return
+  moviendo = true
+  idMenuAbierto.value = null
+  anuncio.value = ''
+  colocar(tarea, estado, posicionEnColumna(tarea) + paso)
+  await nextTick()
+  anunciarPosicion(tarea, estado)
+  document.getElementById(idBotonMover(tarea))?.focus()
+  moviendo = false
+}
+
+async function mover(tarea: Tarea, estado: EstadoGrupo, indice?: number): Promise<void> {
   moviendo = true
   idMenuAbierto.value = null
   anuncio.value = ''
   const correcto = await tienda.cambiarEstadoTarea(tarea.id, estado.id)
-  if (correcto) anuncio.value = `${tarea.nombre} movida a ${estado.nombre}`
+  if (correcto) {
+    if (indice !== undefined) colocar(tarea, estado, indice)
+    anuncio.value = `${tarea.nombre} movida a ${estado.nombre}`
+  }
   await nextTick()
   // Tanto si se movió como si no, el foco queda en "Mover a…" de la tarjeta.
   document.getElementById(idBotonMover(tarea))?.focus()
@@ -194,6 +288,33 @@ async function guardarSubtarea(tarea: Tarea): Promise<void> {
 // --- Arrastrar y soltar ------------------------------------------------------
 const idArrastrada = ref<number | null>(null)
 const idColumnaDestino = ref<number | null>(null)
+// Tarjeta sobre la que se está arrastrando y si se soltaría encima o debajo.
+const insercion = ref<{ idTarea: number; lado: 'antes' | 'despues' } | null>(null)
+
+function alArrastrarSobreTarjeta(evento: DragEvent, tarea: Tarea): void {
+  if (idArrastrada.value === null) return
+  if (tarea.id === idArrastrada.value) {
+    insercion.value = null
+    return
+  }
+  const caja = (evento.currentTarget as HTMLElement).getBoundingClientRect()
+  const lado = evento.clientY < caja.top + caja.height / 2 ? 'antes' : 'despues'
+  insercion.value = { idTarea: tarea.id, lado }
+}
+
+function ladoInsercion(tarea: Tarea): 'antes' | 'despues' | undefined {
+  return insercion.value?.idTarea === tarea.id ? insercion.value.lado : undefined
+}
+
+// Posición donde quedaría la tarjeta arrastrada, contada sin ella; al final
+// si se suelta en la columna fuera de las tarjetas.
+function indiceDestino(estado: EstadoGrupo): number {
+  const otras = tareasEn(estado).filter((t) => t.id !== idArrastrada.value)
+  const objetivo = insercion.value
+  const indice = objetivo ? otras.findIndex((t) => t.id === objetivo.idTarea) : -1
+  if (!objetivo || indice === -1) return otras.length
+  return objetivo.lado === 'antes' ? indice : indice + 1
+}
 
 function alEmpezarArrastre(evento: DragEvent, tarea: Tarea): void {
   idArrastrada.value = tarea.id
@@ -214,19 +335,30 @@ function alSalirDeColumna(evento: DragEvent, estado: EstadoGrupo): void {
   // Pasar sobre una tarjeta de la misma columna también lanza `dragleave`.
   const destino = evento.relatedTarget as Node | null
   if (destino && (evento.currentTarget as HTMLElement).contains(destino)) return
-  if (idColumnaDestino.value === estado.id) idColumnaDestino.value = null
+  if (idColumnaDestino.value === estado.id) {
+    idColumnaDestino.value = null
+    insercion.value = null
+  }
 }
 
 function alSoltar(evento: DragEvent, estado: EstadoGrupo): void {
   evento.preventDefault()
   const tarea = tareasDelGrupo.value.find((t) => t.id === idArrastrada.value)
+  const indice = indiceDestino(estado)
   terminarArrastre()
-  if (tarea && tarea.estado?.id !== estado.id) void mover(tarea, estado)
+  if (!tarea) return
+  if (tarea.estado?.id !== estado.id) {
+    void mover(tarea, estado, indice)
+    return
+  }
+  colocar(tarea, estado, indice)
+  anunciarPosicion(tarea, estado)
 }
 
 function terminarArrastre(): void {
   idArrastrada.value = null
   idColumnaDestino.value = null
+  insercion.value = null
 }
 </script>
 
@@ -307,7 +439,20 @@ function terminarArrastre(): void {
 
             <div class="flex flex-col gap-2 p-2">
               <ul :aria-label="`Tareas en ${estado.nombre}`" class="flex flex-col gap-2">
-                <li v-for="tarea in tareasEn(estado)" :key="tarea.id" class="flex flex-col">
+                <!-- Una línea encima o debajo marca dónde quedará la tarjeta. -->
+                <li
+                  v-for="tarea in tareasEn(estado)"
+                  :key="tarea.id"
+                  :data-insertar="ladoInsercion(tarea)"
+                  :class="[
+                    'relative flex flex-col',
+                    ladoInsercion(tarea) === 'antes' &&
+                      'before:bg-primary before:absolute before:inset-x-0 before:-top-[5px] before:h-0.5 before:rounded-full',
+                    ladoInsercion(tarea) === 'despues' &&
+                      'after:bg-primary after:absolute after:inset-x-0 after:-bottom-[5px] after:h-0.5 after:rounded-full',
+                  ]"
+                  @dragover="alArrastrarSobreTarjeta($event, tarea)"
+                >
                   <div
                     data-tarjeta
                     draggable="true"
@@ -457,6 +602,42 @@ function terminarArrastre(): void {
                           <p v-else class="text-muted-foreground px-2 py-1 text-sm">
                             No hay otros estados en el grupo.
                           </p>
+                          <template v-if="posicionEnColumna(tarea) > 0 || puedeBajar(tarea)">
+                            <p
+                              :id="`menu-orden-${tarea.id}`"
+                              class="mt-1 border-t px-2 pt-2 pb-1 text-sm font-medium"
+                            >
+                              Orden en la columna
+                            </p>
+                            <ul :aria-labelledby="`menu-orden-${tarea.id}`" class="flex flex-col">
+                              <li v-if="posicionEnColumna(tarea) > 0">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  class="w-full justify-start"
+                                  :aria-label="`Subir ${tarea.nombre} una posición`"
+                                  @click="desplazar(tarea, -1)"
+                                >
+                                  <ArrowUp aria-hidden="true" />
+                                  Subir
+                                </Button>
+                              </li>
+                              <li v-if="puedeBajar(tarea)">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  class="w-full justify-start"
+                                  :aria-label="`Bajar ${tarea.nombre} una posición`"
+                                  @click="desplazar(tarea, 1)"
+                                >
+                                  <ArrowDown aria-hidden="true" />
+                                  Bajar
+                                </Button>
+                              </li>
+                            </ul>
+                          </template>
                         </PopoverContent>
                       </Popover>
                     </div>
