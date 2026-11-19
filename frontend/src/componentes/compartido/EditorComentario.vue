@@ -1,7 +1,12 @@
 <script setup lang="ts">
 /**
  * Editor de texto enriquecido para los comentarios (Tiptap): negrita, cursiva,
- * subrayado, tachado, color de texto, resaltado, listas y enlaces.
+ * subrayado, tachado, color de texto, resaltado, listas, enlaces e imágenes.
+ *
+ * Las imágenes (capturas de pantalla) se añaden pegándolas, soltándolas o con
+ * el botón "Imagen": se suben a la API al añadirlas y se insertan con la URL
+ * que devuelve. Mientras sube alguna, emite `subiendo` con `true` (y `false`
+ * al terminar) para que no se envíe el comentario a medias.
  *
  * `v-model` es el HTML del contenido (cadena vacía si no hay nada escrito).
  * El área editable es un `textbox` multilínea con el nombre `etiqueta` y el
@@ -13,6 +18,7 @@ import {
   Baseline,
   Bold,
   Highlighter,
+  ImagePlus,
   Italic,
   Link as IconoEnlace,
   List,
@@ -21,16 +27,19 @@ import {
   Underline,
 } from '@lucide/vue'
 import { Highlight } from '@tiptap/extension-highlight'
+import { Image } from '@tiptap/extension-image'
 import { Color, TextStyle } from '@tiptap/extension-text-style'
 import { CharacterCount, Placeholder } from '@tiptap/extensions'
 import { StarterKit } from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
+import type { EditorView } from '@tiptap/pm/view'
 import { onBeforeUnmount, ref, useTemplateRef, watch, type Component } from 'vue'
 
+import { subirImagen, TAMANO_MAXIMO_IMAGEN, TIPOS_IMAGEN } from '@/api/imagenes'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
-import { CLASES_CONTENIDO_COMENTARIO } from '@/lib/htmlComentario'
+import { CLASES_CONTENIDO_COMENTARIO, URL_IMAGEN_PERMITIDA } from '@/lib/htmlComentario'
 import { cn } from '@/lib/utils'
 
 const props = withDefaults(
@@ -48,7 +57,11 @@ const props = withDefaults(
   }>(),
   { limite: 500 },
 )
-const emit = defineEmits<{ 'update:modelValue': [html: string]; enviar: [] }>()
+const emit = defineEmits<{
+  'update:modelValue': [html: string]
+  enviar: []
+  subiendo: [subiendo: boolean]
+}>()
 
 // Colores legibles tanto en modo claro como en oscuro.
 const COLORES_TEXTO = [
@@ -69,6 +82,22 @@ const COLORES_RESALTADO = [
   { nombre: 'Morado', valor: '#e9d5ff' },
 ]
 const URL_PERMITIDA = /^(?:https?:\/\/|mailto:)\S+$/i
+const ALT_IMAGEN = 'Captura de pantalla'
+const ACEPTA_IMAGENES = TIPOS_IMAGEN.join(',')
+
+// Solo las imágenes subidas a la aplicación (como el saneado de la API): una
+// imagen pegada desde otra web o en `data:` no se admite en el editor.
+const extensionImagen = Image.extend({
+  parseHTML() {
+    return [
+      {
+        tag: 'img[src]',
+        getAttrs: (elemento) =>
+          URL_IMAGEN_PERMITIDA.test(elemento.getAttribute('src') ?? '') ? null : false,
+      },
+    ]
+  },
+}).configure({ allowBase64: false })
 
 function atributosEditable(): Record<string, string> {
   const atributos: Record<string, string> = {
@@ -110,6 +139,7 @@ const editor = useEditor({
     TextStyle,
     Color,
     Highlight.configure({ multicolor: true }),
+    extensionImagen,
     // Cuenta como la API: puntos de código, no unidades UTF-16 (un emoji es
     // uno). Sin autoTrim: un comentario guardado que ya pasa del límite no se
     // recorta al abrirlo; solo no deja escribir más.
@@ -130,6 +160,22 @@ const editor = useEditor({
       if (evento.key !== 'Enter' || !(evento.ctrlKey || evento.metaKey)) return false
       evento.preventDefault()
       emit('enviar')
+      return true
+    },
+    handlePaste: (_vista, evento) => {
+      const imagenes = imagenesDe(evento.clipboardData)
+      if (imagenes.length === 0) return false
+      evento.preventDefault()
+      for (const fichero of imagenes) void anadirImagen(fichero)
+      return true
+    },
+    handleDrop: (vista, evento, _corte, movido) => {
+      if (movido) return false
+      const imagenes = imagenesDe(evento.dataTransfer)
+      if (imagenes.length === 0) return false
+      evento.preventDefault()
+      const posicion = posicionDeSoltar(vista, evento)
+      for (const fichero of imagenes) void anadirImagen(fichero, posicion)
       return true
     },
   },
@@ -290,6 +336,71 @@ function aplicarEnlace(): void {
 function quitarEnlace(): void {
   cadena().extendMarkRange('link').unsetLink().run()
   abiertoEnlace.value = false
+}
+
+// --- Imágenes ---------------------------------------------------------------
+
+const selectorImagen = useTemplateRef<HTMLInputElement>('selectorImagen')
+const subidasEnCurso = ref(0)
+const errorImagen = ref<string | null>(null)
+
+watch(
+  () => subidasEnCurso.value > 0,
+  (subiendo) => emit('subiendo', subiendo),
+)
+
+function imagenesDe(datos: DataTransfer | null): File[] {
+  if (!datos || props.soloLectura) return []
+  return [...(datos.files ?? [])].filter((fichero) => fichero.type.startsWith('image/'))
+}
+
+function posicionDeSoltar(vista: EditorView, evento: DragEvent): number | undefined {
+  try {
+    return vista.posAtCoords({ left: evento.clientX, top: evento.clientY })?.pos
+  } catch {
+    // Sin posición en pantalla (p. ej. sin maquetación): se usa el cursor.
+    return undefined
+  }
+}
+
+function mensajeDe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+async function anadirImagen(fichero: File, posicion?: number): Promise<void> {
+  errorImagen.value = null
+  if (fichero.size > TAMANO_MAXIMO_IMAGEN) {
+    errorImagen.value = 'No se pudo subir la imagen: La imagen no puede pasar de 5 MB'
+    return
+  }
+  subidasEnCurso.value++
+  try {
+    const { url } = await subirImagen(fichero)
+    const actual = editor.value
+    if (!actual || actual.isDestroyed) return
+    const imagen = { type: 'image', attrs: { src: url, alt: ALT_IMAGEN } }
+    // Donde se soltó (si sigue existiendo) o donde esté el cursor.
+    if (posicion !== undefined && posicion <= actual.state.doc.content.size) {
+      actual.chain().focus().insertContentAt(posicion, imagen).run()
+    } else {
+      cadena().insertContent(imagen).run()
+    }
+  } catch (error) {
+    errorImagen.value = `No se pudo subir la imagen: ${mensajeDe(error)}`
+  } finally {
+    subidasEnCurso.value--
+  }
+}
+
+function elegirImagen(): void {
+  selectorImagen.value?.click()
+}
+
+function alElegirImagen(evento: Event): void {
+  const selector = evento.target as HTMLInputElement
+  for (const fichero of selector.files ?? []) void anadirImagen(fichero)
+  // Para poder elegir otra vez el mismo archivo.
+  selector.value = ''
 }
 
 defineExpose({ editor })
@@ -454,7 +565,36 @@ defineExpose({ editor })
           </div>
         </PopoverContent>
       </Popover>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        class="size-7"
+        aria-label="Imagen"
+        title="Imagen (también se puede pegar o soltar)"
+        :disabled="soloLectura"
+        @click="elegirImagen"
+      >
+        <ImagePlus aria-hidden="true" />
+      </Button>
+      <input
+        ref="selectorImagen"
+        type="file"
+        class="hidden"
+        :accept="ACEPTA_IMAGENES"
+        multiple
+        tabindex="-1"
+        aria-hidden="true"
+        @change="alElegirImagen"
+      />
     </div>
     <EditorContent :editor="editor" />
+    <p role="status" class="text-muted-foreground px-3 text-xs empty:hidden">
+      <template v-if="subidasEnCurso > 0">Subiendo imagen…</template>
+    </p>
+    <p v-if="errorImagen" role="alert" class="text-destructive px-3 pb-1 text-xs">
+      {{ errorImagen }}
+    </p>
   </div>
 </template>

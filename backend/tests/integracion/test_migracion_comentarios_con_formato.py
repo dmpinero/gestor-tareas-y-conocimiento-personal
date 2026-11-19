@@ -19,8 +19,8 @@ from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
 from tests.integracion.tablas import vaciar_tablas
 
 _RAIZ = Path(__file__).resolve().parents[2]
-# Revisión más reciente: la del paso de las subtareas, posterior a esta.
-_ULTIMA = "e2c7a9f4b1d6"
+# Revisión más reciente: la de las imágenes de los comentarios, posterior a esta.
+_ULTIMA = "f1a6c3e8b2d9"
 _ANTERIOR = "d2a8e5c3f7b1"
 _TABLAS = ("comentarios", "comentarios_subtarea", "comentarios_paso_workflow")
 _CREADO = "2026-11-10 16:30:05"

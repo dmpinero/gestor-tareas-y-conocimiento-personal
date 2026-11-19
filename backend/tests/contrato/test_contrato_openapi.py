@@ -17,6 +17,7 @@ from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
 from gestor_tareas.interfaces.api.v1.esquemas.comentario import ComentarioCrearEsquema
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import PATRON_FECHA_HORA
 from gestor_tareas.main import crear_aplicacion
+from tests import imagenes_de_prueba
 
 esquema = schemathesis.openapi.from_asgi("/openapi.json", crear_aplicacion())
 
@@ -197,6 +198,16 @@ def _comentar_con_texto_visible_valido(case: schemathesis.Case) -> None:
         case.body["texto"] = "Comentario del contrato"
 
 
+def _subir_una_imagen_de_verdad(case: schemathesis.Case) -> None:
+    """JSON Schema no puede exigir que el archivo sea una imagen PNG, JPEG, GIF o
+    WebP por su contenido (si no, 422). En los casos que el contrato da por válidos
+    se envía una imagen PNG real, con la cabecera que exige la subida (la de la
+    propia aplicación, 403 si no); los inválidos se envían tal cual."""
+    if case.method == "POST" and case.path == "/api/v1/imagenes" and _es_positivo_con_cuerpo(case):
+        case.body["archivo"] = imagenes_de_prueba.PNG
+        case.headers = {**(case.headers or {}), "X-Requested-With": "gestor-tareas"}
+
+
 @esquema.parametrize()
 def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     """Genera peticiones a partir del OpenAPI y valida que las respuestas cumplen el esquema."""
@@ -207,5 +218,6 @@ def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     _mover_a_un_estado_del_grupo_de_la_tarea(case)
     _reordenar_los_estados_que_existen(case)
     _comentar_con_texto_visible_valido(case)
+    _subir_una_imagen_de_verdad(case)
     excluidos = _CHECKS_EXCLUIDOS_POR_RUTA.get(case.path)
     case.call_and_validate(excluded_checks=excluidos or None)

@@ -53,7 +53,7 @@ const editorComentarioFalso = defineComponent({
     soloLectura: Boolean,
     autoenfoque: Boolean,
   },
-  emits: ['update:modelValue', 'enviar'],
+  emits: ['update:modelValue', 'enviar', 'subiendo'],
   setup(props, { emit }) {
     const campo = ref<HTMLTextAreaElement | null>(null)
     onMounted(() => {
@@ -1042,5 +1042,99 @@ describe('ComentariosTarea: con el editor real', () => {
     expect(document.activeElement).toBe(edicion.element)
     const contador = document.getElementById(edicion.attributes('aria-describedby')!)
     expect(contador?.textContent?.trim()).toBe('16/500')
+  })
+})
+
+describe('ComentariosTarea: imágenes', () => {
+  const SRC = '/api/v1/imagenes/0123456789abcdef0123456789abcdef'
+  const IMAGEN = `<img src="${SRC}" alt="Captura de pantalla">`
+
+  it('un comentario con solo una imagen se puede enviar', async () => {
+    obtener.mockResolvedValue([])
+    crear.mockResolvedValue({
+      id: 9,
+      texto: IMAGEN,
+      creado: isoUtcDesdeLocal(11, 10, 11, 45),
+      editado: null,
+    })
+    const envoltorio = await montar(7)
+    await escribir(envoltorio, IMAGEN)
+
+    expect(botonEnviar(envoltorio).attributes('disabled')).toBeUndefined()
+    await botonEnviar(envoltorio).trigger('click')
+    await flushPromises()
+
+    expect(crear).toHaveBeenCalledWith('/tareas/7/comentarios', { texto: IMAGEN })
+  })
+
+  it('una imagen que no es de la aplicación no cuenta como contenido', async () => {
+    obtener.mockResolvedValue([])
+    const envoltorio = await montar(7)
+    await escribir(envoltorio, '<img src="https://ejemplo.com/a.png">')
+
+    expect(botonEnviar(envoltorio).attributes('disabled')).toBeDefined()
+  })
+
+  it('mientras se sube una imagen no se puede enviar', async () => {
+    obtener.mockResolvedValue([])
+    const envoltorio = await montar(7)
+    await escribir(envoltorio, '<p>Hola</p>')
+    const editor = envoltorio.findComponent({ name: 'EditorComentario' })
+
+    editor.vm.$emit('subiendo', true)
+    await flushPromises()
+    expect(botonEnviar(envoltorio).attributes('disabled')).toBeDefined()
+    await campoTexto(envoltorio).trigger('keydown', { key: 'Enter', ctrlKey: true })
+    await flushPromises()
+    expect(crear).not.toHaveBeenCalled()
+
+    editor.vm.$emit('subiendo', false)
+    await flushPromises()
+    expect(botonEnviar(envoltorio).attributes('disabled')).toBeUndefined()
+  })
+
+  it('editar un comentario dejando solo una imagen pide confirmación', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    await campoEdicion(envoltorio).setValue(IMAGEN)
+    await flushPromises()
+
+    await pedirGuardar(envoltorio)
+
+    expect(envoltorio.find(GRUPO_GUARDAR).exists()).toBe(true)
+  })
+
+  it('mientras se sube una imagen en la edición no se puede guardar', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    await campoEdicion(envoltorio).setValue('<p>Otro</p>')
+    envoltorio.findAllComponents({ name: 'EditorComentario' })[0]!.vm.$emit('subiendo', true)
+    await flushPromises()
+
+    await pedirGuardar(envoltorio)
+
+    expect(envoltorio.find(GRUPO_GUARDAR).exists()).toBe(false)
+  })
+
+  it('muestra las imágenes del comentario como enlace que las abre en una pestaña nueva', async () => {
+    obtener.mockResolvedValue([
+      {
+        id: 1,
+        texto: `<p>Mira</p>${IMAGEN}<img src="https://ejemplo.com/x.png" onerror="alert(1)">`,
+        creado: isoUtcDesdeLocal(4, 1, 9, 5),
+        editado: null,
+      },
+    ])
+    const envoltorio = await montar()
+
+    const imagenes = [...historial(envoltorio).querySelectorAll('img')]
+    expect(imagenes.map((i) => i.getAttribute('src'))).toEqual([SRC])
+    expect(imagenes[0]!.getAttribute('alt')).toBe('Captura de pantalla')
+    const enlace = imagenes[0]!.closest('a')!
+    expect(enlace.getAttribute('href')).toBe(SRC)
+    expect(enlace.getAttribute('target')).toBe('_blank')
+    expect(enlace.getAttribute('rel')).toContain('noopener')
   })
 })

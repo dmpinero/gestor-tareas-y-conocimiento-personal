@@ -32,6 +32,7 @@ import {
   htmlComentarioEditable,
   htmlComentarioMostrado,
   textoVisible,
+  tieneContenidoComentario,
 } from '@/lib/htmlComentario'
 
 const LONGITUD_MAXIMA = 500
@@ -64,7 +65,12 @@ const contenedorHistorial = useTemplateRef<HTMLElement>('contenedorHistorial')
 const grupos = computed(() => agruparComentariosPorDia(comentarios.value))
 // En puntos de código, como cuenta la API (un emoji es un carácter).
 const longitudTexto = computed(() => [...textoVisible(texto.value)].length)
-const puedeEnviar = computed(() => longitudTexto.value > 0 && !enviando.value)
+// Mientras el editor sube una imagen no se envía: se quedaría fuera del comentario.
+const subiendoNuevo = ref(false)
+// Un comentario puede ser solo una imagen (captura de pantalla), sin texto.
+const puedeEnviar = computed(
+  () => tieneContenidoComentario(texto.value) && !enviando.value && !subiendoNuevo.value,
+)
 
 function mensajeDe(error: unknown): string {
   if (error instanceof ErrorApi || error instanceof Error) return error.message
@@ -142,6 +148,7 @@ const textoEdicion = ref('')
 let textoAntesDeEditar = ''
 const longitudEdicion = computed(() => [...textoVisible(textoEdicion.value)].length)
 const confirmandoEdicion = ref(false)
+const subiendoEdicion = ref(false)
 const idConfirmandoEliminar = ref<number | null>(null)
 const procesando = ref(false)
 // Error de la última acción sobre un comentario, junto a él.
@@ -167,6 +174,7 @@ function cerrarAcciones(): void {
   idEditando.value = null
   textoEdicion.value = ''
   confirmandoEdicion.value = false
+  subiendoEdicion.value = false
   idConfirmandoEliminar.value = null
   errorAccion.value = null
 }
@@ -188,7 +196,7 @@ function abrirEdicion(comentario: ComentarioMostrado): void {
 // escribir o la edición cambiada: la modal pide confirmación.
 registrarBorrador(
   () =>
-    textoVisible(texto.value) !== '' ||
+    tieneContenidoComentario(texto.value) ||
     (idEditando.value !== null && textoEdicion.value !== textoAntesDeEditar),
 )
 
@@ -198,8 +206,8 @@ async function cancelarEdicion(id: number): Promise<void> {
 }
 
 async function pedirConfirmacionEdicion(id: number): Promise<void> {
-  if (procesando.value) return
-  if (longitudEdicion.value === 0) {
+  if (procesando.value || subiendoEdicion.value) return
+  if (!tieneContenidoComentario(textoEdicion.value)) {
     errorAccion.value = { id, mensaje: ERROR_TEXTO_VACIO }
     return
   }
@@ -369,6 +377,7 @@ watch(() => props.ruta, cargar, { immediate: true })
                   :invalido="errorAccion?.mensaje === ERROR_TEXTO_VACIO"
                   :solo-lectura="confirmandoEdicion"
                   autoenfoque
+                  @subiendo="subiendoEdicion = $event"
                 />
                 <span :id="idContadorEdicion" class="text-muted-foreground self-end text-xs">
                   {{ longitudEdicion }}/{{ LONGITUD_MAXIMA }}
@@ -465,6 +474,7 @@ watch(() => props.ruta, cargar, { immediate: true })
           :limite="LONGITUD_MAXIMA"
           :described-by="idContador"
           @enviar="enviar"
+          @subiendo="subiendoNuevo = $event"
         />
         <Button
           type="submit"

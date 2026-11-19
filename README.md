@@ -298,3 +298,11 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   Conocimiento y Ajustes.
 - Modo claro/oscuro con preferencia persistida y sin parpadeo al cargar.
 - Endpoint de salud `GET /api/v1/salud` y métricas Prometheus en `/metricas`.
+- Comentarios de tareas, subtareas y pasos de los workflows con formato
+  (negrita, cursiva, subrayado, tachado, color, resaltado, listas y enlaces)
+  y capturas de pantalla: se pegan (Ctrl+V), se sueltan o se eligen con el
+  botón "Imagen" del editor. Se admiten PNG, JPEG, GIF y WebP de hasta 5 MB,
+  reconocidas por su contenido; se guardan en MySQL (tabla `imagenes`, así
+  entran en las copias de seguridad) y se sirven en `GET /api/v1/imagenes/{id}`.
+  El HTML de los comentarios se sanea en la API y en el navegador: solo se
+  admiten imágenes subidas a la propia aplicación.

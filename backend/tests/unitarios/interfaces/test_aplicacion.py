@@ -38,6 +38,8 @@ def test_la_api_expone_salud_tareas_catalogos_workflows_y_grupos_de_estados_bajo
         "/api/v1/grupos-estados/{id_grupo}/estados",
         "/api/v1/grupos-estados/{id_grupo}/estados/{id_estado}",
         "/api/v1/grupos-estados/{id_grupo}/orden",
+        "/api/v1/imagenes",
+        "/api/v1/imagenes/{id_imagen}",
     }
 
 
@@ -62,6 +64,8 @@ def test_la_api_publica_los_metodos_de_cada_ruta_nueva_o_cambiada() -> None:
     assert set(rutas[f"{workflows}/{{id_workflow}}/pasos/{{id_paso}}"]) == {"put", "delete"}
     assert set(rutas[f"{workflows}/{{id_workflow}}/orden"]) == {"put"}
     assert set(rutas[f"{workflows}/{{id_workflow}}/sincronizacion"]) == {"get", "post"}
+    assert set(rutas["/api/v1/imagenes"]) == {"post"}
+    assert set(rutas["/api/v1/imagenes/{id_imagen}"]) == {"get"}
 
 
 def test_las_operaciones_de_los_pasos_devuelven_el_workflow_completo() -> None:
