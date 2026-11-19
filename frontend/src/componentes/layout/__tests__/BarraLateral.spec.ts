@@ -1,8 +1,13 @@
-import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { obtenerConfiguracionAlta } from '@/api/altaOportunidades'
 import { SidebarProvider } from '@/componentes/ui/sidebar'
 import BarraLateral from '../BarraLateral.vue'
+
+vi.mock('@/api/altaOportunidades', () => ({
+  obtenerConfiguracionAlta: vi.fn<() => Promise<unknown>>(),
+}))
 
 function definirMatchMedia(): void {
   window.matchMedia = vi.fn<(consulta: string) => unknown>().mockImplementation((consulta) => ({
@@ -36,11 +41,19 @@ async function montarEn(ruta: string) {
     },
     { global: { plugins: [router] } },
   )
+  await flushPromises()
   return wrapper
 }
 
 beforeEach(() => {
   definirMatchMedia()
+  vi.mocked(obtenerConfiguracionAlta).mockResolvedValue({
+    valores: null,
+    error: null,
+    fecha_limite: null,
+    fecha_inicio: '28/02/2026',
+    nombre_menu: 'Oportunidades Ejemplo',
+  })
 })
 
 describe('BarraLateral', () => {
@@ -54,7 +67,7 @@ describe('BarraLateral', () => {
   it.each([
     ['Inicio', '/'],
     ['Tareas', '/tareas'],
-    ['Oportunidades', '/tareas/oportunidades'],
+    ['Oportunidades Ejemplo', '/tareas/oportunidades'],
     ['Conocimiento', '/conocimiento'],
     ['Ajustes', '/ajustes'],
   ])('muestra el enlace "%s" que apunta a %s', async (etiqueta, destino) => {
@@ -73,14 +86,26 @@ describe('BarraLateral', () => {
     expect(actuales[0]?.text()).toBe('Tareas')
   })
 
-  it('"Oportunidades" cuelga de "Tareas" y es la única página actual en su ruta', async () => {
+  it('"Oportunidades" es un grupo dentro de "Tareas" y la entrada del alta cuelga de él', async () => {
     const wrapper = await montarEn('/tareas/oportunidades')
 
-    const enlace = wrapper.findAll('a').find((a) => a.text() === 'Oportunidades')
+    const grupo = wrapper.find('[data-grupo-menu="Oportunidades"]')
+    expect(grupo.exists()).toBe(true)
+    expect(grupo.element.tagName).not.toBe('A')
+    expect(wrapper.findAll('a').some((a) => a.text() === 'Oportunidades')).toBe(false)
     const tareas = wrapper.findAll('a').find((a) => a.text() === 'Tareas')
-    expect(enlace?.element.closest('[data-slot="sidebar-menu-sub"]')).not.toBeNull()
-    expect(tareas?.element.closest('li')?.contains(enlace!.element)).toBe(true)
+    expect(tareas?.element.closest('li')?.contains(grupo.element)).toBe(true)
+    const alta = wrapper.findAll('a').find((a) => a.text() === 'Oportunidades Ejemplo')
+    expect(grupo.element.closest('li')?.contains(alta!.element)).toBe(true)
     const actuales = wrapper.findAll('a[aria-current="page"]')
-    expect(actuales.map((a) => a.text())).toEqual(['Oportunidades'])
+    expect(actuales.map((a) => a.text())).toEqual(['Oportunidades Ejemplo'])
+  })
+
+  it('si no se puede leer la configuración, la entrada del alta usa el nombre predeterminado', async () => {
+    vi.mocked(obtenerConfiguracionAlta).mockRejectedValue(new Error('Bad Gateway'))
+    const wrapper = await montarEn('/')
+
+    const alta = wrapper.findAll('a').find((a) => a.text() === 'Alta de oportunidades')
+    expect(alta?.attributes('href')).toBe('/tareas/oportunidades')
   })
 })

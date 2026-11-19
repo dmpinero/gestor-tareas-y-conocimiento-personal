@@ -34,6 +34,8 @@ export interface ResumenConfiguracionAlta {
   fecha_limite: string | null
   /** Hoy + 1 mes, en dd/mm/aaaa. */
   fecha_inicio: string
+  /** Nombre de la entrada del menú (de la configuración local o el predeterminado). */
+  nombre_menu: string
 }
 
 /** Cuerpo de `POST /alta-oportunidades/ejecucion`. */

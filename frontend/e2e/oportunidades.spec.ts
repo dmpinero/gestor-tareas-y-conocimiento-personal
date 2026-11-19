@@ -22,6 +22,7 @@ const CONFIGURACION = {
   error: null,
   fecha_limite: '07/02/2026',
   fecha_inicio: '28/02/2026',
+  nombre_menu: 'Oportunidades Ejemplo',
 }
 
 const EJECUCION_CON_PREGUNTA = {
@@ -81,19 +82,21 @@ async function auditarPagina(page: Page) {
     .analyze()
 }
 
-test('el enlace "Oportunidades" de Tareas abre la página de alta', async ({ page }) => {
+test('el enlace del alta, dentro del grupo "Oportunidades" de Tareas, abre la página', async ({
+  page,
+}) => {
   await simularApi(page)
   await page.goto('/tareas')
   await page.getByRole('button', { name: 'Expandir panel de navegación' }).click()
 
-  await page.getByRole('link', { name: 'Oportunidades' }).click()
+  await page.getByRole('link', { name: 'Oportunidades Ejemplo' }).click()
 
   await expect(page).toHaveURL(/\/tareas\/oportunidades$/)
-  await expect(page.getByRole('link', { name: 'Oportunidades' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Oportunidades Ejemplo' })).toHaveAttribute(
     'aria-current',
     'page',
   )
-  await expect(page.getByRole('heading', { level: 2, name: 'Oportunidades' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Oportunidades Ejemplo' })).toBeVisible()
   await expect(page.getByText('[CEJ] Cliente Ejemplo S.A.')).toBeVisible()
 })
 

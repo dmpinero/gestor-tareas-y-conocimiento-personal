@@ -183,7 +183,10 @@ Requisitos:
   Se monta en el servicio en solo lectura (`/config`) y se lee en cada alta,
   así que los cambios no necesitan reiniciar nada. Si falta o no es válido,
   la página explica el motivo y no deja lanzar el alta. Nunca la copies dentro
-  del repositorio (`config/*.json` está ignorado salvo el ejemplo).
+  del repositorio (`config/*.json` está ignorado salvo el ejemplo). El campo
+  opcional `nombre_menu` da nombre a la entrada del alta dentro del grupo
+  **Tareas → Oportunidades** del menú (y al título de la página); si falta,
+  se usa «Alta de oportunidades».
 - **WSLg** (Windows 11 con WSL 2): la ventana del navegador se muestra en
   Windows a través de la pantalla de WSL (`DISPLAY=:0` y `/tmp/.X11-unix`
   montado en el servicio). Lanza `docker compose` desde WSL.

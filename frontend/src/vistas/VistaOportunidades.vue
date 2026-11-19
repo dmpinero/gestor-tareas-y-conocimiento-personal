@@ -10,6 +10,7 @@ import {
   type ResumenConfiguracionAlta,
 } from '@/api/altaOportunidades'
 import { ErrorApi } from '@/api/cliente'
+import { NOMBRE_MENU_ALTA_PREDETERMINADO } from '@/composables/useNombreMenuAlta'
 import PanelPreguntaAlta from '@/componentes/oportunidades/PanelPreguntaAlta.vue'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
@@ -151,7 +152,9 @@ onBeforeUnmount(() => {
 <template>
   <section class="grid max-w-3xl gap-6">
     <div>
-      <h2 class="text-xl font-semibold">Oportunidades</h2>
+      <h2 class="text-xl font-semibold">
+        {{ configuracion?.nombre_menu ?? NOMBRE_MENU_ALTA_PREDETERMINADO }}
+      </h2>
       <p class="text-muted-foreground mt-1 text-sm">
         Alta automática de una oportunidad en Digital Desktop. Rellena los campos variables, revisa
         el resumen y lanza el alta: se abrirá una ventana del navegador y aquí verás cada paso. Nada

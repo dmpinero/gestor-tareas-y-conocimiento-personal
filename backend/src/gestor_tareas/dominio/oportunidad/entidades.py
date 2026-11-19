@@ -22,6 +22,10 @@ class Asignacion:
     porcentaje: str
 
 
+# Nombre de la entrada del menú si la configuración local no indica otro.
+NOMBRE_MENU_PREDETERMINADO = "Alta de oportunidades"
+
+
 @dataclass(frozen=True)
 class ConfiguracionAltaOportunidad:
     """Valores fijos del alta, leídos de la configuración local."""
@@ -41,6 +45,7 @@ class ConfiguracionAltaOportunidad:
     tipo_servicio: str
     lineas_negocio: tuple[Asignacion, ...]
     comunidades: tuple[Asignacion, ...]
+    nombre_menu: str = NOMBRE_MENU_PREDETERMINADO
 
 
 @dataclass(frozen=True)

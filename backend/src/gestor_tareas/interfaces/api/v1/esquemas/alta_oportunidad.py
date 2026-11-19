@@ -8,6 +8,7 @@ from gestor_tareas.aplicacion.oportunidad.ejecucion import (
     VistaEjecucion,
 )
 from gestor_tareas.aplicacion.oportunidad.servicio import ResumenConfiguracion
+from gestor_tareas.dominio.oportunidad.entidades import NOMBRE_MENU_PREDETERMINADO
 
 
 class SolicitudAltaEsquema(BaseModel):
@@ -51,6 +52,11 @@ class ResumenConfiguracionEsquema(BaseModel):
     error: str | None = Field(description="Por qué no se puede lanzar el alta, si es el caso.")
     fecha_limite: str | None = Field(description="Hoy + días de la configuración (dd/mm/aaaa).")
     fecha_inicio: str = Field(description="Hoy + 1 mes (dd/mm/aaaa).")
+    nombre_menu: str = Field(
+        description=(
+            "Nombre de la entrada del menú; el predeterminado si la configuración no es válida."
+        )
+    )
 
     @classmethod
     def desde(cls, resumen: ResumenConfiguracion) -> "ResumenConfiguracionEsquema":
@@ -77,6 +83,7 @@ class ResumenConfiguracionEsquema(BaseModel):
             error=resumen.error,
             fecha_limite=resumen.fecha_limite,
             fecha_inicio=resumen.fecha_inicio,
+            nombre_menu=NOMBRE_MENU_PREDETERMINADO if c is None else c.nombre_menu,
         )
 
 
