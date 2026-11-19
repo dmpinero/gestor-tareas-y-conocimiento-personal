@@ -6,7 +6,11 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from gestor_tareas.aplicacion.oportunidad.puertos import ConfiguracionAltaInvalidaError
-from gestor_tareas.dominio.oportunidad.entidades import Asignacion, ConfiguracionAltaOportunidad
+from gestor_tareas.dominio.oportunidad.entidades import (
+    NOMBRE_MENU_PREDETERMINADO,
+    Asignacion,
+    ConfiguracionAltaOportunidad,
+)
 
 _TEXTO = Field(min_length=1)
 
@@ -36,6 +40,7 @@ class _ConfiguracionJson(BaseModel):
     tipo_servicio: str = _TEXTO
     lineas_negocio: list[_AsignacionJson] = Field(min_length=1)
     comunidades: list[_AsignacionJson] = Field(min_length=1)
+    nombre_menu: str = Field(default=NOMBRE_MENU_PREDETERMINADO, min_length=1, max_length=60)
 
 
 def _describir(error: ValidationError) -> str:

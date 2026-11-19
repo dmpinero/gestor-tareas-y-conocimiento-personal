@@ -45,6 +45,7 @@ const CONFIGURACION: ResumenConfiguracionAlta = {
   error: null,
   fecha_limite: '07/02/2026',
   fecha_inicio: '28/02/2026',
+  nombre_menu: 'Oportunidades Ejemplo',
 }
 
 function ejecucion(cambios: Partial<EjecucionAlta> = {}): EjecucionAlta {
@@ -97,6 +98,12 @@ afterEach(() => {
 })
 
 describe('VistaOportunidades — formulario y resumen', () => {
+  it('el título de la página es el nombre del menú de la configuración', async () => {
+    const vista = await montar()
+
+    expect(vista.get('h2').text()).toBe('Oportunidades Ejemplo')
+  })
+
   it('muestra lo que se va a crear: nombre, fechas y valores fijos de solo lectura', async () => {
     const vista = await montar()
     await rellenar(vista, { prj: 'PRJ-00001' })
@@ -146,6 +153,7 @@ describe('VistaOportunidades — formulario y resumen', () => {
       error: 'No existe el archivo de configuración /config/alta_oportunidad.json.',
       fecha_limite: null,
       fecha_inicio: '28/02/2026',
+      nombre_menu: 'Alta de oportunidades',
     })
     const vista = await montar()
 

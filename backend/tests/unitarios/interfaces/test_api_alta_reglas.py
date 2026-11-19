@@ -87,3 +87,37 @@ def test_cantidades_invalidas_o_no_finitas_dan_422_sin_lanzar(tmp_path: Path, cu
         assert respuesta.status_code == 422, respuesta.text
         assert cliente.get(f"{RUTA}/ejecucion").status_code == 404
         assert navegadores == []
+
+
+def test_el_resumen_trae_el_nombre_del_menu_de_la_configuracion(tmp_path: Path) -> None:
+    cliente, _, _ = montar_cliente(fuente=_lector_del_ejemplo(tmp_path))
+    with cliente:
+        resumen = cliente.get(f"{RUTA}/configuracion").json()
+
+        assert resumen["nombre_menu"] == "Oportunidades Ejemplo"
+
+
+def test_sin_nombre_del_menu_en_la_configuracion_se_usa_el_predeterminado(
+    tmp_path: Path,
+) -> None:
+    datos = json.loads(EJEMPLO.read_text(encoding="utf-8"))
+    del datos["nombre_menu"]
+    ruta = tmp_path / "alta_oportunidad.json"
+    ruta.write_text(json.dumps(datos), encoding="utf-8")
+    cliente, _, _ = montar_cliente(fuente=LectorConfiguracionJson(ruta))
+    with cliente:
+        resumen = cliente.get(f"{RUTA}/configuracion").json()
+
+        assert resumen["error"] is None
+        assert resumen["nombre_menu"] == "Alta de oportunidades"
+
+
+def test_con_la_configuracion_invalida_el_menu_usa_el_nombre_predeterminado(
+    tmp_path: Path,
+) -> None:
+    cliente, _, _ = montar_cliente(fuente=LectorConfiguracionJson(tmp_path / "no-existe.json"))
+    with cliente:
+        resumen = cliente.get(f"{RUTA}/configuracion").json()
+
+        assert resumen["valores"] is None
+        assert resumen["nombre_menu"] == "Alta de oportunidades"
