@@ -113,6 +113,18 @@ watch(
       </div>
       <div class="campo-opcional">
         <SelectorEtiquetas
+          id="subestado"
+          :model-value="valores.subestado ? [valores.subestado] : []"
+          etiqueta="Subestado"
+          :longitud-maxima="50"
+          texto-nuevo='Crear subestado "{valor}"'
+          :sugerencias="tienda.subestados"
+          unico
+          @update:model-value="(elegidos) => (valores.subestado = elegidos[0] ?? '')"
+        />
+      </div>
+      <div class="campo-opcional">
+        <SelectorEtiquetas
           id="asignados"
           v-model="valores.asignados"
           etiqueta="Asignado a"

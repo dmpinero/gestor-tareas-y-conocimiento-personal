@@ -77,6 +77,7 @@ const TAREA: Tarea = {
   estado: null,
   workflow: null,
   congelada_en: null,
+  subestado: null,
 }
 
 // Comentarios que devuelve la API para cualquier subtarea.

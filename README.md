@@ -321,4 +321,14 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   reconocidas por su contenido; se guardan en MySQL (tabla `imagenes`, así
   entran en las copias de seguridad) y se sirven en `GET /api/v1/imagenes/{id}`.
   El HTML de los comentarios se sanea en la API y en el navegador: solo se
-  admiten imágenes subidas a la propia aplicación.
+  admiten imágenes subidas a la propia aplicación. Cada comentario admite de 1
+  a 5000 caracteres de texto visible (las imágenes no cuentan) y como mucho
+  50000 caracteres de HTML saneado.
+- Subestado opcional de cada tarea (como mucho uno), elegido de un catálogo que
+  funciona como el de las etiquetas: se escribe en el formulario de la tarea
+  (si no existe, se crea al guardar) y se gestiona en **Ajustes → Subestados**
+  (`/ajustes/subestados`: crear, renombrar y eliminar; al eliminarlo, sus
+  tareas quedan sin subestado). Se muestra como una píldora de color en la
+  tabla (columna "Subestado", que se puede ocultar, ordenar, filtrar y
+  exportar), en el detalle y en el tablero. API: `GET`/`POST /api/v1/subestados`,
+  `PUT`/`DELETE /api/v1/subestados/{id}` y el campo `subestado` de las tareas.

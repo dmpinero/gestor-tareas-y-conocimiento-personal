@@ -31,11 +31,11 @@ import {
   CLASES_CONTENIDO_COMENTARIO,
   htmlComentarioEditable,
   htmlComentarioMostrado,
+  LONGITUD_MAXIMA_COMENTARIO as LONGITUD_MAXIMA,
   textoVisible,
   tieneContenidoComentario,
 } from '@/lib/htmlComentario'
 
-const LONGITUD_MAXIMA = 500
 const ERROR_TEXTO_VACIO = 'El comentario no puede estar vacío.'
 
 const props = defineProps<{

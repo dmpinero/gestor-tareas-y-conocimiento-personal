@@ -90,12 +90,12 @@ def test_un_comentario_sin_texto_ni_imagenes_guardadas_se_rechaza(texto: str) ->
         ComentarioCrearEsquema(texto=texto)
 
 
-def test_las_imagenes_no_cuentan_para_el_limite_de_500_caracteres_visibles() -> None:
+def test_las_imagenes_no_cuentan_para_el_limite_de_5000_caracteres_visibles() -> None:
     imagen = f'<img src="{_SRC}" alt="Captura de pantalla">'
-    html = f"<p>{'a' * 500}{imagen}</p>"
+    html = f"<p>{'a' * 5000}{imagen}</p>"
     assert ComentarioCrearEsquema(texto=html).texto == html
     with pytest.raises(ValidationError):
-        ComentarioCrearEsquema(texto=f"<p>{'a' * 501}{imagen}</p>")
+        ComentarioCrearEsquema(texto=f"<p>{'a' * 5001}{imagen}</p>")
 
 
 def test_sanear_de_nuevo_un_comentario_con_imagenes_no_lo_cambia() -> None:

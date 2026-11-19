@@ -39,7 +39,11 @@ import { subirImagen, TAMANO_MAXIMO_IMAGEN, TIPOS_IMAGEN } from '@/api/imagenes'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
-import { CLASES_CONTENIDO_COMENTARIO, URL_IMAGEN_PERMITIDA } from '@/lib/htmlComentario'
+import {
+  CLASES_CONTENIDO_COMENTARIO,
+  LONGITUD_MAXIMA_COMENTARIO,
+  URL_IMAGEN_PERMITIDA,
+} from '@/lib/htmlComentario'
 import { cn } from '@/lib/utils'
 
 const props = withDefaults(
@@ -55,7 +59,7 @@ const props = withDefaults(
     /** Enfoca el editor (al final del texto) en cuanto se crea. */
     autoenfoque?: boolean
   }>(),
-  { limite: 500 },
+  { limite: LONGITUD_MAXIMA_COMENTARIO },
 )
 const emit = defineEmits<{
   'update:modelValue': [html: string]

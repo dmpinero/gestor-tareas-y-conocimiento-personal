@@ -21,6 +21,7 @@ from gestor_tareas.infraestructura.persistencia.modelos import (
     EtiquetaModelo,
     OportunidadModelo,
     PersonaModelo,
+    SubestadoModelo,
     SubtareaModelo,
     TareaModelo,
 )
@@ -113,6 +114,7 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
             else None
         ),
         congelada_en=_instante_de_columna(modelo.congelada_en),
+        subestado=modelo.subestado.nombre if modelo.subestado is not None else None,
     )
 
 
@@ -146,7 +148,7 @@ class RepositorioTareasSqlAlchemy:
     def __init__(self, sesion: Session) -> None:
         self._sesion = sesion
 
-    def _filas_catalogo[M: (EtiquetaModelo, PersonaModelo)](
+    def _filas_catalogo[M: (EtiquetaModelo, PersonaModelo, SubestadoModelo)](
         self, modelo: type[M], nombres: list[str]
     ) -> list[M]:
         """Filas del catálogo con esos nombres, que ya deben existir.
@@ -179,6 +181,11 @@ class RepositorioTareasSqlAlchemy:
         modelo.grupo_estados_id = tarea.grupo_estados.id if tarea.grupo_estados else None
         modelo.estado_id = tarea.estado.id if tarea.estado else None
         modelo.workflow_id = tarea.workflow.id if tarea.workflow else None
+        modelo.subestado = (
+            self._filas_catalogo(SubestadoModelo, [tarea.subestado])[0]
+            if tarea.subestado is not None
+            else None
+        )
         modelo.congelada_en = _instante_a_columna(tarea.congelada_en)
 
     @staticmethod

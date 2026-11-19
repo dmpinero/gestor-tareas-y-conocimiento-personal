@@ -79,6 +79,7 @@ const SIN_EXTRAS = {
   oportunidad: null,
   grupo_estados_id: null,
   workflow_id: null,
+  subestado: null,
 }
 
 const OPORTUNIDAD = {
@@ -129,6 +130,7 @@ async function montar(
   vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
     if (ruta === '/etiquetas') return Promise.resolve(structuredClone(ETIQUETAS))
     if (ruta === '/personas') return Promise.resolve(structuredClone(PERSONAS))
+    if (ruta === '/subestados') return Promise.resolve([])
     if (ruta === '/grupos-estados') return Promise.resolve(structuredClone(grupos))
     if (ruta === '/workflows') return Promise.resolve(structuredClone(workflows))
     // El detalle carga los comentarios de la tarea abierta.
@@ -211,10 +213,12 @@ const FILAS_TAREA = 'tbody tr[data-fila-tarea]'
 
 // Las celdas con chips se leen como sus textos unidos por " | ". En el vencimiento,
 // el texto une la fecha corta visible, la completa (solo para lectores de
-// pantalla) y la cuenta atrás: "20 nov20/11/2026 18:00:00Vence en …".
+// pantalla) y la cuenta atrás: "20 nov20/11/2026 18:00:00Vence en …". La celda
+// del subestado se omite: la prueban los tests del subestado
+// (VistaTareas.subestado.spec.ts).
 function filasTabla(envoltorio: VueWrapper): string[][] {
   return envoltorio.findAll(FILAS_TAREA).map((tr) =>
-    tr.findAll('td').map((td) => {
+    tr.findAll('td:not([data-columna="subestado"])').map((td) => {
       // Las personas se ven como iniciales: se lee el nombre que representa cada chip.
       const chips = td.findAll('[data-testid="chip-tabla"]')
       return chips.length > 0
@@ -299,6 +303,7 @@ describe('VistaTareas', () => {
       'Descripción',
       'Etiquetas',
       'Asignado a',
+      'Subestado',
       'Fecha de creación',
       'Fecha de vencimiento',
       'Tipo',
@@ -335,7 +340,9 @@ describe('VistaTareas', () => {
 
   describe('cuenta atrás del vencimiento', () => {
     function celdaVencimiento(envoltorio: VueWrapper, fila: number) {
-      return envoltorio.findAll(FILAS_TAREA)[fila]!.findAll('td')[6]!
+      return envoltorio
+        .findAll(FILAS_TAREA)
+        [fila]!.findAll('td:not([data-columna="subestado"])')[6]!
     }
 
     it('muestra bajo la fecha de vencimiento cuánto falta, solo en las tareas con vencimiento', async () => {
@@ -568,6 +575,7 @@ describe('VistaTareas', () => {
       oportunidad: null,
       grupo_estados_id: null,
       workflow_id: null,
+      subestado: null,
     })
     // Tras guardar se vuelven a pedir los catálogos por si hay nombres nuevos.
     expect(clienteApi.obtener).toHaveBeenCalledWith('/etiquetas')
@@ -685,6 +693,7 @@ describe('VistaTareas', () => {
       oportunidad: null,
       grupo_estados_id: null,
       workflow_id: null,
+      subestado: null,
     })
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(filasTabla(envoltorio)).toEqual([
@@ -1956,6 +1965,7 @@ describe('VistaTareas', () => {
         'Descripción',
         'Etiquetas',
         'Asignado a',
+        'Subestado',
         'Fecha de creación',
         'Fecha de vencimiento',
         'Tipo',
@@ -2073,6 +2083,7 @@ describe('VistaTareas', () => {
       'Descripción',
       'Etiquetas',
       'Asignado a',
+      'Subestado',
       'Fecha de creación',
       'Fecha de vencimiento',
       'Tipo',
@@ -2108,6 +2119,7 @@ describe('VistaTareas', () => {
           'Informe trimestral',
           'Backend, Urgente',
           'Ana',
+          '—',
           '10/11/2026 09:30:00',
           '20/11/2026 18:00:00',
           '—',
@@ -2117,6 +2129,7 @@ describe('VistaTareas', () => {
           'Leer artículo',
           '—',
           'Artículo sobre Vue',
+          '—',
           '—',
           '—',
           '01/12/2026 17:05:09',
@@ -2160,7 +2173,7 @@ describe('VistaTareas', () => {
       await botonExportar(envoltorio, 'Exportar a Excel').trigger('click')
 
       const filas = vi.mocked(exportarTablaExcel).mock.calls[0]![2] as unknown[][]
-      expect(filas.map((fila) => fila[7])).toEqual(['Oportunidad', '—'])
+      expect(filas.map((fila) => fila[8])).toEqual(['Oportunidad', '—'])
       expect(filas[0]).toHaveLength(COLUMNAS.length)
       expect(JSON.stringify(filas)).not.toContain('OP-1')
     })
@@ -2171,7 +2184,7 @@ describe('VistaTareas', () => {
       await botonExportar(envoltorio, 'Exportar a Excel').trigger('click')
 
       const filas = vi.mocked(exportarTablaExcel).mock.calls[0]![2] as unknown[][]
-      expect(filas.map((fila) => fila[7])).toEqual(['Oportunidad', '—'])
+      expect(filas.map((fila) => fila[8])).toEqual(['Oportunidad', '—'])
       expect(JSON.stringify(filas)).not.toContain('Contactar')
     })
   })
@@ -2789,6 +2802,7 @@ describe('VistaTareas', () => {
       'Descripción',
       'Etiquetas',
       'Asignado a',
+      'Subestado',
       'Fecha de creación',
       'Fecha de vencimiento',
       'Tipo',
@@ -4328,6 +4342,7 @@ describe('VistaTareas', () => {
         oportunidad: null,
         grupo_estados_id: null,
         workflow_id: null,
+        subestado: null,
       })
       expect(clienteApi.parchear).not.toHaveBeenCalled()
       const despues = panelActual()

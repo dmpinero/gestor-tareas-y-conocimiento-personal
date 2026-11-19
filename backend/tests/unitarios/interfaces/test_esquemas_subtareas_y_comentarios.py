@@ -142,13 +142,13 @@ def test_sanear_de_nuevo_un_comentario_guardado_no_lo_cambia() -> None:
         assert ComentarioCrearEsquema(texto=guardado).texto == guardado
 
 
-def test_el_comentario_admite_500_caracteres_visibles() -> None:
-    assert ComentarioCrearEsquema(texto="á" * 500).texto == f"<p>{'á' * 500}</p>"
+def test_el_comentario_admite_5000_caracteres_visibles() -> None:
+    assert ComentarioCrearEsquema(texto="á" * 5000).texto == f"<p>{'á' * 5000}</p>"
     # Las etiquetas no cuentan; las entidades cuentan como un carácter.
-    html = f"<p><strong>{'a' * 498}</strong>&amp;&lt;</p>"
+    html = f"<p><strong>{'a' * 4998}</strong>&amp;&lt;</p>"
     assert ComentarioCrearEsquema(texto=html).texto == html
     # Los espacios de los extremos del texto visible no cuentan.
-    assert ComentarioCrearEsquema(texto=f"<p> {'a' * 500} </p>").texto == f"<p> {'a' * 500} </p>"
+    assert ComentarioCrearEsquema(texto=f"<p> {'a' * 5000} </p>").texto == f"<p> {'a' * 5000} </p>"
 
 
 @pytest.mark.parametrize(
@@ -160,9 +160,9 @@ def test_el_comentario_admite_500_caracteres_visibles() -> None:
         "<p> </p>",
         "<p>&nbsp;</p><p></p>",
         "<script>alert(1)</script>",
-        "a" * 501,
-        f"<p><em>{'a' * 501}</em></p>",
-        f"<p>{'&amp;' * 501}</p>",
+        "a" * 5001,
+        f"<p><em>{'a' * 5001}</em></p>",
+        f"<p>{'&amp;' * 5001}</p>",
         None,
         5,
     ],
@@ -172,15 +172,15 @@ def test_el_comentario_rechaza_textos_invalidos(texto: object) -> None:
         ComentarioCrearEsquema(texto=texto)
 
 
-def test_el_comentario_rechaza_un_html_saneado_de_mas_de_10000_caracteres() -> None:
-    # 400 caracteres visibles y 3207 de entrada, pero al sanear cada enlace recibe
-    # su `rel` y el HTML guardado pasaría de 10000.
-    enlaces = f"<p>{'<a>a</a>' * 400}</p>"
-    assert len(enlaces) <= 10000 < len(sanear_html(enlaces))
+def test_el_comentario_rechaza_un_html_saneado_de_mas_de_50000_caracteres() -> None:
+    # 1200 caracteres visibles y 9607 de entrada, pero al sanear cada enlace recibe
+    # su `rel` y el HTML guardado pasaría de 50000.
+    enlaces = f"<p>{'<a>a</a>' * 1200}</p>"
+    assert len(enlaces) <= 50000 < len(sanear_html(enlaces))
     with pytest.raises(ValidationError):
         ComentarioCrearEsquema(texto=enlaces)
     color = '<span style="color:#e03131">a</span>'
-    assert len(ComentarioCrearEsquema(texto=f"<p>{color * 250}</p>").texto) == 9007
+    assert len(ComentarioCrearEsquema(texto=f"<p>{color * 1250}</p>").texto) == 45007
 
 
 def test_el_contrato_del_comentario_publica_sus_limites() -> None:
@@ -188,10 +188,10 @@ def test_el_contrato_del_comentario_publica_sus_limites() -> None:
     assert (texto["type"], texto["minLength"], texto["maxLength"], texto["pattern"]) == (
         "string",
         1,
-        10000,
+        50000,
         r"\S",
     )
-    assert "500 caracteres visibles" in texto["description"]
+    assert "5000 caracteres visibles" in texto["description"]
 
 
 def test_la_salida_del_comentario_serializa_el_instante_en_utc_con_z() -> None:
@@ -232,9 +232,9 @@ def test_la_salida_del_comentario_serializa_editado_en_utc_con_z() -> None:
 
 def test_la_edicion_de_un_comentario_valida_como_el_alta() -> None:
     assert ComentarioEditarEsquema(texto="\n Uno\nDos ").texto == "<p>Uno</p><p>Dos</p>"
-    assert ComentarioEditarEsquema(texto="á" * 500).texto == f"<p>{'á' * 500}</p>"
+    assert ComentarioEditarEsquema(texto="á" * 5000).texto == f"<p>{'á' * 5000}</p>"
     assert ComentarioEditarEsquema(texto="<p>a<script>x</script></p>").texto == "<p>a</p>"
-    for texto in ["", " \n\t ", "<p> </p>", "a" * 501, None, 5]:
+    for texto in ["", " \n\t ", "<p> </p>", "a" * 5001, None, 5]:
         with pytest.raises(ValidationError):
             ComentarioEditarEsquema(texto=texto)
     assert (

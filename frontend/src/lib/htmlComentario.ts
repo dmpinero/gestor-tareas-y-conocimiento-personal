@@ -44,6 +44,12 @@ const PROPIEDADES_POR_ETIQUETA: Record<string, string> = {
 }
 // Valores de color sencillos: `#rgb`, nombres, `rgb(…)`/`hsl(…)`.
 const VALOR_COLOR = /^[#a-z0-9(),.%\s-]+$/i
+/**
+ * Máximo de caracteres visibles de un comentario (sin etiquetas, con las
+ * entidades decodificadas y recortado), como en la API. Las imágenes no cuentan.
+ */
+export const LONGITUD_MAXIMA_COMENTARIO = 5000
+
 /** La única URL de imagen que admiten los comentarios (relativa, de esta aplicación). */
 export const URL_IMAGEN_PERMITIDA = /^\/api\/v1\/imagenes\/[0-9a-f]{32}$/
 // Para `href` y `src`: esquemas http/https/mailto sin distinguir mayúsculas

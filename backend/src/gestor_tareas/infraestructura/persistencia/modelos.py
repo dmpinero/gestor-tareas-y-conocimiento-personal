@@ -24,7 +24,7 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.dialects.mysql import MEDIUMBLOB
+from sqlalchemy.dialects.mysql import MEDIUMBLOB, MEDIUMTEXT
 from sqlalchemy.orm import (
     Mapped,
     WriteOnlyMapped,
@@ -41,6 +41,9 @@ from gestor_tareas.infraestructura.persistencia.sesion import Base
 # (utf8mb4_0900_ai_ci) tampoco distingue tildes, y el spec solo pide lo primero.
 # El índice único y las búsquedas por nombre usan esta intercalación.
 INTERCALACION_NOMBRES_CATALOGO = "utf8mb4_0900_as_ci"
+
+# Tipo de la columna `texto` de los comentarios (de tareas, subtareas y pasos).
+_TEXTO_COMENTARIO = Text().with_variant(MEDIUMTEXT(), "mysql")
 
 
 class ImagenModelo(Base):
@@ -77,6 +80,18 @@ class PersonaModelo(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(
         String(100, collation=INTERCALACION_NOMBRES_CATALOGO), nullable=False, unique=True
+    )
+
+
+class SubestadoModelo(Base):
+    """Subestado del catálogo. Una tarea tiene como mucho uno; borrarlo deja sus
+    tareas sin subestado (ON DELETE SET NULL de ``tareas.subestado_id``)."""
+
+    __tablename__ = "subestados"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(
+        String(50, collation=INTERCALACION_NOMBRES_CATALOGO), nullable=False, unique=True
     )
 
 
@@ -130,9 +145,9 @@ class ComentarioSubtareaModelo(Base):
     subtarea_id: Mapped[int] = mapped_column(
         ForeignKey("subtareas.id", ondelete="CASCADE"), nullable=False
     )
-    # HTML saneado: TEXT admite 65 535 bytes y la API limita el HTML a 10000
+    # HTML saneado: MEDIUMTEXT admite 16 MB y la API limita el HTML a 50000
     # caracteres (de hasta 4 bytes), así que cabe de sobra.
-    texto: Mapped[str] = mapped_column(Text, nullable=False)
+    texto: Mapped[str] = mapped_column(_TEXTO_COMENTARIO, nullable=False)
     # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
     creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
@@ -202,9 +217,9 @@ class ComentarioModelo(Base):
     tarea_id: Mapped[int] = mapped_column(
         ForeignKey("tareas.id", ondelete="CASCADE"), nullable=False
     )
-    # HTML saneado: TEXT admite 65 535 bytes y la API limita el HTML a 10000
+    # HTML saneado: MEDIUMTEXT admite 16 MB y la API limita el HTML a 50000
     # caracteres (de hasta 4 bytes), así que cabe de sobra.
-    texto: Mapped[str] = mapped_column(Text, nullable=False)
+    texto: Mapped[str] = mapped_column(_TEXTO_COMENTARIO, nullable=False)
     # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
     creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
@@ -277,9 +292,9 @@ class ComentarioPasoModelo(Base):
         ),
         nullable=False,
     )
-    # HTML saneado: TEXT admite 65 535 bytes y la API limita el HTML a 10000
+    # HTML saneado: MEDIUMTEXT admite 16 MB y la API limita el HTML a 50000
     # caracteres (de hasta 4 bytes), así que cabe de sobra.
-    texto: Mapped[str] = mapped_column(Text, nullable=False)
+    texto: Mapped[str] = mapped_column(_TEXTO_COMENTARIO, nullable=False)
     # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
     creado: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     editado: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
@@ -405,6 +420,15 @@ class TareaModelo(Base):
     # el estado DONE), o NULL si no lo está. DATETIME sin zona horaria con el instante
     # en UTC (la columna no guarda la zona).
     congelada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    # Subestado opcional del catálogo. Borrar el subestado deja la tarea sin él (lo
+    # hace la base de datos con ON DELETE SET NULL).
+    subestado_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subestados.id", name="fk_tareas_subestado", ondelete="SET NULL"),
+        nullable=True,
+    )
+    subestado: Mapped[SubestadoModelo | None] = relationship(
+        lazy="selectin", foreign_keys=[subestado_id]
+    )
 
 
 __all__ = [
@@ -418,6 +442,7 @@ __all__ = [
     "OportunidadModelo",
     "PasoWorkflowModelo",
     "PersonaModelo",
+    "SubestadoModelo",
     "SubtareaModelo",
     "TareaModelo",
     "WorkflowModelo",

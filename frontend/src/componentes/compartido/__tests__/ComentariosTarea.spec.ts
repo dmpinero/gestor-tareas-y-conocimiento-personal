@@ -47,7 +47,7 @@ const editorComentarioFalso = defineComponent({
     etiqueta: { type: String, required: true },
     id: { type: String, default: undefined },
     placeholder: { type: String, default: undefined },
-    limite: { type: Number, default: 500 },
+    limite: { type: Number, default: 5000 },
     describedBy: { type: String, default: undefined },
     invalido: Boolean,
     soloLectura: Boolean,
@@ -302,18 +302,18 @@ describe('ComentariosTarea: historial', () => {
 })
 
 describe('ComentariosTarea: envío', () => {
-  it('tiene un campo con placeholder, límite de 500 y contador', async () => {
+  it('tiene un campo con placeholder, límite de 5000 y contador', async () => {
     obtener.mockResolvedValue([])
     const envoltorio = await montar()
 
     const campo = campoTexto(envoltorio)
     expect(campo.attributes('placeholder')).toBe('Escribe un comentario')
-    expect(campo.attributes('maxlength')).toBe('500')
-    expect(envoltorio.text()).toContain('0/500')
+    expect(campo.attributes('maxlength')).toBe('5000')
+    expect(envoltorio.text()).toContain('0/5000')
 
     await escribir(envoltorio, 'Hola')
 
-    expect(envoltorio.text()).toContain('4/500')
+    expect(envoltorio.text()).toContain('4/5000')
   })
 
   it('el contador cuenta solo el texto visible, sin etiquetas y con las entidades decodificadas', async () => {
@@ -322,7 +322,7 @@ describe('ComentariosTarea: envío', () => {
 
     await escribir(envoltorio, '<p><strong>Hola</strong> &amp;</p><ul><li><p>a</p></li></ul>')
 
-    expect(envoltorio.text()).toContain('7/500')
+    expect(envoltorio.text()).toContain('7/5000')
   })
 
   it('el contador cuenta cada emoji como un carácter, como la API', async () => {
@@ -331,16 +331,16 @@ describe('ComentariosTarea: envío', () => {
 
     await escribir(envoltorio, '<p>😀😀a</p>')
 
-    expect(envoltorio.text()).toContain('3/500')
+    expect(envoltorio.text()).toContain('3/5000')
   })
 
-  it('el límite de 500 se aplica al texto visible, no al HTML', async () => {
+  it('el límite de 5000 se aplica al texto visible, no al HTML', async () => {
     obtener.mockResolvedValue([])
     const envoltorio = await montar()
 
-    await escribir(envoltorio, `<p><strong>${'a'.repeat(500)}</strong></p>`)
+    await escribir(envoltorio, `<p><strong>${'a'.repeat(5000)}</strong></p>`)
 
-    expect(envoltorio.text()).toContain('500/500')
+    expect(envoltorio.text()).toContain('5000/5000')
     expect(botonEnviar(envoltorio).attributes('disabled')).toBeUndefined()
   })
 
@@ -401,7 +401,7 @@ describe('ComentariosTarea: envío', () => {
       'martes, 10 de noviembre',
     )
     expect((campoTexto(envoltorio).element as HTMLTextAreaElement).value).toBe('')
-    expect(envoltorio.text()).toContain('0/500')
+    expect(envoltorio.text()).toContain('0/5000')
     expect(document.activeElement).toBe(campoTexto(envoltorio).element)
     expect(envoltorio.get('[aria-live="polite"]').text()).toBe('Comentario añadido')
   })
@@ -612,10 +612,10 @@ describe('ComentariosTarea: editar', () => {
     const campo = campoEdicion(envoltorio).element as HTMLTextAreaElement
     // El texto plano (datos antiguos) llega al editor como un párrafo por línea.
     expect(campo.value).toBe('<p>Línea 1</p><p>Línea 2</p>')
-    expect(campo.maxLength).toBe(500)
+    expect(campo.maxLength).toBe(5000)
     expect(document.activeElement).toBe(campo)
     const contador = document.getElementById(campo.getAttribute('aria-describedby')!)
-    expect(contador?.textContent?.trim()).toBe('14/500')
+    expect(contador?.textContent?.trim()).toBe('14/5000')
     expect(botonDe(envoltorio, 'form[aria-label="Editar comentario"]', 'Guardar').exists()).toBe(
       true,
     )
@@ -1041,7 +1041,7 @@ describe('ComentariosTarea: con el editor real', () => {
     expect(edicion.element.innerHTML).toContain('<strong>Negrita</strong>')
     expect(document.activeElement).toBe(edicion.element)
     const contador = document.getElementById(edicion.attributes('aria-describedby')!)
-    expect(contador?.textContent?.trim()).toBe('16/500')
+    expect(contador?.textContent?.trim()).toBe('16/5000')
   })
 })
 

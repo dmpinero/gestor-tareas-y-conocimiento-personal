@@ -6,6 +6,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { clienteApi } from '@/api/cliente'
 import type { Tarea } from '@/api/tipos'
+import { colorEtiqueta } from '@/lib/coloresTarea'
 import DetalleTarea from '../DetalleTarea.vue'
 import EditorComentario from '../EditorComentario.vue'
 
@@ -42,6 +43,7 @@ const TAREA_SIN_TIPO: Tarea = {
   estado: null,
   workflow: null,
   congelada_en: null,
+  subestado: null,
 }
 
 const TAREA_OPORTUNIDAD: Tarea = {
@@ -65,6 +67,7 @@ const TAREA_OPORTUNIDAD: Tarea = {
   estado: null,
   workflow: null,
   congelada_en: null,
+  subestado: null,
 }
 
 let contenedor: VueWrapper | null = null
@@ -188,6 +191,7 @@ describe('DetalleTarea', () => {
           ['Estado', 'Pendiente'],
           ['Grupo de estados', '—'],
           ['Estado del grupo', '—'],
+          ['Subestado', '—'],
         ],
       ],
       [
@@ -299,6 +303,18 @@ describe('DetalleTarea', () => {
     expect(pares).toContainEqual(['Estado', 'Pendiente'])
   })
 
+  it('muestra el subestado como una píldora de su color en la planificación', async () => {
+    await montar({ ...TAREA_SIN_TIPO, subestado: 'Bloqueado' })
+
+    const planificacion = tarjetasCampos().find(([titulo]) => titulo === 'Planificación')!
+    expect(planificacion[1]).toContainEqual(['Subestado', 'Bloqueado'])
+    const pildora = modal().querySelector('[data-testid="subestado-detalle"]')!
+    expect(pildora.textContent).toBe('Bloqueado')
+    for (const clase of colorEtiqueta('Bloqueado').split(' ')) {
+      expect(pildora.classList).toContain(clase)
+    }
+  })
+
   it('con tipo Oportunidad muestra su sección con todos sus campos', async () => {
     await montar(TAREA_OPORTUNIDAD)
 
@@ -309,6 +325,7 @@ describe('DetalleTarea', () => {
       ['Estado', 'Pendiente'],
       ['Grupo de estados', '—'],
       ['Estado del grupo', '—'],
+      ['Subestado', '—'],
       ['Asignado a', 'Ana, Luis'],
       ['Etiquetas', 'Backend, Urgente'],
       ['Nombre', 'Escribir informe'],

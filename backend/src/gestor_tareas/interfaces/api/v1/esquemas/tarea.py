@@ -14,6 +14,7 @@ from pydantic import (
 )
 
 from gestor_tareas.dominio.tarea.entidades import TipoTarea
+from gestor_tareas.interfaces.api.v1.esquemas.catalogos import NombreSubestado
 from gestor_tareas.interfaces.api.v1.esquemas.comentario import InstanteUtc
 from gestor_tareas.interfaces.api.v1.esquemas.grupo_estados import (
     EstadoDeTareaEsquema,
@@ -235,6 +236,15 @@ class TareaCrearEsquema(BaseModel):
             "workflow. 422 si el workflow no existe."
         ),
     )
+    subestado: NombreSubestado | None = Field(
+        default=None,
+        description=(
+            "Opcional. Nombre del subestado de la tarea (como mucho uno), con las mismas "
+            "reglas que cada etiqueta: se busca en el catálogo de subestados sin "
+            "distinguir mayúsculas (se conserva la grafía guardada) y se da de alta si "
+            "no existe. null deja la tarea sin subestado."
+        ),
+    )
 
     @model_validator(mode="after")
     def _datos_segun_el_tipo(self) -> Self:
@@ -264,10 +274,22 @@ class TareaCrearEsquema(BaseModel):
 class TareaActualizarEsquema(TareaCrearEsquema):
     """Cuerpo de la edición: los mismos campos y validaciones que el alta.
 
+    Todos los campos se sustituyen salvo ``subestado``: si falta, la tarea conserva
+    el que tenía; con null queda sin subestado.
+
     Ni el alta ni la edición reciben ``completada`` ni ``subtareas``: como cualquier
     campo desconocido, se descartan. El estado solo cambia con
     ``TareaCompletadaEsquema`` y las subtareas con sus propias operaciones.
     """
+
+    subestado: NombreSubestado | None = Field(
+        default=None,
+        description=(
+            "Opcional. Nombre del subestado de la tarea (como mucho uno), con las mismas "
+            "reglas que en el alta. Es el único campo que no se sustituye si falta: sin "
+            "él, la tarea conserva su subestado; con null queda sin subestado."
+        ),
+    )
 
 
 class TareaCompletadaEsquema(BaseModel):
@@ -341,6 +363,9 @@ class TareaSalidaEsquema(BaseModel):
     )
     workflow: WorkflowDeTareaEsquema | None = Field(
         description="Workflow de la tarea, o null si no tiene."
+    )
+    subestado: str | None = Field(
+        default=None, description="Nombre del subestado de la tarea, o null si no tiene."
     )
     congelada_en: InstanteUtc | None = Field(
         default=None,

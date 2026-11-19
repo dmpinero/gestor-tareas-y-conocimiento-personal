@@ -17,6 +17,7 @@ export const useTiendaTareas = defineStore('tareas', () => {
   // Nombres de los catálogos compartidos, para sugerirlos en el formulario.
   const etiquetas = ref<string[]>([])
   const personas = ref<string[]>([])
+  const subestados = ref<string[]>([])
 
   async function cargar(): Promise<void> {
     cargando.value = true
@@ -33,6 +34,10 @@ export const useTiendaTareas = defineStore('tareas', () => {
   // Los catálogos solo alimentan sugerencias: si fallan se conservan los que
   // ya hubiera, sin bloquear el listado ni el guardado de la tarea.
   async function cargarCatalogos(): Promise<void> {
+    await Promise.all([cargarEtiquetasYPersonas(), cargarSubestados()])
+  }
+
+  async function cargarEtiquetasYPersonas(): Promise<void> {
     try {
       const [listaEtiquetas, listaPersonas] = await Promise.all([
         clienteApi.obtener<ElementoCatalogo[]>('/etiquetas'),
@@ -42,6 +47,16 @@ export const useTiendaTareas = defineStore('tareas', () => {
       personas.value = listaPersonas.map((elemento) => elemento.nombre)
     } catch {
       // Sin sugerencias nuevas; el formulario sigue permitiendo escribirlas.
+    }
+  }
+
+  // Aparte, para que un fallo de los subestados no deje sin etiquetas ni personas.
+  async function cargarSubestados(): Promise<void> {
+    try {
+      const lista = await clienteApi.obtener<ElementoCatalogo[]>('/subestados')
+      subestados.value = lista.map((elemento) => elemento.nombre)
+    } catch {
+      // Igual que con los demás catálogos: se conservan los que hubiera.
     }
   }
 
@@ -199,6 +214,7 @@ export const useTiendaTareas = defineStore('tareas', () => {
     error,
     etiquetas,
     personas,
+    subestados,
     cargar,
     cargarCatalogos,
     crear,

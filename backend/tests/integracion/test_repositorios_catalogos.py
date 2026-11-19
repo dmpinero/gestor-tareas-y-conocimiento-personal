@@ -4,16 +4,23 @@ from sqlalchemy.exc import IntegrityError
 
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
 from gestor_tareas.dominio.persona.entidades import Persona
-from gestor_tareas.infraestructura.persistencia.modelos import EtiquetaModelo, PersonaModelo
+from gestor_tareas.dominio.subestado.entidades import Subestado
+from gestor_tareas.infraestructura.persistencia.modelos import (
+    EtiquetaModelo,
+    PersonaModelo,
+    SubestadoModelo,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorios_catalogos_sqlalchemy import (  # noqa: E501
     RepositorioEtiquetasSqlAlchemy,
     RepositorioPersonasSqlAlchemy,
+    RepositorioSubestadosSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
 
 _CATALOGOS = [
     pytest.param(RepositorioEtiquetasSqlAlchemy, EtiquetaModelo, Etiqueta, id="etiquetas"),
     pytest.param(RepositorioPersonasSqlAlchemy, PersonaModelo, Persona, id="personas"),
+    pytest.param(RepositorioSubestadosSqlAlchemy, SubestadoModelo, Subestado, id="subestados"),
 ]
 
 

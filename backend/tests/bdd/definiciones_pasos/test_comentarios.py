@@ -20,13 +20,13 @@ _INSTANTE_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 _CLAVES = {"id", "texto", "creado", "editado"}
 
-# 500 caracteres visibles (250 + espacio + 248 + "&"): las etiquetas no cuentan y
+# 5000 caracteres visibles (2500 + espacio + 2498 + "&"): las etiquetas no cuentan y
 # cada entidad cuenta como un carácter.
-_HTML_500_VISIBLES = f"<p><strong>{'á' * 250}</strong> {'á' * 248}&amp;</p>"
-_HTML_501_VISIBLES = f"<p><strong>{'á' * 251}</strong>{'á' * 250}</p>"
-# 400 caracteres visibles y 3207 de entrada, pero al sanear cada enlace recibe su
-# `rel` y el HTML guardado pasaría de 10000 caracteres.
-_HTML_SANEADO_DE_MAS_DE_10000 = f"<p>{'<a>a</a>' * 400}</p>"
+_HTML_5000_VISIBLES = f"<p><strong>{'á' * 2500}</strong> {'á' * 2498}&amp;</p>"
+_HTML_5001_VISIBLES = f"<p><strong>{'á' * 2501}</strong>{'á' * 2500}</p>"
+# 1200 caracteres visibles y 9607 de entrada, pero al sanear cada enlace recibe su
+# `rel` y el HTML guardado pasaría de 50000 caracteres.
+_HTML_SANEADO_DE_MAS_DE_50000 = f"<p>{'<a>a</a>' * 1200}</p>"
 
 
 def _texto(texto: str) -> str:
@@ -130,11 +130,11 @@ def comentar(cliente: TestClient, texto: str, tarea: str) -> Response:
 
 
 @when(
-    parsers.re(r'^comento un texto de 500 caracteres en "(?P<tarea>[^"]+)"$'),
+    parsers.re(r'^comento un texto de 5000 caracteres en "(?P<tarea>[^"]+)"$'),
     target_fixture="respuesta",
 )
 def comentar_en_el_limite(cliente: TestClient, tarea: str) -> Response:
-    return _comentar(cliente, tarea, {"texto": "á" * 500})
+    return _comentar(cliente, tarea, {"texto": "á" * 5000})
 
 
 @when(
@@ -146,29 +146,29 @@ def comentar_html(cliente: TestClient, tarea: str, html: str) -> Response:
 
 
 @when(
-    parsers.re(r'^comento en "(?P<tarea>[^"]+)" un HTML con 500 caracteres visibles$'),
+    parsers.re(r'^comento en "(?P<tarea>[^"]+)" un HTML con 5000 caracteres visibles$'),
     target_fixture="respuesta",
 )
 def comentar_html_en_el_limite(cliente: TestClient, tarea: str) -> Response:
-    return _comentar(cliente, tarea, {"texto": _HTML_500_VISIBLES})
+    return _comentar(cliente, tarea, {"texto": _HTML_5000_VISIBLES})
 
 
 @when(
-    parsers.re(r'^intento comentar en "(?P<tarea>[^"]+)" un HTML con 501 caracteres visibles$'),
+    parsers.re(r'^intento comentar en "(?P<tarea>[^"]+)" un HTML con 5001 caracteres visibles$'),
     target_fixture="respuesta",
 )
 def comentar_html_largo(cliente: TestClient, tarea: str) -> Response:
-    return _comentar(cliente, tarea, {"texto": _HTML_501_VISIBLES})
+    return _comentar(cliente, tarea, {"texto": _HTML_5001_VISIBLES})
 
 
 @when(
     parsers.re(
-        r'^intento comentar en "(?P<tarea>[^"]+)" un HTML que saneado pasa de 10000 caracteres$'
+        r'^intento comentar en "(?P<tarea>[^"]+)" un HTML que saneado pasa de 50000 caracteres$'
     ),
     target_fixture="respuesta",
 )
 def comentar_html_saneado_largo(cliente: TestClient, tarea: str) -> Response:
-    return _comentar(cliente, tarea, {"texto": _HTML_SANEADO_DE_MAS_DE_10000})
+    return _comentar(cliente, tarea, {"texto": _HTML_SANEADO_DE_MAS_DE_50000})
 
 
 @when(
@@ -180,11 +180,11 @@ def comentar_con_cuerpo(cliente: TestClient, tarea: str, cuerpo: str) -> Respons
 
 
 @when(
-    parsers.re(r'^intento comentar en "(?P<tarea>[^"]+)" un texto de 501 caracteres$'),
+    parsers.re(r'^intento comentar en "(?P<tarea>[^"]+)" un texto de 5001 caracteres$'),
     target_fixture="respuesta",
 )
 def comentar_texto_largo(cliente: TestClient, tarea: str) -> Response:
-    return _comentar(cliente, tarea, {"texto": "a" * 501})
+    return _comentar(cliente, tarea, {"texto": "a" * 5001})
 
 
 @when(
@@ -217,12 +217,12 @@ def editar_comentario(cliente: TestClient, comentario: str, tarea: str, texto: s
 @when(
     parsers.re(
         r'^edito el comentario "(?P<comentario>[^"]+)" de "(?P<tarea>[^"]+)"'
-        r" con un texto de 500 caracteres$"
+        r" con un texto de 5000 caracteres$"
     ),
     target_fixture="respuesta",
 )
 def editar_comentario_en_el_limite(cliente: TestClient, comentario: str, tarea: str) -> Response:
-    return cliente.put(_ruta_por_texto(cliente, tarea, comentario), json={"texto": "á" * 500})
+    return cliente.put(_ruta_por_texto(cliente, tarea, comentario), json={"texto": "á" * 5000})
 
 
 @when(
@@ -241,12 +241,12 @@ def editar_comentario_con_cuerpo(
 @when(
     parsers.re(
         r'^intento editar el comentario "(?P<comentario>[^"]+)" de "(?P<tarea>[^"]+)"'
-        r" con un texto de 501 caracteres$"
+        r" con un texto de 5001 caracteres$"
     ),
     target_fixture="respuesta",
 )
 def editar_comentario_texto_largo(cliente: TestClient, comentario: str, tarea: str) -> Response:
-    return cliente.put(_ruta_por_texto(cliente, tarea, comentario), json={"texto": "a" * 501})
+    return cliente.put(_ruta_por_texto(cliente, tarea, comentario), json={"texto": "a" * 5001})
 
 
 @when(
@@ -317,10 +317,10 @@ def la_api_responde_con_el_html(respuesta: Response, html: str) -> None:
     assert respuesta.json()["texto"] == html
 
 
-@then("la API responde 201 con el HTML de 500 caracteres visibles")
+@then("la API responde 201 con el HTML de 5000 caracteres visibles")
 def la_api_responde_con_el_html_en_el_limite(respuesta: Response) -> None:
     assert respuesta.status_code == 201
-    assert respuesta.json()["texto"] == _HTML_500_VISIBLES
+    assert respuesta.json()["texto"] == _HTML_5000_VISIBLES
 
 
 @then(parsers.re(r'^"(?P<tarea>[^"]+)" solo tiene ese comentario$'))
@@ -329,12 +329,12 @@ def solo_tiene_ese_comentario(cliente: TestClient, respuesta: Response, tarea: s
     assert _listar(cliente, tarea) == [respuesta.json()]
 
 
-@then("la API responde 201 con un comentario de 500 caracteres")
+@then("la API responde 201 con un comentario de 5000 caracteres")
 def la_api_responde_en_el_limite(cliente: TestClient, respuesta: Response) -> None:
     assert respuesta.status_code == 201
-    assert respuesta.json()["texto"] == f"<p>{'á' * 500}</p>"
+    assert respuesta.json()["texto"] == f"<p>{'á' * 5000}</p>"
     listado = cliente.get(_ruta(_id_tarea(cliente, "Mudanza"))).json()
-    assert [c["texto"] for c in listado] == [f"<p>{'á' * 500}</p>"]
+    assert [c["texto"] for c in listado] == [f"<p>{'á' * 5000}</p>"]
 
 
 def _comprobar_editado(comentario: dict, original: dict, texto: str) -> None:
@@ -361,13 +361,13 @@ def la_api_responde_con_el_comentario_editado(
     _comprobar_editado(comentario, originales[comentario["id"]], _guardado(texto))
 
 
-@then("la API responde 200 con un comentario editado de 500 caracteres")
+@then("la API responde 200 con un comentario editado de 5000 caracteres")
 def la_api_responde_editado_en_el_limite(
     cliente: TestClient, respuesta: Response, originales: dict[int, dict]
 ) -> None:
     assert respuesta.status_code == 200
     comentario = respuesta.json()
-    _comprobar_editado(comentario, originales[comentario["id"]], f"<p>{'á' * 500}</p>")
+    _comprobar_editado(comentario, originales[comentario["id"]], f"<p>{'á' * 5000}</p>")
     assert _listar(cliente, "Mudanza") == [comentario]
 
 

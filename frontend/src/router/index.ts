@@ -6,6 +6,7 @@ import VistaAjustes from '@/vistas/VistaAjustes.vue'
 import VistaGruposEstados from '@/vistas/VistaGruposEstados.vue'
 import VistaWorkflows from '@/vistas/VistaWorkflows.vue'
 import VistaOportunidades from '@/vistas/VistaOportunidades.vue'
+import VistaSubestados from '@/vistas/VistaSubestados.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -49,6 +50,11 @@ const router = createRouter({
       path: '/ajustes/grupos-estados',
       name: 'grupos-estados',
       component: VistaGruposEstados,
+    },
+    {
+      path: '/ajustes/subestados',
+      name: 'subestados',
+      component: VistaSubestados,
     },
   ],
 })

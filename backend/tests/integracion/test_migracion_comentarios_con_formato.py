@@ -19,8 +19,9 @@ from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
 from tests.integracion.tablas import vaciar_tablas
 
 _RAIZ = Path(__file__).resolve().parents[2]
-# Revisión más reciente: la de las imágenes de los comentarios, posterior a esta.
-_ULTIMA = "f1a6c3e8b2d9"
+# Revisión más reciente (la columna `texto` es MEDIUMTEXT desde la de los
+# comentarios de 5000 caracteres, posterior a esta).
+_ULTIMA = "c9a2f6e4d8b1"
 _ANTERIOR = "d2a8e5c3f7b1"
 _TABLAS = ("comentarios", "comentarios_subtarea", "comentarios_paso_workflow")
 _CREADO = "2026-11-10 16:30:05"
@@ -96,7 +97,10 @@ def _estado() -> tuple[str, dict[str, tuple[str, list[str]]]]:
             columna = next(c for c in inspector.get_columns(tabla) if c["name"] == "texto")
             assert columna["nullable"] is False
             textos = sesion.scalars(text(f"SELECT texto FROM {tabla} ORDER BY id")).all()
-            tablas[tabla] = (str(columna["type"]), list(textos))
+            # Solo el tipo base: con otra intercalación del servidor el inspector
+            # añade " COLLATE …" (p. ej. "TEXT COLLATE utf8mb4_unicode_ci").
+            tipo = str(columna["type"]).split(" COLLATE ")[0]
+            tablas[tabla] = (tipo, list(textos))
         revision = sesion.scalar(text("SELECT version_num FROM alembic_version"))
         return revision, tablas
     finally:
@@ -111,7 +115,7 @@ def test_la_migracion_pasa_los_comentarios_a_html_y_se_deshace_a_texto_plano() -
     padres = _ids_padre()
     largo = f"<p><em>{'a' * 600}</em></p>"
     _insertar(padres, [_HTML, _FORMATO, largo])
-    assert _estado() == (_ULTIMA, _todas("TEXT", [_HTML, _FORMATO, largo]))
+    assert _estado() == (_ULTIMA, _todas("MEDIUMTEXT", [_HTML, _FORMATO, largo]))
 
     try:
         # Al deshacerla, el HTML pasa a texto plano y se trunca a 500 caracteres.
@@ -129,7 +133,7 @@ def test_la_migracion_pasa_los_comentarios_a_html_y_se_deshace_a_texto_plano() -
     assert _estado() == (
         _ULTIMA,
         _todas(
-            "TEXT",
+            "MEDIUMTEXT",
             [
                 _HTML,
                 "<p>Uno rojo</p><p>dos</p><p>a &amp; b</p><p>enlace</p>",

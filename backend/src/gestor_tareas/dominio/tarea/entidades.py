@@ -135,6 +135,9 @@ class Tarea:
     estado del grupo en el que está: los dos son ``None`` o el estado es de ese
     grupo.
 
+    ``subestado`` es el nombre del subestado del catálogo de la tarea (como mucho
+    uno; opcional).
+
     ``congelada_en`` es el instante (en UTC, sin fracción de segundo) desde el que
     su contador de vencimiento está congelado, o ``None`` si no lo está (ver
     ``gestor_tareas.dominio.tarea.congelacion``). Lo mantiene ``ajustar_congelacion``
@@ -156,6 +159,7 @@ class Tarea:
     estado: ReferenciaEstado | None = None
     workflow: ReferenciaWorkflow | None = None
     congelada_en: datetime | None = None
+    subestado: str | None = None
     id: int | None = None
 
     def ajustar_congelacion(self, ahora: datetime) -> None:

@@ -39,11 +39,11 @@ Característica: Comentarios de los pasos de los workflows
       | {"texto": " \\n\\t "}          |
       | {"texto": null}               |
       | {"texto": 5}                  |
-      | {"texto": "<501 caracteres>"} |
+      | {"texto": "<5001 caracteres>"} |
 
-  Escenario: Se admite un comentario de paso de 500 caracteres
-    Cuando comento un texto de 500 caracteres en el paso "Contacto" de "Ventas"
-    Entonces la API responde 201 con un comentario de 500 caracteres
+  Escenario: Se admite un comentario de paso de 5000 caracteres
+    Cuando comento un texto de 5000 caracteres en el paso "Contacto" de "Ventas"
+    Entonces la API responde 201 con un comentario de 5000 caracteres
 
   Escenario: Editar un comentario de paso cambia su texto, conserva su fecha de alta y lo marca como editado
     Dado que el paso "Contacto" de "Ventas" tiene los comentarios "Llamar; Enviar correo"
@@ -51,11 +51,16 @@ Característica: Comentarios de los pasos de los workflows
     Entonces la API responde 200 con el comentario editado "Llamar dos veces" con su fecha de alta
     Y los comentarios del paso "Contacto" de "Ventas" son "Llamar dos veces; Enviar correo"
 
-  Escenario: Se rechaza editar un comentario de paso con un texto inválido
+  Esquema del escenario: Se rechaza editar un comentario de paso con un texto inválido
     Dado que el paso "Contacto" de "Ventas" tiene los comentarios "Llamar"
-    Cuando intento editar el comentario "Llamar" del paso "Contacto" de "Ventas" con el cuerpo {"texto": " "}
+    Cuando intento editar el comentario "Llamar" del paso "Contacto" de "Ventas" con el cuerpo <cuerpo>
     Entonces la API rechaza la petición por datos inválidos
     Y los comentarios del paso "Contacto" de "Ventas" son "Llamar"
+
+    Ejemplos:
+      | cuerpo                         |
+      | {"texto": " "}                 |
+      | {"texto": "<5001 caracteres>"} |
 
   Escenario: Eliminar un comentario de paso lo quita del histórico
     Dado que el paso "Contacto" de "Ventas" tiene los comentarios "Uno; Dos; Tres"

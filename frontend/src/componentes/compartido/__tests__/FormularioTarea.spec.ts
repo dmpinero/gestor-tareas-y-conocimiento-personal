@@ -6,6 +6,7 @@ import { reactive } from 'vue'
 import type { Workflow } from '@/api/tipos'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
 import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
+import { useTiendaTareas } from '@/stores/tareas'
 import { useTiendaWorkflows } from '@/stores/workflows'
 
 let envoltorio: VueWrapper | null = null
@@ -29,10 +30,16 @@ const WORKFLOWS: Workflow[] = [
 
 function montar(
   tipo: ValoresFormularioTarea['tipo'] = '',
-  opciones: { alta?: boolean; workflowId?: number | ''; workflows?: Workflow[] } = {},
+  opciones: {
+    alta?: boolean
+    workflowId?: number | ''
+    workflows?: Workflow[]
+    subestado?: string
+  } = {},
 ): VueWrapper {
   setActivePinia(createPinia())
   useTiendaWorkflows().workflows = opciones.workflows ?? WORKFLOWS
+  useTiendaTareas().subestados = ['Bloqueado', 'En pausa']
   const valores: ValoresFormularioTarea = reactive({
     nombre: '',
     prioridad: '',
@@ -41,6 +48,7 @@ function montar(
     fechaVencimiento: '',
     etiquetas: [],
     asignados: [],
+    subestado: opciones.subestado ?? '',
     tipo,
     oportunidad: { codigo: '', descripcion: '', observaciones: '' },
     grupoEstadosId: '',
@@ -67,6 +75,7 @@ const OPCIONALES = [
   'tarea-prioridad',
   'etiquetas',
   'asignados',
+  'subestado',
   'fecha-vencimiento',
   'tarea-tipo',
   'tarea-grupo-estados',
@@ -177,5 +186,55 @@ describe('FormularioTarea: workflow', () => {
     await flushPromises()
 
     expect(valores().workflowId).toBe('')
+  })
+})
+
+describe('FormularioTarea: subestado', () => {
+  function valores(): ValoresFormularioTarea {
+    if (!valoresMontados) throw new Error('No hay formulario montado')
+    return valoresMontados
+  }
+
+  async function escribirSubestado(formulario: VueWrapper, texto: string): Promise<void> {
+    await formulario.get('input#subestado').setValue(texto)
+    await flushPromises()
+  }
+
+  it('tiene un campo "Subestado" que sugiere los subestados del catálogo', async () => {
+    const formulario = montar()
+
+    expect(formulario.get('label[for="subestado"]').text()).toBe('Subestado')
+    await escribirSubestado(formulario, 'blo')
+
+    expect(formulario.findAll('[role="option"]').map((opcion) => opcion.text())).toEqual([
+      'Bloqueado',
+      'Crear subestado "blo"',
+    ])
+  })
+
+  it('elegir un subestado lo guarda en los valores y otro lo sustituye', async () => {
+    const formulario = montar('', { subestado: 'Bloqueado' })
+    expect(formulario.findAll('[data-testid="chip"]').map((chip) => chip.text())).toEqual([
+      'Bloqueado',
+    ])
+
+    await escribirSubestado(formulario, 'en pausa')
+    await formulario.get('input#subestado').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(valores().subestado).toBe('En pausa')
+  })
+
+  it('se puede crear un subestado nuevo y quitarlo', async () => {
+    const formulario = montar()
+
+    await escribirSubestado(formulario, 'Esperando cliente')
+    await formulario.get('input#subestado').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(valores().subestado).toBe('Esperando cliente')
+
+    await formulario.get('button[aria-label="Quitar Esperando cliente"]').trigger('click')
+    await flushPromises()
+    expect(valores().subestado).toBe('')
   })
 })

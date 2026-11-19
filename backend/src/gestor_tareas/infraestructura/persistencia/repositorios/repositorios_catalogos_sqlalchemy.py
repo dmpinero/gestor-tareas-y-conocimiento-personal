@@ -1,12 +1,21 @@
-from sqlalchemy import inspect, select
+from collections.abc import Callable
+
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
 from gestor_tareas.dominio.nombres_catalogo import clave_orden_nombre
 from gestor_tareas.dominio.persona.entidades import Persona
-from gestor_tareas.infraestructura.persistencia.modelos import EtiquetaModelo, PersonaModelo
+from gestor_tareas.dominio.subestado.entidades import Subestado
+from gestor_tareas.dominio.subestado.errores import subestado_duplicado, subestado_no_encontrado
+from gestor_tareas.infraestructura.persistencia.modelos import (
+    EtiquetaModelo,
+    PersonaModelo,
+    SubestadoModelo,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import traducir_conflictos
+from gestor_tareas.infraestructura.persistencia.repositorios.nombres_unicos import nombre_unico
 
 # Clave de ``Session.info`` donde se guardan las filas que ``obtener_o_crear``
 # ha devuelto en esa sesión, por (modelo, nombre guardado).
@@ -17,7 +26,7 @@ def _filas_obtenidas(sesion: Session) -> dict[tuple[type, str], object]:
     return sesion.info.setdefault(_CLAVE_FILAS_OBTENIDAS, {})
 
 
-def filas_obtenidas[M: (EtiquetaModelo, PersonaModelo)](
+def filas_obtenidas[M: (EtiquetaModelo, PersonaModelo, SubestadoModelo)](
     sesion: Session, modelo: type[M], nombres: list[str]
 ) -> tuple[list[M], list[str]]:
     """Filas que ``obtener_o_crear`` devolvió en esta sesión para esos nombres guardados.
@@ -40,8 +49,12 @@ def filas_obtenidas[M: (EtiquetaModelo, PersonaModelo)](
     return filas, faltan
 
 
-class _RepositorioCatalogoSqlAlchemy[E: (Etiqueta, Persona), M: (EtiquetaModelo, PersonaModelo)]:
-    """Catálogo de nombres únicos sin distinguir mayúsculas (etiquetas o personas).
+class _RepositorioCatalogoSqlAlchemy[
+    E: (Etiqueta, Persona, Subestado),
+    M: (EtiquetaModelo, PersonaModelo, SubestadoModelo),
+]:
+    """Catálogo de nombres únicos sin distinguir mayúsculas (etiquetas, personas o
+    subestados).
 
     La comparación de nombres la hace MySQL con la intercalación de la columna
     (ver ``INTERCALACION_NOMBRES_CATALOGO``), que también respalda el índice único.
@@ -49,6 +62,10 @@ class _RepositorioCatalogoSqlAlchemy[E: (Etiqueta, Persona), M: (EtiquetaModelo,
 
     _modelo: type[M]
     _entidad: type[E]
+    # Si se lee con bloqueo compartido (FOR SHARE) el elemento existente que se
+    # reutiliza. Hace falta en los catálogos que se pueden borrar (subestados):
+    # así nadie lo borra entre la lectura y el guardado de la tarea que lo usa.
+    _bloquear_al_reutilizar: bool = False
 
     def __init__(self, sesion: Session) -> None:
         self._sesion = sesion
@@ -74,7 +91,7 @@ class _RepositorioCatalogoSqlAlchemy[E: (Etiqueta, Persona), M: (EtiquetaModelo,
         return [self._a_entidad(filas[nombre]) for nombre in nombres]
 
     def _obtener_o_crear_uno(self, nombre: str) -> M:
-        existente = self._buscar(nombre)
+        existente = self._buscar(nombre, con_bloqueo=self._bloquear_al_reutilizar)
         if existente is not None:
             return existente
         try:
@@ -112,3 +129,59 @@ class RepositorioEtiquetasSqlAlchemy(_RepositorioCatalogoSqlAlchemy[Etiqueta, Et
 class RepositorioPersonasSqlAlchemy(_RepositorioCatalogoSqlAlchemy[Persona, PersonaModelo]):
     _modelo = PersonaModelo
     _entidad = Persona
+
+
+class RepositorioSubestadosSqlAlchemy(_RepositorioCatalogoSqlAlchemy[Subestado, SubestadoModelo]):
+    """Catálogo de subestados: como el de etiquetas, y además se gestiona (alta,
+    cambio de nombre y borrado). Cada operación de gestión confirma su transacción."""
+
+    _modelo = SubestadoModelo
+    _entidad = Subestado
+    # Borrar un subestado (que deja sus tareas sin él) espera a las tareas que se
+    # están guardando con él, y estas a que termine el borrado: una lectura con
+    # bloqueo ve que ya no existe y lo vuelve a dar de alta. Sin el bloqueo, la
+    # tarea se guardaría con un subestado ya borrado (clave ajena rota, 500).
+    _bloquear_al_reutilizar = True
+
+    def _confirmar[T](self, operacion: Callable[[], T]) -> T:
+        with traducir_conflictos(self._sesion):
+            try:
+                resultado = operacion()
+            except BaseException:
+                self._sesion.rollback()
+                raise
+            self._sesion.commit()
+        return resultado
+
+    def crear(self, nombre: str) -> Subestado:
+        def crear() -> Subestado:
+            with nombre_unico(lambda: subestado_duplicado(nombre)):
+                fila = SubestadoModelo(nombre=nombre)
+                self._sesion.add(fila)
+                self._sesion.flush()
+            return self._a_entidad(fila)
+
+        return self._confirmar(crear)
+
+    def renombrar(self, id_subestado: int, nombre: str) -> Subestado:
+        def renombrar() -> Subestado:
+            fila = self._sesion.get(SubestadoModelo, id_subestado, with_for_update=True)
+            if fila is None:
+                raise subestado_no_encontrado(id_subestado)
+            with nombre_unico(lambda: subestado_duplicado(nombre)):
+                fila.nombre = nombre
+                self._sesion.flush()
+            return self._a_entidad(fila)
+
+        return self._confirmar(renombrar)
+
+    def eliminar(self, id_subestado: int) -> None:
+        def eliminar() -> None:
+            # El ON DELETE SET NULL de la base de datos deja sus tareas sin subestado.
+            resultado = self._sesion.execute(
+                delete(SubestadoModelo).where(SubestadoModelo.id == id_subestado)
+            )
+            if resultado.rowcount == 0:
+                raise subestado_no_encontrado(id_subestado)
+
+        self._confirmar(eliminar)

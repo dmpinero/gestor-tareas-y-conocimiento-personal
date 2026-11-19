@@ -39,8 +39,8 @@ InstanteUtc = Annotated[
 
 # Caracteres del texto visible (sin etiquetas, con las entidades decodificadas y
 # sin los espacios de los extremos) y del HTML saneado que se guarda.
-LONGITUD_MAXIMA_VISIBLE = 500
-LONGITUD_MAXIMA_HTML = 10000
+LONGITUD_MAXIMA_VISIBLE = 5000
+LONGITUD_MAXIMA_HTML = 50000
 
 
 def _sanear_y_validar(texto: str) -> str:
