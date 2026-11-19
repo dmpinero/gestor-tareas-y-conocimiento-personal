@@ -621,12 +621,12 @@ describe('VistaWorkflows', () => {
       ).toBe('2')
     })
 
-    it('el texto es obligatorio y admite como mucho 500 caracteres', async () => {
+    it('el texto es obligatorio y admite como mucho 5000 caracteres', async () => {
       const vista = await abrirComentarios()
 
       const enviar = boton(vista, 'Enviar comentario del paso Propuesta de Workflow Oportunidades')
       const contador = vista.get(`#${campoComentario(vista).attributes('aria-describedby')}`)
-      expect(contador.text()).toBe('0/500')
+      expect(contador.text()).toBe('0/5000')
       await escribirEnEditor(vista, ETIQUETA_CAMPO, '<p>   </p>')
       expect(enviar.attributes('disabled')).toBeDefined()
       await vista

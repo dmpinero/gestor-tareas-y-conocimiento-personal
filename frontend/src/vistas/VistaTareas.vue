@@ -5,10 +5,12 @@ import {
   ChevronRight,
   Columns3,
   Kanban,
+  Layers,
   List,
   ListFilter,
   Search,
 } from '@lucide/vue'
+import { createReusableTemplate } from '@vueuse/core'
 import { computed, nextTick, onMounted, reactive, ref, watch, type Component } from 'vue'
 
 import {
@@ -19,6 +21,11 @@ import {
   type Tarea,
   type TipoTarea,
 } from '@/api/tipos'
+import {
+  CLAVE_SIN_SUBESTADO,
+  agruparPorSubestado,
+  type GrupoSubestado,
+} from '@/lib/agruparPorSubestado'
 import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
 import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
@@ -229,6 +236,7 @@ const formulario = reactive<ValoresFormularioTarea>({
   fechaVencimiento: '',
   etiquetas: [],
   asignados: [],
+  subestado: '',
   tipo: '',
   oportunidad: { codigo: '', descripcion: '', observaciones: '' },
   grupoEstadosId: '',
@@ -324,6 +332,7 @@ type CampoOrdenable =
   | 'descripcion'
   | 'etiquetas'
   | 'asignados'
+  | 'subestado'
   | 'fechaCreacion'
   | 'fechaVencimiento'
   | 'tipo'
@@ -379,9 +388,18 @@ const itemsAsignadosFiltro = computed(() =>
   ),
 )
 
+// El subestado es como mucho uno: se filtra como una lista de cero o un nombres.
+function nombresSubestado(tarea: Tarea): string[] {
+  return tarea.subestado ? [tarea.subestado] : []
+}
+const itemsSubestadosFiltro = computed(() =>
+  itemsDeNombres(tienda.subestados, tienda.tareas.map(nombresSubestado), 'Sin subestado'),
+)
+
 const prioridadesFiltro = ref<number[]>(ITEMS_PRIORIDAD.map((item) => item.id))
 const etiquetasFiltro = ref<string[]>(itemsEtiquetasFiltro.value.map((item) => item.id))
 const asignadosFiltro = ref<string[]>(itemsAsignadosFiltro.value.map((item) => item.id))
+const subestadosFiltro = ref<string[]>(itemsSubestadosFiltro.value.map((item) => item.id))
 const tiposFiltro = ref<string[]>(ITEMS_TIPO.map((item) => item.id))
 
 // Estado de las tareas que se muestran: todas, solo las completadas o solo las
@@ -417,6 +435,7 @@ function marcarNuevos(seleccion: { value: string[] }) {
 }
 watch(itemsEtiquetasFiltro, marcarNuevos(etiquetasFiltro))
 watch(itemsAsignadosFiltro, marcarNuevos(asignadosFiltro))
+watch(itemsSubestadosFiltro, marcarNuevos(subestadosFiltro))
 
 /** Pasa si alguno de sus nombres está marcado o, sin ninguno, si lo está la opción "Sin …". */
 function pasaFiltroNombres(nombres: string[], seleccion: string[]): boolean {
@@ -437,6 +456,7 @@ const tareasConFiltros = computed(() =>
     if (!prioridadesFiltro.value.includes(tarea.prioridad ?? SIN_PRIORIDAD)) return false
     if (!pasaFiltroNombres(tarea.etiquetas, etiquetasFiltro.value)) return false
     if (!pasaFiltroNombres(tarea.asignados, asignadosFiltro.value)) return false
+    if (!pasaFiltroNombres(nombresSubestado(tarea), subestadosFiltro.value)) return false
     if (!tiposFiltro.value.includes(tarea.tipo ?? SIN_TIPO)) return false
     if (estadoFiltro.value === 'completadas' && !tarea.completada) return false
     if (estadoFiltro.value === 'pendientes' && tarea.completada) return false
@@ -480,6 +500,7 @@ function limpiarFiltros(): void {
   prioridadesFiltro.value = ITEMS_PRIORIDAD.map((item) => item.id)
   etiquetasFiltro.value = itemsEtiquetasFiltro.value.map((item) => item.id)
   asignadosFiltro.value = itemsAsignadosFiltro.value.map((item) => item.id)
+  subestadosFiltro.value = itemsSubestadosFiltro.value.map((item) => item.id)
   tiposFiltro.value = ITEMS_TIPO.map((item) => item.id)
   estadoFiltro.value = 'todas'
   fechasFiltro.creacion = { desde: '', hasta: '' }
@@ -495,6 +516,7 @@ const numeroFiltrosActivos = computed(
       prioridadesFiltro.value.length !== ITEMS_PRIORIDAD.length,
       etiquetasFiltro.value.length !== itemsEtiquetasFiltro.value.length,
       asignadosFiltro.value.length !== itemsAsignadosFiltro.value.length,
+      subestadosFiltro.value.length !== itemsSubestadosFiltro.value.length,
       tiposFiltro.value.length !== ITEMS_TIPO.length,
       estadoFiltro.value !== 'todas',
       ...RANGOS_FECHA.map(
@@ -516,6 +538,7 @@ const { campo, direccion, ordenarPor, filasOrdenadas } = useOrdenacionTabla<Tare
     descripcion: (a, b) => compararTexto(a.descripcion, b.descripcion),
     etiquetas: compararConNulosAlFinal((tarea) => unirNombres(tarea.etiquetas), compararTexto),
     asignados: compararConNulosAlFinal((tarea) => unirNombres(tarea.asignados), compararTexto),
+    subestado: compararConNulosAlFinal((tarea) => tarea.subestado ?? null, compararTexto),
     fechaCreacion: (a, b) => compararIso(a.fecha_creacion, b.fecha_creacion),
     fechaVencimiento: compararConNulosAlFinal((tarea) => tarea.fecha_vencimiento, compararIso),
     tipo: compararConNulosAlFinal((tarea) => etiquetaTipoTarea(tarea.tipo), compararTexto),
@@ -529,6 +552,7 @@ const COLUMNAS_ORDENABLES: { campo: CampoOrdenable; etiqueta: string }[] = [
   { campo: 'descripcion', etiqueta: 'Descripción' },
   { campo: 'etiquetas', etiqueta: 'Etiquetas' },
   { campo: 'asignados', etiqueta: 'Asignado a' },
+  { campo: 'subestado', etiqueta: 'Subestado' },
   { campo: 'fechaCreacion', etiqueta: 'Fecha de creación' },
   { campo: 'fechaVencimiento', etiqueta: 'Fecha de vencimiento' },
   { campo: 'tipo', etiqueta: 'Tipo' },
@@ -666,10 +690,96 @@ const gruposConFilas = computed(() =>
   })),
 )
 
-// Filas que se ven, en el orden de la pantalla (los grupos plegados no cuentan).
-const filasVisibles = computed(() =>
-  gruposConFilas.value.flatMap((grupo) => (estaPlegado(grupo.id) ? [] : grupo.filas)),
+// --- Agrupar por subestado ---
+// Dentro de cada grupo ("Pendientes", "Completadas") las filas se reparten en
+// secciones plegables por subestado, ordenadas por nombre como el catálogo y
+// con "Sin subestado" al final; solo las que tienen filas. Se recuerda en este
+// navegador si se agrupa y qué secciones están plegadas, cada una como
+// "<grupo>|<clave del subestado>" (p. ej. "pendientes|sin"); lo que no se
+// reconozca se ignora.
+const CLAVE_AGRUPAR_SUBESTADO = 'gestor-tareas:agrupar-subestado-tareas'
+const CLAVE_SUBESTADOS_PLEGADOS = 'gestor-tareas:subestados-plegados-tareas'
+
+const agruparSubestado = ref(leerPreferencia(CLAVE_AGRUPAR_SUBESTADO) === 'true')
+watch(agruparSubestado, (activo) => guardarPreferencia(CLAVE_AGRUPAR_SUBESTADO, String(activo)))
+
+function claveSeccion(idGrupo: IdGrupoTabla, claveSubestado: string): string {
+  return `${idGrupo}|${claveSubestado}`
+}
+
+function esClaveSeccion(valor: unknown): valor is string {
+  if (typeof valor !== 'string') return false
+  const separador = valor.indexOf('|')
+  const grupo = valor.slice(0, separador)
+  const subestado = valor.slice(separador + 1)
+  return (
+    separador > 0 &&
+    GRUPOS_TABLA.some((g) => g.id === grupo) &&
+    (subestado === CLAVE_SIN_SUBESTADO || /^subestado:.+/.test(subestado))
+  )
+}
+
+function leerSeccionesPlegadas(): string[] {
+  try {
+    const guardado: unknown = JSON.parse(localStorage.getItem(CLAVE_SUBESTADOS_PLEGADOS) ?? '[]')
+    return Array.isArray(guardado) ? [...new Set(guardado.filter(esClaveSeccion))] : []
+  } catch {
+    return []
+  }
+}
+
+const seccionesPlegadas = ref<string[]>(leerSeccionesPlegadas())
+watch(seccionesPlegadas, (plegadas) =>
+  guardarPreferencia(CLAVE_SUBESTADOS_PLEGADOS, JSON.stringify(plegadas)),
 )
+
+function estaPlegadaSeccion(idGrupo: IdGrupoTabla, claveSubestado: string): boolean {
+  return seccionesPlegadas.value.includes(claveSeccion(idGrupo, claveSubestado))
+}
+
+function alternarSeccion(idGrupo: IdGrupoTabla, claveSubestado: string): void {
+  const clave = claveSeccion(idGrupo, claveSubestado)
+  seccionesPlegadas.value = seccionesPlegadas.value.includes(clave)
+    ? seccionesPlegadas.value.filter((plegada) => plegada !== clave)
+    : [...seccionesPlegadas.value, clave]
+}
+
+// Las secciones de cada grupo, con un id para el `aria-controls` de su cabecera.
+const seccionesPorGrupo = computed<
+  Record<IdGrupoTabla, (GrupoSubestado<Tarea> & { idCuerpo: string })[]>
+>(() => {
+  const secciones = {} as Record<IdGrupoTabla, (GrupoSubestado<Tarea> & { idCuerpo: string })[]>
+  for (const grupo of gruposConFilas.value) {
+    secciones[grupo.id] = agruparPorSubestado(grupo.filas).map((seccion, indice) => ({
+      ...seccion,
+      idCuerpo: `seccion-${grupo.id}-${indice}`,
+    }))
+  }
+  return secciones
+})
+
+function filasVisiblesDe(grupo: { id: IdGrupoTabla; filas: Tarea[] }): Tarea[] {
+  if (estaPlegado(grupo.id)) return []
+  if (!agruparSubestado.value) return grupo.filas
+  return seccionesPorGrupo.value[grupo.id].flatMap((seccion) =>
+    estaPlegadaSeccion(grupo.id, seccion.clave) ? [] : seccion.tareas,
+  )
+}
+
+// Filas que se ven, en el orden de la pantalla (los grupos y secciones
+// plegados no cuentan).
+const filasVisibles = computed(() => gruposConFilas.value.flatMap(filasVisiblesDe))
+
+// La fila de una tarea y el pie de cada grupo (alta rápida y barra de
+// prioridades) se escriben una vez y se usan con y sin secciones.
+const plantillaFila = createReusableTemplate<{
+  tarea: Tarea
+  indice: number
+  borde: string
+}>()
+const plantillaPieGrupo = createReusableTemplate<{
+  grupo: (typeof gruposConFilas.value)[number]
+}>()
 
 // Celdas de la tabla por fila: las columnas visibles más la de acciones.
 const numeroColumnasTabla = computed(() => columnasVisibles.value.length + 1)
@@ -707,6 +817,7 @@ async function crearRapida(id: IdGrupoTabla): Promise<void> {
       oportunidad: null,
       grupo_estados_id: null,
       workflow_id: null,
+      subestado: null,
     })
     altaRapida[id] = ''
     if (GRUPOS_TABLA.find((grupo) => grupo.id === id)?.completada) {
@@ -732,6 +843,7 @@ const filasExportacion = computed<CeldaExportada[][]>(() =>
       descripcion: tarea.descripcion,
       etiquetas: unirNombres(tarea.etiquetas) ?? '—',
       asignados: unirNombres(tarea.asignados) ?? '—',
+      subestado: tarea.subestado ?? '—',
       fechaCreacion: formatearFechaHora(tarea.fecha_creacion),
       fechaVencimiento: tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : '—',
       tipo: etiquetaTipoTarea(tarea.tipo) ?? '—',
@@ -749,6 +861,7 @@ function limpiarFormulario(): void {
   formulario.fechaVencimiento = ''
   formulario.etiquetas = []
   formulario.asignados = []
+  formulario.subestado = ''
   formulario.tipo = ''
   formulario.oportunidad = { codigo: '', descripcion: '', observaciones: '' }
   formulario.grupoEstadosId = ''
@@ -900,6 +1013,7 @@ function cargarFormulario(tarea: Tarea): void {
   // Copias, para que editar los chips no altere la tarea mostrada en la tabla.
   formulario.etiquetas = [...tarea.etiquetas]
   formulario.asignados = [...tarea.asignados]
+  formulario.subestado = tarea.subestado ?? ''
   formulario.tipo = tarea.tipo ?? ''
   formulario.grupoEstadosId = tarea.grupo_estados?.id ?? ''
   formulario.workflowId = tarea.workflow?.id ?? ''
@@ -966,6 +1080,7 @@ async function guardar(): Promise<void> {
     oportunidad: datosOportunidad(),
     grupo_estados_id: formulario.grupoEstadosId === '' ? null : formulario.grupoEstadosId,
     workflow_id: formulario.workflowId === '' ? null : formulario.workflowId,
+    subestado: formulario.subestado === '' ? null : formulario.subestado,
   }
   const destino = destinoAlta
   try {
@@ -995,6 +1110,174 @@ async function guardar(): Promise<void> {
 
 <template>
   <section>
+    <plantillaFila.define v-slot="{ tarea, indice, borde }">
+      <TableRow
+        data-fila-tarea
+        :class="claseFilaTarea(indice)"
+        @click="alPulsarFila($event, tarea.id)"
+      >
+        <!--
+          Ancho mínimo para que la casilla y las campanas no estrechen el
+          nombre, que se parte entre palabras salvo si una sola no cabe.
+        -->
+        <TableCell :class="claseCelda(tarea, `whitespace-normal min-w-56 border-l-4 ${borde}`)">
+          <div class="flex items-start gap-2">
+            <Checkbox
+              class="mt-0.5"
+              :model-value="tarea.completada"
+              :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
+              :title="tarea.completada ? 'Completada' : 'Pendiente'"
+              @update:model-value="tienda.alternarCompletada(tarea.id)"
+            />
+            <span data-nombre-tarea class="min-w-0 flex-1 break-words">{{ tarea.nombre }}</span>
+            <AvisoVencimiento
+              class="mt-0.5"
+              :vencimiento="tarea.fecha_vencimiento"
+              :completada="tarea.completada"
+              :congelada-en="tarea.congelada_en"
+            />
+          </div>
+        </TableCell>
+        <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">
+          <span
+            v-if="tarea.prioridad !== null"
+            data-testid="pildora-prioridad"
+            :class="clasePildoraPrioridad(tarea.prioridad)"
+            >{{ tarea.prioridad }}</span
+          >
+          <template v-else>—</template>
+        </TableCell>
+        <TableCell v-if="esVisible('descripcion')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{
+          tarea.descripcion
+        }}</TableCell>
+        <TableCell
+          v-for="campoLista in camposListaVisibles"
+          :key="campoLista"
+          :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+        >
+          <ul
+            v-if="tarea[campoLista].length > 0 && campoLista === 'asignados'"
+            class="flex flex-wrap gap-1"
+          >
+            <li
+              v-for="nombre in tarea.asignados"
+              :key="nombre"
+              data-testid="chip-tabla"
+              :data-nombre="nombre"
+              class="inline-flex"
+            >
+              <NombreRelacionado tipo="persona" :nombre="nombre" class="rounded-full">
+                <AvatarPersona :nombre="nombre" />
+              </NombreRelacionado>
+            </li>
+          </ul>
+          <ul v-else-if="tarea[campoLista].length > 0" class="flex flex-wrap gap-1">
+            <li
+              v-for="nombre in tarea.etiquetas"
+              :key="nombre"
+              data-testid="chip-tabla"
+              :data-nombre="nombre"
+              :class="`${CLASE_PILDORA} ${colorEtiqueta(nombre)}`"
+            >
+              <NombreRelacionado tipo="etiqueta" :nombre="nombre" />
+            </li>
+          </ul>
+          <template v-else>—</template>
+        </TableCell>
+        <TableCell
+          v-if="esVisible('subestado')"
+          data-columna="subestado"
+          :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+        >
+          <span
+            v-if="tarea.subestado"
+            data-testid="pildora-subestado"
+            :class="`${CLASE_PILDORA} ${colorEtiqueta(tarea.subestado)}`"
+            >{{ tarea.subestado }}</span
+          >
+          <template v-else>—</template>
+        </TableCell>
+        <TableCell v-if="esVisible('fechaCreacion')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{
+          formatearFechaHora(tarea.fecha_creacion)
+        }}</TableCell>
+        <TableCell v-if="esVisible('fechaVencimiento')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">
+          <template v-if="tarea.fecha_vencimiento">
+            <VencimientoCorto
+              :vencimiento="tarea.fecha_vencimiento"
+              :completada="tarea.completada"
+              :congelada-en="tarea.congelada_en"
+            />
+            <ContadorVencimiento
+              :vencimiento="tarea.fecha_vencimiento"
+              :congelada-en="tarea.congelada_en"
+              :class="claseCelda(tarea, 'block text-xs')"
+            />
+          </template>
+          <template v-else>—</template>
+        </TableCell>
+        <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">
+          <span
+            v-if="tarea.tipo !== null"
+            data-testid="pildora-tipo"
+            :class="`${CLASE_PILDORA} ${PILDORA_TIPO}`"
+            >{{ textoTipoEnTabla(tarea) }}</span
+          >
+          <template v-else>—</template>
+        </TableCell>
+        <TableCell v-if="esVisible('estado')" :class="claseCelda(tarea)">
+          <span
+            v-if="tarea.estado"
+            data-testid="pildora-estado"
+            :class="clasePildoraEstado(tarea)"
+            >{{ tarea.estado.nombre }}</span
+          >
+          <template v-else>—</template>
+        </TableCell>
+        <TableCell class="w-0">
+          <MenuAccionesTarea
+            :nombre="tarea.nombre"
+            :id-disparador="idBotonAcciones(tarea.id)"
+            @editar="abrirParaEditar(tarea)"
+            @detalle="idEnDetalle = tarea.id"
+            @eliminar="pedirEliminar(tarea, true)"
+          />
+        </TableCell>
+      </TableRow>
+    </plantillaFila.define>
+    <plantillaPieGrupo.define v-slot="{ grupo }">
+      <TableRow class="hover:bg-transparent">
+        <TableCell :colspan="numeroColumnasTabla" :class="`border-l-4 ${grupo.borde}`">
+          <form class="flex flex-col gap-1" @submit.prevent="crearRapida(grupo.id)">
+            <Input
+              v-model="altaRapida[grupo.id]"
+              data-alta-rapida
+              placeholder="+ Agregar tarea"
+              :aria-label="`Agregar tarea a ${grupo.titulo}`"
+              :disabled="creandoRapida[grupo.id]"
+              class="h-8 max-w-sm border-dashed shadow-none"
+              @keydown.enter.prevent="crearRapida(grupo.id)"
+            />
+            <p v-if="errorAltaRapida[grupo.id]" role="alert" class="text-destructive text-sm">
+              {{ errorAltaRapida[grupo.id] }}
+            </p>
+          </form>
+        </TableCell>
+      </TableRow>
+      <TableRow
+        v-if="grupo.filas.length > 0 && esVisible('prioridad')"
+        class="hover:bg-transparent"
+      >
+        <TableCell :class="`border-l-4 ${grupo.borde}`" />
+        <TableCell v-for="columna in columnasVisibles.slice(1)" :key="columna.campo">
+          <BarraPrioridades
+            v-if="columna.campo === 'prioridad'"
+            :prioridades="grupo.filas.map((tarea) => tarea.prioridad)"
+            :titulo="grupo.titulo"
+          />
+        </TableCell>
+        <TableCell />
+      </TableRow>
+    </plantillaPieGrupo.define>
     <div class="flex items-center justify-between">
       <h2 :id="ID_TITULO_LISTA" class="text-xl font-semibold" tabindex="-1">Tareas</h2>
       <div class="flex items-center gap-2">
@@ -1072,6 +1355,17 @@ async function guardar(): Promise<void> {
           v-if="vista === 'lista' && filasFiltradas.length > 0"
           class="ml-auto flex flex-wrap items-center gap-2"
         >
+          <!-- Su texto visible es su nombre accesible (WCAG 2.5.3). -->
+          <Button
+            type="button"
+            data-testid="agrupar-subestado"
+            :variant="agruparSubestado ? 'default' : 'outline'"
+            :aria-pressed="agruparSubestado"
+            @click="agruparSubestado = !agruparSubestado"
+          >
+            <Layers aria-hidden="true" />
+            Agrupar por subestado
+          </Button>
           <Popover>
             <PopoverTrigger as-child>
               <Button
@@ -1149,6 +1443,18 @@ async function guardar(): Promise<void> {
               etiqueta-boton="Filtrar por etiquetas"
               nombre-singular="etiqueta"
               nombre-plural="etiquetas"
+            />
+          </div>
+          <div class="flex min-w-0 flex-col gap-1.5">
+            <Label>Subestado</Label>
+            <FiltroMultiple
+              v-model="subestadosFiltro"
+              :items="itemsSubestadosFiltro"
+              id-base="filtro-subestados"
+              etiqueta-boton="Filtrar por subestado"
+              nombre-singular="subestado"
+              nombre-plural="subestados"
+              genero="masculino"
             />
           </div>
           <div class="flex min-w-0 flex-col gap-1.5">
@@ -1331,199 +1637,93 @@ async function guardar(): Promise<void> {
               <TableHead><span class="sr-only">Acciones</span></TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody v-for="grupo in gruposConFilas" :key="grupo.id" :data-grupo="grupo.id">
-            <TableRow :class="grupo.fondo">
-              <TableCell :colspan="numeroColumnasTabla" :class="`border-l-4 ${grupo.borde}`">
-                <button
-                  type="button"
-                  class="hover:text-foreground focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-sm text-sm font-semibold outline-none focus-visible:ring-[3px]"
-                  :aria-expanded="!estaPlegado(grupo.id)"
-                  @click="alternarGrupo(grupo.id)"
-                >
-                  <ChevronRight
-                    class="size-4 transition-transform"
-                    :class="estaPlegado(grupo.id) ? '' : 'rotate-90'"
-                    aria-hidden="true"
-                  />
-                  {{ grupo.titulo }}
-                  <span
-                    class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
-                    >{{ grupo.filas.length }}</span
-                  >
-                </button>
-              </TableCell>
-            </TableRow>
-            <template v-if="!estaPlegado(grupo.id)">
-              <TableRow
-                v-for="(tarea, indice) in grupo.filas"
-                :key="tarea.id"
-                data-fila-tarea
-                :class="claseFilaTarea(indice)"
-                @click="alPulsarFila($event, tarea.id)"
-              >
-                <!--
-                  Ancho mínimo para que la casilla y las campanas no estrechen el
-                  nombre, que se parte entre palabras salvo si una sola no cabe.
-                -->
-                <TableCell
-                  :class="claseCelda(tarea, `whitespace-normal min-w-56 border-l-4 ${grupo.borde}`)"
-                >
-                  <div class="flex items-start gap-2">
-                    <Checkbox
-                      class="mt-0.5"
-                      :model-value="tarea.completada"
-                      :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
-                      :title="tarea.completada ? 'Completada' : 'Pendiente'"
-                      @update:model-value="tienda.alternarCompletada(tarea.id)"
-                    />
-                    <span data-nombre-tarea class="min-w-0 flex-1 break-words">{{
-                      tarea.nombre
-                    }}</span>
-                    <AvisoVencimiento
-                      class="mt-0.5"
-                      :vencimiento="tarea.fecha_vencimiento"
-                      :completada="tarea.completada"
-                      :congelada-en="tarea.congelada_en"
-                    />
-                  </div>
-                </TableCell>
-                <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">
-                  <span
-                    v-if="tarea.prioridad !== null"
-                    data-testid="pildora-prioridad"
-                    :class="clasePildoraPrioridad(tarea.prioridad)"
-                    >{{ tarea.prioridad }}</span
-                  >
-                  <template v-else>—</template>
-                </TableCell>
-                <TableCell
-                  v-if="esVisible('descripcion')"
-                  :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
-                  >{{ tarea.descripcion }}</TableCell
-                >
-                <TableCell
-                  v-for="campoLista in camposListaVisibles"
-                  :key="campoLista"
-                  :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
-                >
-                  <ul
-                    v-if="tarea[campoLista].length > 0 && campoLista === 'asignados'"
-                    class="flex flex-wrap gap-1"
-                  >
-                    <li
-                      v-for="nombre in tarea.asignados"
-                      :key="nombre"
-                      data-testid="chip-tabla"
-                      :data-nombre="nombre"
-                      class="inline-flex"
-                    >
-                      <NombreRelacionado tipo="persona" :nombre="nombre" class="rounded-full">
-                        <AvatarPersona :nombre="nombre" />
-                      </NombreRelacionado>
-                    </li>
-                  </ul>
-                  <ul v-else-if="tarea[campoLista].length > 0" class="flex flex-wrap gap-1">
-                    <li
-                      v-for="nombre in tarea.etiquetas"
-                      :key="nombre"
-                      data-testid="chip-tabla"
-                      :data-nombre="nombre"
-                      :class="`${CLASE_PILDORA} ${colorEtiqueta(nombre)}`"
-                    >
-                      <NombreRelacionado tipo="etiqueta" :nombre="nombre" />
-                    </li>
-                  </ul>
-                  <template v-else>—</template>
-                </TableCell>
-                <TableCell
-                  v-if="esVisible('fechaCreacion')"
-                  :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
-                  >{{ formatearFechaHora(tarea.fecha_creacion) }}</TableCell
-                >
-                <TableCell
-                  v-if="esVisible('fechaVencimiento')"
-                  :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
-                >
-                  <template v-if="tarea.fecha_vencimiento">
-                    <VencimientoCorto
-                      :vencimiento="tarea.fecha_vencimiento"
-                      :completada="tarea.completada"
-                      :congelada-en="tarea.congelada_en"
-                    />
-                    <ContadorVencimiento
-                      :vencimiento="tarea.fecha_vencimiento"
-                      :congelada-en="tarea.congelada_en"
-                      :class="claseCelda(tarea, 'block text-xs')"
-                    />
-                  </template>
-                  <template v-else>—</template>
-                </TableCell>
-                <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">
-                  <span
-                    v-if="tarea.tipo !== null"
-                    data-testid="pildora-tipo"
-                    :class="`${CLASE_PILDORA} ${PILDORA_TIPO}`"
-                    >{{ textoTipoEnTabla(tarea) }}</span
-                  >
-                  <template v-else>—</template>
-                </TableCell>
-                <TableCell v-if="esVisible('estado')" :class="claseCelda(tarea)">
-                  <span
-                    v-if="tarea.estado"
-                    data-testid="pildora-estado"
-                    :class="clasePildoraEstado(tarea)"
-                    >{{ tarea.estado.nombre }}</span
-                  >
-                  <template v-else>—</template>
-                </TableCell>
-                <TableCell class="w-0">
-                  <MenuAccionesTarea
-                    :nombre="tarea.nombre"
-                    :id-disparador="idBotonAcciones(tarea.id)"
-                    @editar="abrirParaEditar(tarea)"
-                    @detalle="idEnDetalle = tarea.id"
-                    @eliminar="pedirEliminar(tarea, true)"
-                  />
-                </TableCell>
-              </TableRow>
-              <TableRow class="hover:bg-transparent">
+          <template v-for="grupo in gruposConFilas" :key="grupo.id">
+            <TableBody :data-grupo="grupo.id">
+              <TableRow :class="grupo.fondo">
                 <TableCell :colspan="numeroColumnasTabla" :class="`border-l-4 ${grupo.borde}`">
-                  <form class="flex flex-col gap-1" @submit.prevent="crearRapida(grupo.id)">
-                    <Input
-                      v-model="altaRapida[grupo.id]"
-                      data-alta-rapida
-                      placeholder="+ Agregar tarea"
-                      :aria-label="`Agregar tarea a ${grupo.titulo}`"
-                      :disabled="creandoRapida[grupo.id]"
-                      class="h-8 max-w-sm border-dashed shadow-none"
-                      @keydown.enter.prevent="crearRapida(grupo.id)"
+                  <button
+                    type="button"
+                    class="hover:text-foreground focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-sm text-sm font-semibold outline-none focus-visible:ring-[3px]"
+                    :aria-expanded="!estaPlegado(grupo.id)"
+                    @click="alternarGrupo(grupo.id)"
+                  >
+                    <ChevronRight
+                      class="size-4 transition-transform"
+                      :class="estaPlegado(grupo.id) ? '' : 'rotate-90'"
+                      aria-hidden="true"
                     />
-                    <p
-                      v-if="errorAltaRapida[grupo.id]"
-                      role="alert"
-                      class="text-destructive text-sm"
+                    {{ grupo.titulo }}
+                    <span
+                      class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
+                      >{{ grupo.filas.length }}</span
                     >
-                      {{ errorAltaRapida[grupo.id] }}
-                    </p>
-                  </form>
+                  </button>
                 </TableCell>
               </TableRow>
-              <TableRow
-                v-if="grupo.filas.length > 0 && esVisible('prioridad')"
-                class="hover:bg-transparent"
+              <template v-if="!estaPlegado(grupo.id) && !agruparSubestado">
+                <plantillaFila.reuse
+                  v-for="(tarea, indice) in grupo.filas"
+                  :key="tarea.id"
+                  :tarea="tarea"
+                  :indice="indice"
+                  :borde="grupo.borde"
+                />
+                <plantillaPieGrupo.reuse :grupo="grupo" />
+              </template>
+            </TableBody>
+            <template v-if="!estaPlegado(grupo.id) && agruparSubestado">
+              <!-- Una sección por subestado: su cabecera nombra el grupo de filas. -->
+              <TableBody
+                v-for="seccion in seccionesPorGrupo[grupo.id]"
+                :id="seccion.idCuerpo"
+                :key="seccion.clave"
+                :data-grupo="grupo.id"
+                :data-subgrupo="seccion.clave"
               >
-                <TableCell :class="`border-l-4 ${grupo.borde}`" />
-                <TableCell v-for="columna in columnasVisibles.slice(1)" :key="columna.campo">
-                  <BarraPrioridades
-                    v-if="columna.campo === 'prioridad'"
-                    :prioridades="grupo.filas.map((tarea) => tarea.prioridad)"
-                    :titulo="grupo.titulo"
+                <TableRow class="hover:bg-transparent">
+                  <TableHead
+                    scope="rowgroup"
+                    :colspan="numeroColumnasTabla"
+                    :class="`border-l-4 pl-6 ${grupo.borde}`"
+                  >
+                    <button
+                      type="button"
+                      class="hover:text-foreground focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-sm text-sm font-medium outline-none focus-visible:ring-[3px]"
+                      :aria-expanded="!estaPlegadaSeccion(grupo.id, seccion.clave)"
+                      :aria-controls="seccion.idCuerpo"
+                      @click="alternarSeccion(grupo.id, seccion.clave)"
+                    >
+                      <ChevronRight
+                        class="size-4 transition-transform"
+                        :class="estaPlegadaSeccion(grupo.id, seccion.clave) ? '' : 'rotate-90'"
+                        aria-hidden="true"
+                      />
+                      <span
+                        v-if="seccion.subestado !== null"
+                        data-testid="pildora-subestado"
+                        :class="`${CLASE_PILDORA} ${colorEtiqueta(seccion.subestado)}`"
+                        >{{ seccion.subestado }}</span
+                      >
+                      <template v-else>Sin subestado</template>
+                      <span class="text-muted-foreground">{{ ` · ${seccion.tareas.length}` }}</span>
+                    </button>
+                  </TableHead>
+                </TableRow>
+                <template v-if="!estaPlegadaSeccion(grupo.id, seccion.clave)">
+                  <plantillaFila.reuse
+                    v-for="(tarea, indice) in seccion.tareas"
+                    :key="tarea.id"
+                    :tarea="tarea"
+                    :indice="indice"
+                    :borde="grupo.borde"
                   />
-                </TableCell>
-                <TableCell />
-              </TableRow>
+                </template>
+              </TableBody>
+              <TableBody :data-grupo="grupo.id">
+                <plantillaPieGrupo.reuse :grupo="grupo" />
+              </TableBody>
             </template>
-          </TableBody>
+          </template>
         </Table>
       </div>
     </template>

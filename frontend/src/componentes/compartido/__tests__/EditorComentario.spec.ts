@@ -217,16 +217,21 @@ describe('EditorComentario', () => {
     expect(editable(envoltorio).text()).toBe('')
   })
 
-  it('no deja pasar de 500 caracteres visibles', async () => {
-    const envoltorio = await montar({ modelValue: `<p>${'a'.repeat(500)}</p>` })
+  it('deja escribir hasta 5000 caracteres visibles y no deja pasar de ahí', async () => {
+    const envoltorio = await montar({ modelValue: `<p>${'a'.repeat(4999)}</p>` })
     const vm = envoltorio.vm as unknown as {
       editor: { commands: { insertContent: (t: string) => boolean } }
     }
 
     vm.editor.commands.insertContent('b')
     await flushPromises()
+    expect(editable(envoltorio).text()).toHaveLength(5000)
+    expect(editable(envoltorio).text()).toContain('b')
 
-    expect(editable(envoltorio).text()).toBe('a'.repeat(500))
+    vm.editor.commands.insertContent('c')
+    await flushPromises()
+    expect(editable(envoltorio).text()).toHaveLength(5000)
+    expect(editable(envoltorio).text()).not.toContain('c')
   })
 
   it('en solo lectura no es editable y desactiva la barra', async () => {

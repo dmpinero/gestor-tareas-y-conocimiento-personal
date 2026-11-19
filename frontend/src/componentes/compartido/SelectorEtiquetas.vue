@@ -19,8 +19,10 @@ const props = withDefaults(
     id?: string
     placeholder?: string
     textoNuevo?: string
+    /** Admite como mucho un valor: elegir otro sustituye al elegido. */
+    unico?: boolean
   }>(),
-  { id: undefined, placeholder: undefined, textoNuevo: 'Crear "{valor}"' },
+  { id: undefined, placeholder: undefined, textoNuevo: 'Crear "{valor}"', unico: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [valores: string[]] }>()
@@ -97,7 +99,9 @@ function anadir(valor: string) {
   }
   const existente = props.sugerencias.find((sugerencia) => mismoValor(sugerencia, recortado))
   const definitivo = existente ?? recortado
-  if (!estaSeleccionado(definitivo)) {
+  if (props.unico) {
+    emit('update:modelValue', [definitivo])
+  } else if (!estaSeleccionado(definitivo)) {
     emit('update:modelValue', [...props.modelValue, definitivo])
   }
   texto.value = ''

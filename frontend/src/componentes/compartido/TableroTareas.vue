@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowUp, ListTree, MessageSquare, MoveRight, Plus } from '@lucide/vue'
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  ListTree,
+  MessageSquare,
+  MoveRight,
+  Plus,
+} from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
@@ -20,6 +29,7 @@ import {
   colorEtiqueta,
   type ColorEstadoTablero,
 } from '@/lib/coloresTarea'
+import { agruparPorSubestado } from '@/lib/agruparPorSubestado'
 import { isoAFechaLocal } from '@/lib/fechas'
 import { MAX_NOMBRE_SUBTAREA, validarNombreSubtarea } from '@/lib/subtareas'
 import { useTiendaTareas } from '@/stores/tareas'
@@ -160,21 +170,135 @@ function colocar(tarea: Tarea, estado: EstadoGrupo, indice: number): void {
   guardarOrden()
 }
 
+// --- Agrupar por subestado ---------------------------------------------------
+// Con "Agrupar por subestado", las tarjetas de cada columna (en su orden) se
+// reparten en bloques plegables por subestado; mover una tarjeta solo cambia
+// su estado. Se recuerda en este navegador si se agrupa y qué bloques están
+// plegados, por columna (`<id del estado>:<clave del grupo>`).
+const CLAVE_AGRUPAR = 'gestor-tareas:agrupar-subestado-tablero'
+const CLAVE_PLEGADOS = 'gestor-tareas:subestados-plegados-tablero'
+
+function leerAgrupar(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_AGRUPAR) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function leerPlegados(): Set<string> {
+  try {
+    const guardado: unknown = JSON.parse(localStorage.getItem(CLAVE_PLEGADOS) ?? '[]')
+    if (!Array.isArray(guardado)) return new Set()
+    return new Set(guardado.filter((clave): clave is string => typeof clave === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+const agrupar = ref(leerAgrupar())
+const plegados = ref(leerPlegados())
+
+watch(agrupar, (activo) => {
+  try {
+    localStorage.setItem(CLAVE_AGRUPAR, String(activo))
+  } catch {
+    // Sin almacenamiento la agrupación dura la sesión.
+  }
+})
+
+function guardarPlegados(): void {
+  try {
+    localStorage.setItem(CLAVE_PLEGADOS, JSON.stringify([...plegados.value]))
+  } catch {
+    // Sin almacenamiento los bloques plegados duran la sesión.
+  }
+}
+
+interface BloqueColumna {
+  clave: string
+  /** Nombre del subestado; `null` en "Sin subestado" o si no se agrupa. */
+  subestado: string | null
+  tareas: Tarea[]
+}
+
+// Sin agrupar, la columna es un único bloque con todas sus tarjetas.
+function bloquesDe(estado: EstadoGrupo): BloqueColumna[] {
+  const tareas = tareasEn(estado)
+  return agrupar.value ? agruparPorSubestado(tareas) : [{ clave: '', subestado: null, tareas }]
+}
+
+function clavePlegado(estado: EstadoGrupo, bloque: BloqueColumna): string {
+  return `${estado.id}:${bloque.clave}`
+}
+
+function estaPlegado(estado: EstadoGrupo, bloque: BloqueColumna): boolean {
+  return agrupar.value && plegados.value.has(clavePlegado(estado, bloque))
+}
+
+function alternarBloque(estado: EstadoGrupo, bloque: BloqueColumna): void {
+  const clave = clavePlegado(estado, bloque)
+  if (plegados.value.has(clave)) plegados.value.delete(clave)
+  else plegados.value.add(clave)
+  guardarPlegados()
+}
+
+function idBloque(estado: EstadoGrupo, indice: number): string {
+  return `bloque-tablero-${estado.id}-${indice}`
+}
+
+function nombreBloque(bloque: BloqueColumna): string {
+  return bloque.subestado ?? 'Sin subestado'
+}
+
+function etiquetaLista(estado: EstadoGrupo, bloque: BloqueColumna): string {
+  return agrupar.value
+    ? `Tareas en ${estado.nombre}: ${nombreBloque(bloque)}`
+    : `Tareas en ${estado.nombre}`
+}
+
+// Bloque de la columna en el que está la tarjeta.
+function bloqueDe(tarea: Tarea, estado: EstadoGrupo): BloqueColumna | undefined {
+  return bloquesDe(estado).find((bloque) => bloque.tareas.some((t) => t.id === tarea.id))
+}
+
+// Despliega el bloque de la tarjeta en su columna, para que reciba el foco
+// tras moverla (aunque el tablero aún no la muestre allí).
+function desplegarBloqueDe(tarea: Tarea): void {
+  const estado = estadoDe(tarea)
+  const [bloque] = agruparPorSubestado([tarea])
+  if (!estado || !bloque || !estaPlegado(estado, bloque)) return
+  plegados.value.delete(clavePlegado(estado, bloque))
+  guardarPlegados()
+}
+
 function estadoDe(tarea: Tarea): EstadoGrupo | undefined {
   return grupoActivo.value?.estados.find((estado) => estado.id === tarea.estado?.id)
 }
 
-function posicionEnColumna(tarea: Tarea): number {
+// Tarjetas entre las que "Subir"/"Bajar" mueven la tarea: su bloque (toda la
+// columna si no se agrupa).
+function vecinas(tarea: Tarea): Tarea[] {
   const estado = estadoDe(tarea)
-  return estado ? tareasEn(estado).findIndex((t) => t.id === tarea.id) : -1
+  return (estado && bloqueDe(tarea, estado)?.tareas) ?? []
+}
+
+function posicionEnBloque(tarea: Tarea): number {
+  return vecinas(tarea).findIndex((t) => t.id === tarea.id)
 }
 
 function puedeBajar(tarea: Tarea): boolean {
-  const estado = estadoDe(tarea)
-  return !!estado && posicionEnColumna(tarea) < tareasEn(estado).length - 1
+  const posicion = posicionEnBloque(tarea)
+  return posicion !== -1 && posicion < vecinas(tarea).length - 1
 }
 
 function anunciarPosicion(tarea: Tarea, estado: EstadoGrupo): void {
+  const bloque = agrupar.value ? bloqueDe(tarea, estado) : undefined
+  if (bloque) {
+    const posicion = bloque.tareas.findIndex((t) => t.id === tarea.id) + 1
+    anuncio.value = `${tarea.nombre} en la posición ${posicion} de ${nombreBloque(bloque)} en ${estado.nombre}`
+    return
+  }
   const posicion = tareasEn(estado).findIndex((t) => t.id === tarea.id) + 1
   anuncio.value = `${tarea.nombre} en la posición ${posicion} de ${estado.nombre}`
 }
@@ -223,14 +347,20 @@ function alDevolverFocoMenu(evento: Event): void {
   if (moviendo) evento.preventDefault()
 }
 
-// Sube o baja la tarjeta una posición en su columna, desde "Mover a…".
+// Sube o baja la tarjeta una posición en su bloque (su columna si no se
+// agrupa), desde "Mover a…": ocupa el sitio de la vecina en la columna.
 async function desplazar(tarea: Tarea, paso: -1 | 1): Promise<void> {
   const estado = estadoDe(tarea)
-  if (!estado) return
+  const vecina = vecinas(tarea)[posicionEnBloque(tarea) + paso]
+  if (!estado || !vecina) return
   moviendo = true
   idMenuAbierto.value = null
   anuncio.value = ''
-  colocar(tarea, estado, posicionEnColumna(tarea) + paso)
+  colocar(
+    tarea,
+    estado,
+    tareasEn(estado).findIndex((t) => t.id === vecina.id),
+  )
   await nextTick()
   anunciarPosicion(tarea, estado)
   document.getElementById(idBotonMover(tarea))?.focus()
@@ -246,6 +376,10 @@ async function mover(tarea: Tarea, estado: EstadoGrupo, indice?: number): Promis
     if (indice !== undefined) colocar(tarea, estado, indice)
     anuncio.value = `${tarea.nombre} movida a ${estado.nombre}`
   }
+  // La tarea ya llega recolocada desde la tienda; si su bloque está plegado se
+  // despliega para que su "Mover a…" pueda recibir el foco.
+  const actual = tienda.tareas.find((t) => t.id === tarea.id) ?? tarea
+  desplegarBloqueDe(actual)
   await nextTick()
   // Tanto si se movió como si no, el foco queda en "Mover a…" de la tarjeta.
   document.getElementById(idBotonMover(tarea))?.focus()
@@ -441,6 +575,16 @@ function terminarArrastre(): void {
             <option value="manual">Manual</option>
           </select>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          :aria-pressed="agrupar"
+          :class="agrupar ? 'bg-accent text-accent-foreground' : ''"
+          @click="agrupar = !agrupar"
+        >
+          <ListTree aria-hidden="true" />
+          Agrupar por subestado
+        </Button>
         <div v-if="grupoActivo.estados.length > 0" class="w-full pb-3 sm:w-64">
           <BarraEstados :estados="estadosBarra" :titulo="grupoActivo.nombre" />
         </div>
@@ -490,325 +634,376 @@ function terminarArrastre(): void {
             </h3>
 
             <div class="flex flex-col gap-2 p-2">
-              <ul :aria-label="`Tareas en ${estado.nombre}`" class="flex flex-col gap-2">
-                <!-- Una línea encima o debajo marca dónde quedará la tarjeta. -->
-                <li
-                  v-for="tarea in tareasEn(estado)"
-                  :key="tarea.id"
-                  :data-insertar="ladoInsercion(tarea)"
-                  :class="[
-                    'relative flex flex-col',
-                    ladoInsercion(tarea) === 'antes' &&
-                      'before:bg-primary before:absolute before:inset-x-0 before:-top-[5px] before:h-0.5 before:rounded-full',
-                    ladoInsercion(tarea) === 'despues' &&
-                      'after:bg-primary after:absolute after:inset-x-0 after:-bottom-[5px] after:h-0.5 after:rounded-full',
-                  ]"
-                  @dragover="alArrastrarSobreTarjeta($event, tarea)"
-                >
-                  <div
-                    data-tarjeta
-                    draggable="true"
-                    :class="[
-                      'bg-card text-card-foreground relative flex flex-col gap-2 rounded-lg border p-3 shadow-xs',
-                      idArrastrada === tarea.id && 'opacity-50',
-                    ]"
-                    @dragstart="alEmpezarArrastre($event, tarea)"
-                    @dragend="terminarArrastre"
+              <!-- Sin agrupar hay un único bloque, sin cabecera. -->
+              <template v-for="(bloque, indice) in bloquesDe(estado)" :key="bloque.clave">
+                <h4 v-if="agrupar" class="text-sm">
+                  <button
+                    type="button"
+                    data-cabecera-grupo
+                    class="hover:bg-background/60 focus-visible:ring-ring/50 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left outline-none focus-visible:ring-[3px]"
+                    :aria-expanded="!estaPlegado(estado, bloque)"
+                    :aria-controls="
+                      estaPlegado(estado, bloque) ? undefined : idBloque(estado, indice)
+                    "
+                    @click="alternarBloque(estado, bloque)"
                   >
-                    <div class="flex items-start justify-between gap-2">
-                      <button
-                        type="button"
-                        data-nombre-tarjeta
-                        class="focus-visible:ring-ring/50 line-clamp-2 rounded-sm text-left text-sm font-medium outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px]"
-                        :class="tarea.completada ? 'line-through' : ''"
-                        @click="emit('verDetalle', tarea.id)"
-                      >
-                        {{ tarea.nombre }}
-                      </button>
-                      <AvisoVencimiento
-                        class="mt-0.5"
-                        :vencimiento="tarea.fecha_vencimiento"
-                        :completada="tarea.completada"
-                        :congelada-en="tarea.congelada_en"
-                      />
-                    </div>
-
-                    <div
-                      v-if="tarea.asignados.length > 0 || tarea.fecha_vencimiento"
-                      class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                    <ChevronRight
+                      v-if="estaPlegado(estado, bloque)"
+                      aria-hidden="true"
+                      class="size-4 shrink-0"
+                    />
+                    <ChevronDown v-else aria-hidden="true" class="size-4 shrink-0" />
+                    <span
+                      v-if="bloque.subestado"
+                      data-pildora-grupo
+                      :class="`${CLASE_PILDORA} ${colorEtiqueta(bloque.subestado)} min-w-0 [overflow-wrap:anywhere]`"
+                      >{{ bloque.subestado }}</span
                     >
-                      <ul
-                        v-if="tarea.asignados.length > 0"
-                        aria-label="Asignados"
-                        class="flex -space-x-1.5"
-                      >
-                        <li v-for="persona in tarea.asignados" :key="persona" class="flex">
-                          <NombreRelacionado tipo="persona" :nombre="persona" class="rounded-full">
-                            <AvatarPersona :nombre="persona" />
-                          </NombreRelacionado>
-                        </li>
-                      </ul>
-                      <span
-                        v-if="tarea.fecha_vencimiento"
-                        class="flex flex-wrap items-center gap-x-2"
-                      >
-                        <span class="sr-only">{{ 'Vencimiento: ' }}</span>
-                        <VencimientoCorto
+                    <span v-else data-pildora-grupo class="min-w-0 font-medium">Sin subestado</span>
+                    <span aria-hidden="true" class="text-muted-foreground">{{
+                      bloque.tareas.length
+                    }}</span>
+                    <span class="sr-only">{{ ` (${textoTareas(bloque.tareas.length)})` }}</span>
+                  </button>
+                </h4>
+                <ul
+                  v-if="!estaPlegado(estado, bloque)"
+                  :id="agrupar ? idBloque(estado, indice) : undefined"
+                  :aria-label="etiquetaLista(estado, bloque)"
+                  class="flex flex-col gap-2"
+                >
+                  <!-- Una línea encima o debajo marca dónde quedará la tarjeta. -->
+                  <li
+                    v-for="tarea in bloque.tareas"
+                    :key="tarea.id"
+                    :data-insertar="ladoInsercion(tarea)"
+                    :class="[
+                      'relative flex flex-col',
+                      ladoInsercion(tarea) === 'antes' &&
+                        'before:bg-primary before:absolute before:inset-x-0 before:-top-[5px] before:h-0.5 before:rounded-full',
+                      ladoInsercion(tarea) === 'despues' &&
+                        'after:bg-primary after:absolute after:inset-x-0 after:-bottom-[5px] after:h-0.5 after:rounded-full',
+                    ]"
+                    @dragover="alArrastrarSobreTarjeta($event, tarea)"
+                  >
+                    <div
+                      data-tarjeta
+                      draggable="true"
+                      :class="[
+                        'bg-card text-card-foreground relative flex flex-col gap-2 rounded-lg border p-3 shadow-xs',
+                        idArrastrada === tarea.id && 'opacity-50',
+                      ]"
+                      @dragstart="alEmpezarArrastre($event, tarea)"
+                      @dragend="terminarArrastre"
+                    >
+                      <div class="flex items-start justify-between gap-2">
+                        <button
+                          type="button"
+                          data-nombre-tarjeta
+                          class="focus-visible:ring-ring/50 line-clamp-2 rounded-sm text-left text-sm font-medium outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px]"
+                          :class="tarea.completada ? 'line-through' : ''"
+                          @click="emit('verDetalle', tarea.id)"
+                        >
+                          {{ tarea.nombre }}
+                        </button>
+                        <AvisoVencimiento
+                          class="mt-0.5"
                           :vencimiento="tarea.fecha_vencimiento"
                           :completada="tarea.completada"
                           :congelada-en="tarea.congelada_en"
-                          class="text-foreground"
                         />
-                        <ContadorVencimiento
-                          :vencimiento="tarea.fecha_vencimiento"
-                          :congelada-en="tarea.congelada_en"
-                        />
-                      </span>
-                    </div>
+                      </div>
 
-                    <ul
-                      v-if="tarea.etiquetas.length > 0"
-                      aria-label="Etiquetas"
-                      class="flex flex-wrap gap-1"
-                    >
-                      <li
-                        v-for="etiqueta in tarea.etiquetas"
-                        :key="etiqueta"
-                        :class="`${CLASE_PILDORA} ${colorEtiqueta(etiqueta)} [overflow-wrap:anywhere]`"
+                      <div
+                        v-if="tarea.asignados.length > 0 || tarea.fecha_vencimiento"
+                        class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
                       >
-                        <NombreRelacionado tipo="etiqueta" :nombre="etiqueta" />
-                      </li>
-                    </ul>
-
-                    <div class="-mx-1 -mb-1 flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        class="text-muted-foreground size-8"
-                        :aria-label="`Comentarios de ${tarea.nombre}`"
-                        :title="`Comentarios de ${tarea.nombre}`"
-                        @click="emit('verDetalle', tarea.id)"
-                      >
-                        <MessageSquare aria-hidden="true" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        class="text-muted-foreground gap-1 px-2"
-                        :aria-label="`${tarea.subtareas.length} subtareas de ${tarea.nombre}`"
-                        :title="`${tarea.subtareas.length} subtareas de ${tarea.nombre}`"
-                        :aria-expanded="idsDesplegadas.has(tarea.id)"
-                        :aria-controls="
-                          idsDesplegadas.has(tarea.id) ? idPanelSubtareas(tarea) : undefined
-                        "
-                        @click="alternarSubtareas(tarea)"
-                      >
-                        {{ tarea.subtareas.length }}
-                        <ListTree aria-hidden="true" />
-                      </Button>
-
-                      <Popover
-                        :open="idMenuAbierto === tarea.id"
-                        @update:open="(abierto: boolean) => alCambiarMenu(tarea, abierto)"
-                      >
-                        <PopoverTrigger as-child>
-                          <Button
-                            :id="idBotonMover(tarea)"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            class="text-muted-foreground ml-auto px-2"
-                            :aria-label="`Mover a… (${tarea.nombre})`"
-                          >
-                            <MoveRight aria-hidden="true" />
-                            Mover a…
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="end"
-                          class="w-56 p-2"
-                          data-menu-mover
-                          @close-auto-focus="alDevolverFocoMenu"
+                        <ul
+                          v-if="tarea.asignados.length > 0"
+                          aria-label="Asignados"
+                          class="flex -space-x-1.5"
                         >
-                          <p :id="`menu-mover-${tarea.id}`" class="px-2 py-1 text-sm font-medium">
-                            Mover a
-                          </p>
-                          <ul
-                            v-if="otrosEstados(tarea).length > 0"
-                            :aria-labelledby="`menu-mover-${tarea.id}`"
-                            class="flex flex-col"
-                          >
-                            <li v-for="destino in otrosEstados(tarea)" :key="destino.id">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                class="w-full justify-start"
-                                @click="mover(tarea, destino)"
-                                >{{ destino.nombre }}</Button
-                              >
-                            </li>
-                          </ul>
-                          <p v-else class="text-muted-foreground px-2 py-1 text-sm">
-                            No hay otros estados en el grupo.
-                          </p>
-                          <template
-                            v-if="
-                              modoOrden === 'manual' &&
-                              (posicionEnColumna(tarea) > 0 || puedeBajar(tarea))
-                            "
-                          >
-                            <p
-                              :id="`menu-orden-${tarea.id}`"
-                              class="mt-1 border-t px-2 pt-2 pb-1 text-sm font-medium"
+                          <li v-for="persona in tarea.asignados" :key="persona" class="flex">
+                            <NombreRelacionado
+                              tipo="persona"
+                              :nombre="persona"
+                              class="rounded-full"
                             >
-                              Orden en la columna
-                            </p>
-                            <ul :aria-labelledby="`menu-orden-${tarea.id}`" class="flex flex-col">
-                              <li v-if="posicionEnColumna(tarea) > 0">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  class="w-full justify-start"
-                                  :aria-label="`Subir ${tarea.nombre} una posición`"
-                                  @click="desplazar(tarea, -1)"
-                                >
-                                  <ArrowUp aria-hidden="true" />
-                                  Subir
-                                </Button>
-                              </li>
-                              <li v-if="puedeBajar(tarea)">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  class="w-full justify-start"
-                                  :aria-label="`Bajar ${tarea.nombre} una posición`"
-                                  @click="desplazar(tarea, 1)"
-                                >
-                                  <ArrowDown aria-hidden="true" />
-                                  Bajar
-                                </Button>
-                              </li>
-                            </ul>
-                          </template>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </div>
-
-                  <!-- Subtareas: tarjetas sangradas bajo la tarea, unidas por
-                       una línea que baja desde la tarjeta. -->
-                  <div
-                    v-if="idsDesplegadas.has(tarea.id)"
-                    :id="idPanelSubtareas(tarea)"
-                    class="border-border ml-4 flex flex-col gap-1.5 border-l-2 pt-1.5 pl-3"
-                  >
-                    <ul
-                      v-if="tarea.subtareas.length > 0"
-                      :aria-label="`Subtareas de ${tarea.nombre}`"
-                      class="flex flex-col gap-1.5"
-                    >
-                      <li
-                        v-for="subtarea in tarea.subtareas"
-                        :key="subtarea.id"
-                        class="before:border-border relative before:absolute before:top-1/2 before:-left-3 before:w-3 before:border-t-2"
-                      >
-                        <div
-                          class="bg-card text-card-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5 shadow-xs"
+                              <AvatarPersona :nombre="persona" />
+                            </NombreRelacionado>
+                          </li>
+                        </ul>
+                        <span
+                          v-if="tarea.fecha_vencimiento"
+                          class="flex flex-wrap items-center gap-x-2"
                         >
-                          <button
-                            type="button"
-                            data-nombre-subtarea
-                            class="focus-visible:ring-ring/50 min-w-0 flex-1 rounded-sm text-left text-sm outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px]"
-                            :class="subtarea.resuelta ? 'text-muted-foreground line-through' : ''"
-                            @click="emit('verDetalle', tarea.id)"
-                          >
-                            {{ subtarea.nombre
-                            }}<span v-if="subtarea.resuelta" class="sr-only">{{
-                              ' (resuelta)'
-                            }}</span>
-                          </button>
-                          <NombreRelacionado
-                            v-if="subtarea.asignado"
-                            tipo="persona"
-                            :nombre="subtarea.asignado"
-                            class="rounded-full"
-                          >
-                            <AvatarPersona :nombre="subtarea.asignado" />
-                          </NombreRelacionado>
-                        </div>
-                      </li>
-                    </ul>
+                          <span class="sr-only">{{ 'Vencimiento: ' }}</span>
+                          <VencimientoCorto
+                            :vencimiento="tarea.fecha_vencimiento"
+                            :completada="tarea.completada"
+                            :congelada-en="tarea.congelada_en"
+                            class="text-foreground"
+                          />
+                          <ContadorVencimiento
+                            :vencimiento="tarea.fecha_vencimiento"
+                            :congelada-en="tarea.congelada_en"
+                          />
+                        </span>
+                      </div>
 
-                    <form
-                      v-if="idAltaAbierta === tarea.id"
-                      class="flex flex-col gap-1.5"
-                      novalidate
-                      @submit.prevent="guardarSubtarea(tarea)"
-                    >
-                      <Label :for="idCampoSubtarea(tarea)" class="sr-only"
-                        >Nombre de la subtarea</Label
-                      >
-                      <Input
-                        :id="idCampoSubtarea(tarea)"
-                        v-model="nombreNueva"
-                        name="nombre-subtarea"
-                        placeholder="Nombre de la subtarea"
-                        autocomplete="off"
-                        :maxlength="MAX_NOMBRE_SUBTAREA"
-                        :aria-invalid="errorNueva ? 'true' : undefined"
-                        :aria-describedby="
-                          errorNueva ? `${idCampoSubtarea(tarea)}-error` : undefined
-                        "
-                        class="bg-card h-8"
-                        @keydown.esc.prevent.stop="cancelarAltaSubtarea(tarea)"
-                      />
-                      <p
-                        v-if="errorNueva"
-                        :id="`${idCampoSubtarea(tarea)}-error`"
-                        role="alert"
-                        class="text-destructive text-xs"
-                      >
-                        {{ errorNueva }}
+                      <p v-if="tarea.subestado" class="flex">
+                        <span class="sr-only">{{ 'Subestado: ' }}</span>
+                        <span
+                          data-testid="subestado-tablero"
+                          :class="`${CLASE_PILDORA} ${colorEtiqueta(tarea.subestado)} [overflow-wrap:anywhere]`"
+                          >{{ tarea.subestado }}</span
+                        >
                       </p>
-                      <div class="flex gap-1">
-                        <Button
-                          type="submit"
-                          size="sm"
-                          :disabled="guardandoNueva"
-                          aria-label="Guardar subtarea"
-                          >Guardar</Button
+
+                      <ul
+                        v-if="tarea.etiquetas.length > 0"
+                        aria-label="Etiquetas"
+                        class="flex flex-wrap gap-1"
+                      >
+                        <li
+                          v-for="etiqueta in tarea.etiquetas"
+                          :key="etiqueta"
+                          :class="`${CLASE_PILDORA} ${colorEtiqueta(etiqueta)} [overflow-wrap:anywhere]`"
                         >
+                          <NombreRelacionado tipo="etiqueta" :nombre="etiqueta" />
+                        </li>
+                      </ul>
+
+                      <div class="-mx-1 -mb-1 flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          class="text-muted-foreground size-8"
+                          :aria-label="`Comentarios de ${tarea.nombre}`"
+                          :title="`Comentarios de ${tarea.nombre}`"
+                          @click="emit('verDetalle', tarea.id)"
+                        >
+                          <MessageSquare aria-hidden="true" />
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          aria-label="Cancelar subtarea"
-                          @click="cancelarAltaSubtarea(tarea)"
-                          >Cancelar</Button
+                          class="text-muted-foreground gap-1 px-2"
+                          :aria-label="`${tarea.subtareas.length} subtareas de ${tarea.nombre}`"
+                          :title="`${tarea.subtareas.length} subtareas de ${tarea.nombre}`"
+                          :aria-expanded="idsDesplegadas.has(tarea.id)"
+                          :aria-controls="
+                            idsDesplegadas.has(tarea.id) ? idPanelSubtareas(tarea) : undefined
+                          "
+                          @click="alternarSubtareas(tarea)"
                         >
+                          {{ tarea.subtareas.length }}
+                          <ListTree aria-hidden="true" />
+                        </Button>
+
+                        <Popover
+                          :open="idMenuAbierto === tarea.id"
+                          @update:open="(abierto: boolean) => alCambiarMenu(tarea, abierto)"
+                        >
+                          <PopoverTrigger as-child>
+                            <Button
+                              :id="idBotonMover(tarea)"
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              class="text-muted-foreground ml-auto px-2"
+                              :aria-label="`Mover a… (${tarea.nombre})`"
+                            >
+                              <MoveRight aria-hidden="true" />
+                              Mover a…
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align="end"
+                            class="w-56 p-2"
+                            data-menu-mover
+                            @close-auto-focus="alDevolverFocoMenu"
+                          >
+                            <p :id="`menu-mover-${tarea.id}`" class="px-2 py-1 text-sm font-medium">
+                              Mover a
+                            </p>
+                            <ul
+                              v-if="otrosEstados(tarea).length > 0"
+                              :aria-labelledby="`menu-mover-${tarea.id}`"
+                              class="flex flex-col"
+                            >
+                              <li v-for="destino in otrosEstados(tarea)" :key="destino.id">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  class="w-full justify-start"
+                                  @click="mover(tarea, destino)"
+                                  >{{ destino.nombre }}</Button
+                                >
+                              </li>
+                            </ul>
+                            <p v-else class="text-muted-foreground px-2 py-1 text-sm">
+                              No hay otros estados en el grupo.
+                            </p>
+                            <template
+                              v-if="
+                                modoOrden === 'manual' &&
+                                (posicionEnBloque(tarea) > 0 || puedeBajar(tarea))
+                              "
+                            >
+                              <p
+                                :id="`menu-orden-${tarea.id}`"
+                                class="mt-1 border-t px-2 pt-2 pb-1 text-sm font-medium"
+                              >
+                                Orden en la columna
+                              </p>
+                              <ul :aria-labelledby="`menu-orden-${tarea.id}`" class="flex flex-col">
+                                <li v-if="posicionEnBloque(tarea) > 0">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    class="w-full justify-start"
+                                    :aria-label="`Subir ${tarea.nombre} una posición`"
+                                    @click="desplazar(tarea, -1)"
+                                  >
+                                    <ArrowUp aria-hidden="true" />
+                                    Subir
+                                  </Button>
+                                </li>
+                                <li v-if="puedeBajar(tarea)">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    class="w-full justify-start"
+                                    :aria-label="`Bajar ${tarea.nombre} una posición`"
+                                    @click="desplazar(tarea, 1)"
+                                  >
+                                    <ArrowDown aria-hidden="true" />
+                                    Bajar
+                                  </Button>
+                                </li>
+                              </ul>
+                            </template>
+                          </PopoverContent>
+                        </Popover>
                       </div>
-                    </form>
-                    <Button
-                      v-else
-                      :id="idBotonAgregar(tarea)"
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      class="text-muted-foreground justify-start px-2"
-                      :aria-label="`Agregar subtarea a ${tarea.nombre}`"
-                      @click="abrirAltaSubtarea(tarea)"
+                    </div>
+
+                    <!-- Subtareas: tarjetas sangradas bajo la tarea, unidas por
+                       una línea que baja desde la tarjeta. -->
+                    <div
+                      v-if="idsDesplegadas.has(tarea.id)"
+                      :id="idPanelSubtareas(tarea)"
+                      class="border-border ml-4 flex flex-col gap-1.5 border-l-2 pt-1.5 pl-3"
                     >
-                      <Plus aria-hidden="true" />
-                      Agregar subtarea
-                    </Button>
-                  </div>
-                </li>
-              </ul>
+                      <ul
+                        v-if="tarea.subtareas.length > 0"
+                        :aria-label="`Subtareas de ${tarea.nombre}`"
+                        class="flex flex-col gap-1.5"
+                      >
+                        <li
+                          v-for="subtarea in tarea.subtareas"
+                          :key="subtarea.id"
+                          class="before:border-border relative before:absolute before:top-1/2 before:-left-3 before:w-3 before:border-t-2"
+                        >
+                          <div
+                            class="bg-card text-card-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5 shadow-xs"
+                          >
+                            <button
+                              type="button"
+                              data-nombre-subtarea
+                              class="focus-visible:ring-ring/50 min-w-0 flex-1 rounded-sm text-left text-sm outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px]"
+                              :class="subtarea.resuelta ? 'text-muted-foreground line-through' : ''"
+                              @click="emit('verDetalle', tarea.id)"
+                            >
+                              {{ subtarea.nombre
+                              }}<span v-if="subtarea.resuelta" class="sr-only">{{
+                                ' (resuelta)'
+                              }}</span>
+                            </button>
+                            <NombreRelacionado
+                              v-if="subtarea.asignado"
+                              tipo="persona"
+                              :nombre="subtarea.asignado"
+                              class="rounded-full"
+                            >
+                              <AvatarPersona :nombre="subtarea.asignado" />
+                            </NombreRelacionado>
+                          </div>
+                        </li>
+                      </ul>
+
+                      <form
+                        v-if="idAltaAbierta === tarea.id"
+                        class="flex flex-col gap-1.5"
+                        novalidate
+                        @submit.prevent="guardarSubtarea(tarea)"
+                      >
+                        <Label :for="idCampoSubtarea(tarea)" class="sr-only"
+                          >Nombre de la subtarea</Label
+                        >
+                        <Input
+                          :id="idCampoSubtarea(tarea)"
+                          v-model="nombreNueva"
+                          name="nombre-subtarea"
+                          placeholder="Nombre de la subtarea"
+                          autocomplete="off"
+                          :maxlength="MAX_NOMBRE_SUBTAREA"
+                          :aria-invalid="errorNueva ? 'true' : undefined"
+                          :aria-describedby="
+                            errorNueva ? `${idCampoSubtarea(tarea)}-error` : undefined
+                          "
+                          class="bg-card h-8"
+                          @keydown.esc.prevent.stop="cancelarAltaSubtarea(tarea)"
+                        />
+                        <p
+                          v-if="errorNueva"
+                          :id="`${idCampoSubtarea(tarea)}-error`"
+                          role="alert"
+                          class="text-destructive text-xs"
+                        >
+                          {{ errorNueva }}
+                        </p>
+                        <div class="flex gap-1">
+                          <Button
+                            type="submit"
+                            size="sm"
+                            :disabled="guardandoNueva"
+                            aria-label="Guardar subtarea"
+                            >Guardar</Button
+                          >
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Cancelar subtarea"
+                            @click="cancelarAltaSubtarea(tarea)"
+                            >Cancelar</Button
+                          >
+                        </div>
+                      </form>
+                      <Button
+                        v-else
+                        :id="idBotonAgregar(tarea)"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        class="text-muted-foreground justify-start px-2"
+                        :aria-label="`Agregar subtarea a ${tarea.nombre}`"
+                        @click="abrirAltaSubtarea(tarea)"
+                      >
+                        <Plus aria-hidden="true" />
+                        Agregar subtarea
+                      </Button>
+                    </div>
+                  </li>
+                </ul>
+              </template>
 
               <Button
                 type="button"

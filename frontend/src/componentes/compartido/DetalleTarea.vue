@@ -88,6 +88,8 @@ interface Campo {
   // Etiquetas o personas que se pueden pulsar para ver sus tareas relacionadas:
   // las personas se muestran con su avatar y las etiquetas como píldoras.
   relacionados?: { tipo: TipoRelacion; nombres: string[] }
+  // Nombre de catálogo que se muestra como píldora de color (el subestado).
+  pildora?: string
 }
 
 interface Tarjeta {
@@ -118,6 +120,11 @@ const tarjetasCampos = computed<Tarjeta[]>(() => {
         // "Estado del grupo" para no confundirlo con el de completado.
         { termino: 'Grupo de estados', valor: textoOVacio(tarea.grupo_estados?.nombre) },
         { termino: 'Estado del grupo', valor: textoOVacio(tarea.estado?.nombre) },
+        {
+          termino: 'Subestado',
+          valor: textoOVacio(tarea.subestado),
+          pildora: tarea.subestado ?? undefined,
+        },
       ],
     },
     {
@@ -353,6 +360,13 @@ function alCambiarApertura(abierta: boolean): void {
                         >
                       </li>
                     </ul>
+                  </dd>
+                  <dd v-else-if="campo.pildora" class="min-w-0 text-sm">
+                    <span
+                      data-testid="subestado-detalle"
+                      :class="`${CLASE_PILDORA} ${colorEtiqueta(campo.pildora)} [overflow-wrap:anywhere]`"
+                      >{{ campo.pildora }}</span
+                    >
                   </dd>
                   <dd
                     v-else

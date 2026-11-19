@@ -7,7 +7,8 @@ import type { TipoTarea } from '@/api/tipos'
  * `dd/mm/aaaa hh:mm:ss`. El tipo vacío es "Sin tipo"; los campos de la
  * oportunidad solo se envían si el tipo es "Oportunidad". El grupo de estados
  * vacío es "Sin grupo"; si no, es el id del grupo. Igual con el workflow:
- * vacío es "Sin workflow".
+ * vacío es "Sin workflow". El subestado es un nombre del catálogo (como
+ * mucho uno), o vacío si la tarea no tiene.
  */
 export interface ValoresFormularioTarea {
   nombre: string
@@ -17,6 +18,7 @@ export interface ValoresFormularioTarea {
   fechaVencimiento: string
   etiquetas: string[]
   asignados: string[]
+  subestado: string
   tipo: TipoTarea | ''
   oportunidad: { codigo: string; descripcion: string; observaciones: string }
   grupoEstadosId: number | ''

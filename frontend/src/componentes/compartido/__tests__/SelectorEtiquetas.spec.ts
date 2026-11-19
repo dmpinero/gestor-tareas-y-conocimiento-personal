@@ -12,6 +12,7 @@ function montar(
     sugerencias: string[]
     longitudMaxima: number
     textoNuevo: string
+    unico: boolean
   }> = {},
 ) {
   const valores = ref<string[]>(props.modelValue ?? [])
@@ -28,6 +29,7 @@ function montar(
       id: 'campo-etiquetas',
       longitudMaxima: props.longitudMaxima ?? 50,
       textoNuevo: props.textoNuevo ?? 'Crear etiqueta "{valor}"',
+      unico: props.unico ?? false,
     },
   })
   return { wrapper, valores }
@@ -49,6 +51,42 @@ function textosOpciones(wrapper: ReturnType<typeof montar>['wrapper']) {
 
 afterEach(() => {
   document.body.innerHTML = ''
+})
+
+describe('SelectorEtiquetas: un solo valor (unico)', () => {
+  it('elegir otro valor sustituye al elegido en lugar de añadirlo', async () => {
+    const { wrapper, valores } = montar({ modelValue: ['Casa'], unico: true })
+
+    await escribir(wrapper, 'trabajo')
+    await pulsar(wrapper, 'Enter')
+
+    expect(valores.value).toEqual(['Trabajo'])
+    expect(wrapper.findAll('[data-testid="chip"]').map((chip) => chip.text())).toEqual(['Trabajo'])
+    wrapper.unmount()
+  })
+
+  it('un valor nuevo también sustituye al elegido y se puede quitar', async () => {
+    const { wrapper, valores } = montar({ modelValue: ['Casa'], unico: true })
+
+    await escribir(wrapper, 'Bloqueado')
+    await pulsar(wrapper, 'Enter')
+    expect(valores.value).toEqual(['Bloqueado'])
+
+    await wrapper.get('button[aria-label="Quitar Bloqueado"]').trigger('click')
+    await flushPromises()
+    expect(valores.value).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('sin unico sigue añadiendo valores', async () => {
+    const { wrapper, valores } = montar({ modelValue: ['Casa'] })
+
+    await escribir(wrapper, 'trabajo')
+    await pulsar(wrapper, 'Enter')
+
+    expect(valores.value).toEqual(['Casa', 'Trabajo'])
+    wrapper.unmount()
+  })
 })
 
 describe('SelectorEtiquetas', () => {
@@ -155,7 +193,7 @@ describe('SelectorEtiquetas', () => {
   it('al pulsar una sugerencia la añade', async () => {
     const { wrapper, valores } = montar()
 
-    await escribir(wrapper, 'trab')
+    await escribir(wrapper, 'trabajo')
     await wrapper.get('[role="option"]').trigger('click')
     await flushPromises()
 

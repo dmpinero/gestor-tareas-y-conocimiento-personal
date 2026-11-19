@@ -102,6 +102,9 @@ export interface Tarea {
   estado: ReferenciaNombre | null
   /** Workflow de la tarea; `null` si no tiene. */
   workflow: ReferenciaNombre | null
+  /** Nombre del subestado de la tarea (del catálogo `/subestados`, como mucho
+   * uno); `null` si no tiene. */
+  subestado: string | null
   /** Instante en UTC (`YYYY-MM-DDTHH:MM:SSZ`) desde el que el contador de
    * vencimiento está congelado, o `null` si no lo está. Lo pone el servidor: la
    * tarea está congelada mientras está completada o en un estado llamado DONE, y
@@ -131,9 +134,15 @@ export interface DatosTarea {
   /** Workflow de la tarea, o `null` sin workflow. Al asignarlo en el alta, o
    * al cambiarlo en la edición, sus pasos se añaden como subtareas nuevas. */
   workflow_id: number | null
+  /** Nombre del subestado, o `null` sin subestado. Si no existe en el catálogo
+   * de subestados, se crea al guardar. En la edición, si falta, la tarea
+   * conserva el suyo. */
+  subestado?: string | null
 }
 
-/** Elemento de un catálogo compartido (`GET /etiquetas`, `GET /personas`). */
+/** Elemento de un catálogo compartido (`GET /etiquetas`, `GET /personas`,
+ * `GET /subestados`). Los subestados también se crean, renombran y eliminan en
+ * Ajustes (`POST /subestados`, `PUT`/`DELETE /subestados/{id}`). */
 export interface ElementoCatalogo {
   id: number
   nombre: string

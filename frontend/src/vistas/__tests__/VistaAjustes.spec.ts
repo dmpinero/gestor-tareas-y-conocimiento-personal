@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import router from '@/router'
 import VistaAjustes from '../VistaAjustes.vue'
 import VistaGruposEstados from '../VistaGruposEstados.vue'
+import VistaSubestados from '../VistaSubestados.vue'
 import VistaWorkflows from '../VistaWorkflows.vue'
 
 function crearRouter() {
@@ -14,6 +15,7 @@ function crearRouter() {
       { path: '/ajustes', component: VistaAjustes },
       { path: '/ajustes/workflows', component: { template: '<div />' } },
       { path: '/ajustes/grupos-estados', component: { template: '<div />' } },
+      { path: '/ajustes/subestados', component: { template: '<div />' } },
     ],
   })
 }
@@ -38,6 +40,15 @@ describe('VistaAjustes', () => {
     const enlace = contenedor.get('a[href="/ajustes/grupos-estados"]')
     expect(enlace.text()).toContain('Grupos de estados')
   })
+
+  it('muestra la opción "Subestados" enlazada a su página', async () => {
+    const enrutador = crearRouter()
+    await enrutador.push('/ajustes')
+    const contenedor = mount(VistaAjustes, { global: { plugins: [enrutador] } })
+
+    const enlace = contenedor.get('a[href="/ajustes/subestados"]')
+    expect(enlace.get('.font-medium').text()).toBe('Subestados')
+  })
 })
 
 describe('router', () => {
@@ -60,5 +71,12 @@ describe('router', () => {
 
     expect(resuelta.name).toBe('grupos-estados')
     expect(resuelta.matched[0]?.components?.default).toBe(VistaGruposEstados)
+  })
+
+  it('la ruta /ajustes/subestados muestra VistaSubestados', () => {
+    const resuelta = router.resolve('/ajustes/subestados')
+
+    expect(resuelta.name).toBe('subestados')
+    expect(resuelta.matched[0]?.components?.default).toBe(VistaSubestados)
   })
 })
