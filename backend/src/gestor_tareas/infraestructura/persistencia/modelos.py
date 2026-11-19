@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Integer,
+    LargeBinary,
     String,
     Table,
     Text,
@@ -23,6 +24,7 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.dialects.mysql import MEDIUMBLOB
 from sqlalchemy.orm import (
     Mapped,
     WriteOnlyMapped,
@@ -39,6 +41,25 @@ from gestor_tareas.infraestructura.persistencia.sesion import Base
 # (utf8mb4_0900_ai_ci) tampoco distingue tildes, y el spec solo pide lo primero.
 # El índice único y las búsquedas por nombre usan esta intercalación.
 INTERCALACION_NOMBRES_CATALOGO = "utf8mb4_0900_as_ci"
+
+
+class ImagenModelo(Base):
+    """Imagen subida para los comentarios. No tiene claves ajenas: los comentarios
+    la usan por su URL dentro de su HTML, y varios pueden usar la misma."""
+
+    __tablename__ = "imagenes"
+
+    # UUID4 en hexadecimal: la URL de la imagen no se puede adivinar.
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    tipo: Mapped[str] = mapped_column(String(20), nullable=False)
+    tamano: Mapped[int] = mapped_column(Integer, nullable=False)
+    # MEDIUMBLOB admite hasta 16 MB; la API limita cada imagen a 5 MB. Así las
+    # copias de seguridad de la base de datos incluyen las imágenes.
+    contenido: Mapped[bytes] = mapped_column(
+        LargeBinary().with_variant(MEDIUMBLOB(), "mysql"), nullable=False
+    )
+    # DATETIME sin zona horaria con el instante en UTC.
+    creada: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
 
 class EtiquetaModelo(Base):

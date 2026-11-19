@@ -13,8 +13,9 @@ from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
 from tests.integracion.tablas import vaciar_tablas
 
 _RAIZ = Path(__file__).resolve().parents[2]
-_REVISION = "e2c7a9f4b1d6"
 _ANTERIOR = "c5e1b8f4a2d7"
+# La última revisión, a la que llega "head" (la de las imágenes, posterior a esta).
+_ULTIMA = "f1a6c3e8b2d9"
 
 
 def _alembic() -> Config:
@@ -132,7 +133,7 @@ def test_la_migracion_congela_las_tareas_completadas_o_en_done_y_se_deshace() ->
 
     command.upgrade(_alembic(), "head")
 
-    assert _estado() == (True, tareas, _REVISION)
+    assert _estado() == (True, tareas, _ULTIMA)
     _comprobar_relleno(desde, _ahora())
 
     try:
@@ -144,5 +145,5 @@ def test_la_migracion_congela_las_tareas_completadas_o_en_done_y_se_deshace() ->
         command.upgrade(_alembic(), "head")
 
     # Al volver a aplicarla, congela de nuevo las mismas tareas desde ese instante.
-    assert _estado() == (True, tareas, _REVISION)
+    assert _estado() == (True, tareas, _ULTIMA)
     _comprobar_relleno(desde, _ahora())
