@@ -1,0 +1,26 @@
+# Servicio "automatizador": alta de oportunidades con Playwright y Chromium con
+# ventana (se ve en Windows mediante WSLg). La imagen ya trae Chromium y sus
+# dependencias para Playwright 1.49.0: la versión de pyproject.toml (extra
+# "automatizador") tiene que coincidir con esta etiqueta.
+FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /uvx /usr/local/bin/
+
+# Se usa el Python 3.12 de la imagen en vez de descargar otro.
+ENV UV_PYTHON=/usr/bin/python3 \
+    UV_PYTHON_DOWNLOADS=never
+
+WORKDIR /aplicacion
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --extra automatizador --no-install-project
+
+COPY . .
+RUN uv sync --frozen --no-dev --extra automatizador
+
+ENV PATH="/aplicacion/.venv/bin:$PATH"
+
+EXPOSE 8001
+
+# No usa la base de datos: no hay migraciones que aplicar al arrancar.
+CMD ["uvicorn", "gestor_tareas.main_automatizador:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -9,7 +9,7 @@ services:
       MYSQL_PASSWORD: gestor
       MYSQL_ROOT_PASSWORD: raiz
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - datos_mysql:/var/lib/mysql
     healthcheck:
@@ -29,7 +29,7 @@ services:
       ENTORNO: desarrollo
       URL_BASE_DATOS: mysql+pymysql://gestor:gestor@mysql:3306/gestor_tareas?charset=utf8mb4
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       mysql:
         condition: service_healthy
@@ -39,17 +39,45 @@ services:
       timeout: 5s
       retries: 10
 
+  # Alta automática de oportunidades: abre Chromium con ventana (WSLg) y rellena
+  # el formulario de la herramienta comercial. Los datos corporativos están en
+  # una configuración local fuera de git (ver README, "Alta de oportunidades").
+  # Si no hay pantalla o configuración, el servicio arranca igual y la página
+  # explica qué falta; el resto de servicios no depende de él.
+  automatizador:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.automatizador
+    restart: unless-stopped
+    environment:
+      DISPLAY: ":0"
+      RUTA_CONFIGURACION_ALTA_OPORTUNIDAD: /config/alta_oportunidad.json
+      DIRECTORIO_PERFIL_NAVEGADOR: /perfil-navegador
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - perfil_navegador:/perfil-navegador
+      - ${HOME}/.config/gestor-tareas:/config:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8001/api/v1/alta-oportunidades/salud')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   frontend:
     build:
       context: ./frontend
     restart: unless-stopped
     environment:
       URL_BACKEND: http://backend:8000
+      URL_AUTOMATIZADOR: http://automatizador:8001
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     depends_on:
       backend:
         condition: service_healthy
 
 volumes:
   datos_mysql:
+  perfil_navegador:

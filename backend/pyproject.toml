@@ -26,6 +26,12 @@ dependencies = [
     "uvicorn[standard]>=0.52.3",
 ]
 
+[project.optional-dependencies]
+# Solo para el servicio "automatizador" (alta de oportunidades en el navegador).
+# Debe coincidir con la versión de la imagen mcr.microsoft.com/playwright/python
+# de Dockerfile.automatizador, que ya trae los navegadores de esa versión.
+automatizador = ["playwright==1.49.0"]
+
 [build-system]
 requires = ["uv_build>=0.11.21,<0.14.0"]
 build-backend = "uv_build"
@@ -50,6 +56,9 @@ bdd_features_base_dir = "tests/bdd/caracteristicas"
 
 [tool.coverage.run]
 source = ["src/gestor_tareas"]
+# El adaptador de Playwright abre un navegador real: no se prueba en CI (su
+# frontera se cubre con dobles en tests/unitarios/interfaces).
+omit = ["src/gestor_tareas/infraestructura/automatizacion/navegador_playwright.py"]
 
 [tool.ruff]
 line-length = 100
@@ -62,6 +71,11 @@ extend-exclude = ["alembic/versions"]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]
 # N: pep8-naming — fuerza PascalCase en clases y snake_case en funciones/variables,
 # también con identificadores en español.
+
+[tool.ruff.lint.per-file-ignores]
+# Fragmentos de JavaScript que se evalúan en la página: partirlos para cumplir
+# el ancho de línea los haría más difíciles de leer y de comparar con el DOM.
+"src/gestor_tareas/infraestructura/automatizacion/navegador_playwright.py" = ["E501"]
 
 [tool.ruff.lint.pep8-naming]
 classmethod-decorators = ["classmethod"]

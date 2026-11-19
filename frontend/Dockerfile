@@ -24,6 +24,10 @@ FROM nginx:alpine AS produccion
 # del backend.
 ENV URL_BACKEND=http://backend:8000
 
+# Servicio "automatizador" (alta de oportunidades), con la misma sustitucion por
+# envsubst. Solo existe en docker-compose; en otros despliegues esa ruta da 502.
+ENV URL_AUTOMATIZADOR=http://automatizador:8001
+
 # Puerto en el que escucha nginx dentro del contenedor. Por defecto 80 (el
 # que mapea docker-compose.yml); en plataformas que asignan el puerto
 # dinamicamente e inyectan su propia variable PORT (p. ej. Railway), esta
