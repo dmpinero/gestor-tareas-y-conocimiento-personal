@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookOpen, House, ListTodo, Settings2 } from '@lucide/vue'
+import { BookOpen, BriefcaseBusiness, House, ListTodo, Settings2 } from '@lucide/vue'
 import type { Component } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
@@ -12,6 +12,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarTrigger,
 } from '@/componentes/ui/sidebar'
 
@@ -20,6 +23,8 @@ interface ElementoNavegacion {
   etiqueta: string
   icono: Component
   color: string
+  /** Subapartados que se muestran debajo (ocultos con el panel colapsado). */
+  hijos?: ElementoNavegacion[]
 }
 
 interface GrupoNavegacion {
@@ -34,7 +39,20 @@ const grupos: GrupoNavegacion[] = [
     titulo: 'General',
     elementos: [
       { a: '/', etiqueta: 'Inicio', icono: House, color: 'text-blue-500' },
-      { a: '/tareas', etiqueta: 'Tareas', icono: ListTodo, color: 'text-rose-500' },
+      {
+        a: '/tareas',
+        etiqueta: 'Tareas',
+        icono: ListTodo,
+        color: 'text-rose-500',
+        hijos: [
+          {
+            a: '/tareas/oportunidades',
+            etiqueta: 'Oportunidades',
+            icono: BriefcaseBusiness,
+            color: 'text-amber-500',
+          },
+        ],
+      },
       { a: '/conocimiento', etiqueta: 'Conocimiento', icono: BookOpen, color: 'text-cyan-500' },
     ],
   },
@@ -47,6 +65,11 @@ const grupos: GrupoNavegacion[] = [
 function estaActivo(destino: string): boolean {
   if (destino === '/') return ruta.path === '/'
   return ruta.path === destino || ruta.path.startsWith(`${destino}/`)
+}
+
+/** Página actual: la sección activa, salvo que lo esté uno de sus subapartados. */
+function esPaginaActual(elemento: ElementoNavegacion): boolean {
+  return estaActivo(elemento.a) && !elemento.hijos?.some((hijo) => estaActivo(hijo.a))
 }
 </script>
 
@@ -68,12 +91,25 @@ function estaActivo(destino: string): boolean {
               >
                 <RouterLink
                   :to="elemento.a"
-                  :aria-current="estaActivo(elemento.a) ? 'page' : undefined"
+                  :aria-current="esPaginaActual(elemento) ? 'page' : undefined"
                 >
                   <component :is="elemento.icono" :class="elemento.color" />
                   <span>{{ elemento.etiqueta }}</span>
                 </RouterLink>
               </SidebarMenuButton>
+              <SidebarMenuSub v-if="elemento.hijos?.length">
+                <SidebarMenuSubItem v-for="hijo in elemento.hijos" :key="hijo.a">
+                  <SidebarMenuSubButton as-child :is-active="estaActivo(hijo.a)">
+                    <RouterLink
+                      :to="hijo.a"
+                      :aria-current="estaActivo(hijo.a) ? 'page' : undefined"
+                    >
+                      <component :is="hijo.icono" :class="hijo.color" aria-hidden="true" />
+                      <span>{{ hijo.etiqueta }}</span>
+                    </RouterLink>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              </SidebarMenuSub>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>

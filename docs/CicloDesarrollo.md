@@ -233,7 +233,9 @@ bloquearía la fusión.
 4. `lint-imports` (contrato de capas hexagonales).
 5. `alembic upgrade head` contra un MySQL de servicio real levantado por
    el propio workflow (no mockeado).
-6. `pytest` completo con cobertura (§3.1), `--cov-fail-under=80`.
+6. `pytest` completo con cobertura (§3.1), `--cov-fail-under=80`. No instala
+   el extra `automatizador` (Playwright): el adaptador del navegador queda
+   fuera de la cobertura y su frontera se prueba con dobles.
 7. Publica el informe de cobertura como artefacto.
 
 ### `ci-frontend.yml` — job `calidad-y-tests-frontend`
@@ -247,7 +249,10 @@ bloquearía la fusión.
 ### `e2e.yml` — job `playwright`
 
 1. Levanta la aplicación **real** completa con `docker compose up -d
-   --build` (MySQL + backend + frontend), no una versión simulada.
+   --build` (MySQL + backend + automatizador + frontend), no una versión
+   simulada. El automatizador arranca sin pantalla ni configuración local y
+   su API se simula en `e2e/oportunidades.spec.ts`: ningún test abre un
+   navegador contra Digital Desktop ni Notion.
 2. Espera activamente a que el backend responda en
    `/api/v1/salud` antes de continuar.
 3. Instala Playwright con sus navegadores (`--with-deps chromium`).

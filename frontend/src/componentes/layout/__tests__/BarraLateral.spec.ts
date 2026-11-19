@@ -18,7 +18,7 @@ const vistaVacia = { template: '<div />' }
 function crearRouter(): Router {
   return createRouter({
     history: createMemoryHistory(),
-    routes: ['/', '/tareas', '/conocimiento', '/ajustes'].map((path) => ({
+    routes: ['/', '/tareas', '/tareas/oportunidades', '/conocimiento', '/ajustes'].map((path) => ({
       path,
       component: vistaVacia,
     })),
@@ -54,6 +54,7 @@ describe('BarraLateral', () => {
   it.each([
     ['Inicio', '/'],
     ['Tareas', '/tareas'],
+    ['Oportunidades', '/tareas/oportunidades'],
     ['Conocimiento', '/conocimiento'],
     ['Ajustes', '/ajustes'],
   ])('muestra el enlace "%s" que apunta a %s', async (etiqueta, destino) => {
@@ -70,5 +71,16 @@ describe('BarraLateral', () => {
     const actuales = wrapper.findAll('a[aria-current="page"]')
     expect(actuales).toHaveLength(1)
     expect(actuales[0]?.text()).toBe('Tareas')
+  })
+
+  it('"Oportunidades" cuelga de "Tareas" y es la única página actual en su ruta', async () => {
+    const wrapper = await montarEn('/tareas/oportunidades')
+
+    const enlace = wrapper.findAll('a').find((a) => a.text() === 'Oportunidades')
+    const tareas = wrapper.findAll('a').find((a) => a.text() === 'Tareas')
+    expect(enlace?.element.closest('[data-slot="sidebar-menu-sub"]')).not.toBeNull()
+    expect(tareas?.element.closest('li')?.contains(enlace!.element)).toBe(true)
+    const actuales = wrapper.findAll('a[aria-current="page"]')
+    expect(actuales.map((a) => a.text())).toEqual(['Oportunidades'])
   })
 })
