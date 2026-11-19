@@ -2430,6 +2430,59 @@ describe('VistaTareas', () => {
       expect(nombresEnTabla(envoltorio)).toEqual(['Preparar reunión'])
     })
 
+    it('busca también en el resto de campos visibles de la tarea', async () => {
+      const completa = {
+        ...TAREAS[0],
+        id: 50,
+        nombre: 'Tarea completa',
+        descripcion: 'Sin pistas',
+        fecha_vencimiento: '2026-12-24T10:00:00',
+        etiquetas: ['Infraestructura'],
+        asignados: ['Sabrina Ben Kacem'],
+        tipo: 'oportunidad',
+        oportunidad: {
+          codigo: 'XYZ9001',
+          descripcion: 'Renovación anual',
+          observaciones: 'Llamar a Quique',
+        },
+        grupo_estados: { id: 7, nombre: 'Preventa' },
+        estado: { id: 70, nombre: 'Esperando cliente' },
+        workflow: { id: 3, nombre: 'Flujo comercial' },
+        subtareas: [
+          {
+            id: 900,
+            nombre: 'Preparar maqueta',
+            asignado: 'Lucía Ferrer',
+            prioridad: null,
+            resuelta: false,
+            comentarios: 0,
+          },
+        ],
+      }
+      const otra = { ...TAREAS[1], id: 51, nombre: 'Otra tarea', descripcion: 'Nada que ver' }
+      const envoltorio = await montarConFiltros([completa, otra])
+
+      for (const termino of [
+        'sabrina',
+        'infraestructura',
+        'xyz9001',
+        'renovacion',
+        'quique',
+        'preventa',
+        'esperando cliente',
+        'flujo comercial',
+        'maqueta',
+        'lucia',
+        '24/12/2026',
+      ]) {
+        await escribir(entrada(envoltorio, 'filtro-buscar'), termino)
+        expect({ termino, nombres: nombresEnTabla(envoltorio) }).toEqual({
+          termino,
+          nombres: ['Tarea completa'],
+        })
+      }
+    })
+
     it('filtra por prioridad, incluida la opción "Sin prioridad"', async () => {
       const envoltorio = await montarConFiltros(TAREAS_FILTRO)
 
@@ -3497,13 +3550,107 @@ describe('VistaTareas', () => {
         })
       })
 
+      describe('orden por vencimiento', () => {
+        const CLAVE_MODO = 'gestor-tareas:modo-orden-tablero'
+        const PENDIENTE = { grupo_estados: EN_DESARROLLO, estado: { id: 10, nombre: 'Pendiente' } }
+        const TARDE = {
+          ...TAREAS[0],
+          id: 1,
+          nombre: 'Vence tarde',
+          fecha_vencimiento: '2026-11-25T10:00:00',
+          ...PENDIENTE,
+        }
+        const PRONTO = {
+          ...TAREAS[0],
+          id: 2,
+          nombre: 'Vence pronto',
+          fecha_vencimiento: '2026-11-21T09:00:00',
+          ...PENDIENTE,
+        }
+        const SIN_FECHA = { ...TAREAS[1], id: 3, nombre: 'Sin fecha', ...PENDIENTE }
+        const TRES = [SIN_FECHA, TARDE, PRONTO]
+
+        beforeEach(() => localStorage.removeItem(CLAVE_MODO))
+        afterEach(() => localStorage.removeItem(CLAVE_MODO))
+
+        function selectorOrden(): HTMLSelectElement {
+          return document.body.querySelector<HTMLSelectElement>('#tablero-orden')!
+        }
+
+        it('por defecto ordena cada columna por vencimiento: la más próxima arriba y sin fecha al final', async () => {
+          await montarTablero(TRES)
+
+          expect(
+            document.body.querySelector('label[for="tablero-orden"]')?.textContent?.trim(),
+          ).toBe('Orden del tablero')
+          expect(selectorOrden().value).toBe('vencimiento')
+          expect(tarjetas('Pendiente')).toEqual(['Vence pronto', 'Vence tarde', 'Sin fecha'])
+        })
+
+        it('al cambiar la fecha de vencimiento la tarjeta se recoloca sola', async () => {
+          await montarTablero(TRES)
+
+          const tarde = useTiendaTareas().tareas.find((t) => t.id === 1)!
+          tarde.fecha_vencimiento = '2026-11-20T08:00:00'
+          await flushPromises()
+
+          expect(tarjetas('Pendiente')).toEqual(['Vence tarde', 'Vence pronto', 'Sin fecha'])
+        })
+
+        it('por vencimiento no ofrece Subir/Bajar ni reordena al arrastrar en la columna', async () => {
+          await montarTablero(TRES)
+
+          botonEn(columna('Pendiente'), 'Mover a… (Vence tarde)').click()
+          await flushPromises()
+          const menu = document.body.querySelector<HTMLElement>('[data-menu-mover]')!
+          expect(menu.querySelector('button[aria-label^="Subir"]')).toBeNull()
+          expect(menu.querySelector('button[aria-label^="Bajar"]')).toBeNull()
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+
+          const dataTransfer = crearDataTransfer()
+          const origen = [
+            ...columna('Pendiente').querySelectorAll<HTMLElement>('[data-tarjeta]'),
+          ].pop()!
+          lanzarEventoArrastre(origen, 'dragstart', dataTransfer)
+          lanzarEventoArrastre(columna('Pendiente'), 'drop', dataTransfer)
+          lanzarEventoArrastre(origen, 'dragend', dataTransfer)
+          await flushPromises()
+
+          expect(tarjetas('Pendiente')).toEqual(['Vence pronto', 'Vence tarde', 'Sin fecha'])
+          expect(clienteApi.parchear).not.toHaveBeenCalled()
+        })
+
+        it('"Manual" vuelve al orden guardado y la elección se recuerda', async () => {
+          localStorage.setItem('gestor-tareas:orden-tablero', JSON.stringify({ 10: [3, 1, 2] }))
+          const envoltorio = await montarTablero(TRES)
+
+          selectorOrden().value = 'manual'
+          selectorOrden().dispatchEvent(new Event('change'))
+          await flushPromises()
+          expect(tarjetas('Pendiente')).toEqual(['Sin fecha', 'Vence tarde', 'Vence pronto'])
+
+          envoltorio.unmount()
+          document.body.innerHTML = ''
+          await montarTablero(TRES)
+          expect(selectorOrden().value).toBe('manual')
+          localStorage.removeItem('gestor-tareas:orden-tablero')
+        })
+      })
+
       describe('ordenar tarjetas', () => {
         const CLAVE_ORDEN = 'gestor-tareas:orden-tablero'
         const ARTICULO_PENDIENTE = { ...ARTICULO, estado: { id: 10, nombre: 'Pendiente' } }
         const DOS_PENDIENTES = [INFORME, ARTICULO_PENDIENTE, SUELTA]
 
-        beforeEach(() => localStorage.removeItem(CLAVE_ORDEN))
-        afterEach(() => localStorage.removeItem(CLAVE_ORDEN))
+        // Estas pruebas son del orden manual; el predeterminado es por vencimiento.
+        beforeEach(() => {
+          localStorage.removeItem(CLAVE_ORDEN)
+          localStorage.setItem('gestor-tareas:modo-orden-tablero', 'manual')
+        })
+        afterEach(() => {
+          localStorage.removeItem(CLAVE_ORDEN)
+          localStorage.removeItem('gestor-tareas:modo-orden-tablero')
+        })
 
         function elementoTarjeta(nombreColumna: string, nombre: string): HTMLElement {
           const tarjeta = [
@@ -3690,7 +3837,8 @@ describe('VistaTareas', () => {
           await enviar(panel)
 
           expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/9/estado', { estado_id: 11 })
-          expect(tarjetas('En curso')).toEqual(['Leer artículo', 'Nueva'])
+          // Por vencimiento (orden predeterminado), la nueva, con fecha, va antes que la sin fecha.
+          expect(tarjetas('En curso')).toEqual(['Nueva', 'Leer artículo'])
         })
 
         it('si se cambia el grupo en el formulario, no la recoloca', async () => {

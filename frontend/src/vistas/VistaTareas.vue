@@ -455,9 +455,24 @@ const tareasConFiltros = computed(() =>
   }),
 )
 
+// El buscador mira todo lo que se ve de la tarea: textos, personas (también
+// las de las subtareas), etiquetas, oportunidad, grupo, estado, workflow,
+// tipo y fechas tal como se muestran (dd/mm/aaaa hh:mm:ss).
 const { busqueda, filasFiltradas } = useBusquedaTabla(tareasConFiltros, (tarea) => [
   tarea.nombre,
   tarea.descripcion,
+  ...tarea.asignados,
+  ...tarea.etiquetas,
+  tarea.oportunidad?.codigo,
+  tarea.oportunidad?.descripcion,
+  tarea.oportunidad?.observaciones,
+  tarea.grupo_estados?.nombre,
+  tarea.estado?.nombre,
+  tarea.workflow?.nombre,
+  TIPOS_TAREA.find((tipo) => tipo.valor === tarea.tipo)?.etiqueta,
+  formatearFechaHora(tarea.fecha_creacion),
+  tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : null,
+  ...tarea.subtareas.flatMap((subtarea) => [subtarea.nombre, subtarea.asignado]),
 ])
 
 function limpiarFiltros(): void {

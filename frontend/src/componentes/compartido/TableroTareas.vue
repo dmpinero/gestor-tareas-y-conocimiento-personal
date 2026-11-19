@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowDown, ArrowUp, ListTree, MessageSquare, MoveRight, Plus } from '@lucide/vue'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import type { EstadoGrupo, GrupoEstados, Tarea } from '@/api/tipos'
@@ -20,6 +20,7 @@ import {
   colorEtiqueta,
   type ColorEstadoTablero,
 } from '@/lib/coloresTarea'
+import { isoAFechaLocal } from '@/lib/fechas'
 import { MAX_NOMBRE_SUBTAREA, validarNombreSubtarea } from '@/lib/subtareas'
 import { useTiendaTareas } from '@/stores/tareas'
 
@@ -27,9 +28,9 @@ import { useTiendaTareas } from '@/stores/tareas'
 // orden de Ajustes. `tareas` llega ya filtrada y ordenada por quien lo usa.
 // Las tarjetas se mueven arrastrándolas o con "Mover a…" (teclado y lectores
 // de pantalla); se guarda con `PATCH /tareas/{id}/estado` y la tarjeta se
-// recoloca con la respuesta. Dentro de una columna también se reordenan
-// arrastrando o con "Subir"/"Bajar" del mismo menú; ese orden es solo visual
-// y se recuerda en este navegador. Abrir el detalle y el alta son cosa del padre.
+// recoloca con la respuesta. Cada columna se ordena por vencimiento (por
+// defecto) o, en modo "Manual", arrastrando o con "Subir"/"Bajar" del mismo
+// menú; ese orden es solo visual y se recuerda en este navegador. Abrir el detalle y el alta son cosa del padre.
 // Cada columna lleva una cabecera del color de su estado (por posición, como
 // la píldora de la tabla) y una barra resume cuántas tareas hay en cada uno.
 // Las subtareas se despliegan bajo su tarjeta, donde también se añaden.
@@ -93,15 +94,52 @@ function guardarOrden(): void {
   }
 }
 
+// Modo de orden del tablero: por vencimiento (predeterminado; la que vence
+// antes arriba, las que no tienen fecha al final, y se recoloca sola cuando
+// cambia la fecha) o manual (el orden guardado arriba). Se recuerda en este
+// navegador.
+type ModoOrden = 'vencimiento' | 'manual'
+const CLAVE_MODO_ORDEN = 'gestor-tareas:modo-orden-tablero'
+
+function leerModoOrden(): ModoOrden {
+  try {
+    return localStorage.getItem(CLAVE_MODO_ORDEN) === 'manual' ? 'manual' : 'vencimiento'
+  } catch {
+    return 'vencimiento'
+  }
+}
+
+const modoOrden = ref<ModoOrden>(leerModoOrden())
+
+watch(modoOrden, (modo) => {
+  try {
+    localStorage.setItem(CLAVE_MODO_ORDEN, modo)
+  } catch {
+    // Sin almacenamiento el modo dura la sesión.
+  }
+})
+
+function instanteVencimiento(tarea: Tarea): number {
+  if (!tarea.fecha_vencimiento) return Number.POSITIVE_INFINITY
+  const instante = isoAFechaLocal(tarea.fecha_vencimiento)?.getTime()
+  return instante === undefined || Number.isNaN(instante) ? Number.POSITIVE_INFINITY : instante
+}
+
 function tareasEn(estado: EstadoGrupo): Tarea[] {
+  const enColumna = tareasDelGrupo.value.filter((tarea) => tarea.estado?.id === estado.id)
+  if (modoOrden.value === 'vencimiento') {
+    // `sort` es estable: a igual fecha se mantiene el orden en que llegan.
+    return enColumna.sort((a, b) => {
+      const diferencia = instanteVencimiento(a) - instanteVencimiento(b)
+      return Number.isNaN(diferencia) ? 0 : diferencia
+    })
+  }
   const ids = orden.value[estado.id] ?? []
   const posicion = (tarea: Tarea) => {
     const indice = ids.indexOf(tarea.id)
     return indice === -1 ? Number.POSITIVE_INFINITY : indice
   }
-  return tareasDelGrupo.value
-    .filter((tarea) => tarea.estado?.id === estado.id)
-    .sort((a, b) => posicion(a) - posicion(b))
+  return enColumna.sort((a, b) => posicion(a) - posicion(b))
 }
 
 // Coloca la tarea en la posición `indice` de las tarjetas visibles de la
@@ -293,7 +331,7 @@ const insercion = ref<{ idTarea: number; lado: 'antes' | 'despues' } | null>(nul
 
 function alArrastrarSobreTarjeta(evento: DragEvent, tarea: Tarea): void {
   if (idArrastrada.value === null) return
-  if (tarea.id === idArrastrada.value) {
+  if (modoOrden.value !== 'manual' || tarea.id === idArrastrada.value) {
     insercion.value = null
     return
   }
@@ -347,10 +385,13 @@ function alSoltar(evento: DragEvent, estado: EstadoGrupo): void {
   const indice = indiceDestino(estado)
   terminarArrastre()
   if (!tarea) return
+  const manual = modoOrden.value === 'manual'
   if (tarea.estado?.id !== estado.id) {
-    void mover(tarea, estado, indice)
+    void mover(tarea, estado, manual ? indice : undefined)
     return
   }
+  // Por vencimiento el orden de la columna no se elige a mano.
+  if (!manual) return
   colocar(tarea, estado, indice)
   anunciarPosicion(tarea, estado)
 }
@@ -387,6 +428,17 @@ function terminarArrastre(): void {
             <option v-for="grupo in props.grupos" :key="grupo.id" :value="grupo.id">
               {{ grupo.nombre }}
             </option>
+          </select>
+        </div>
+        <div class="flex w-full max-w-xs flex-col gap-1.5">
+          <Label for="tablero-orden">Orden del tablero</Label>
+          <select
+            id="tablero-orden"
+            v-model="modoOrden"
+            class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
+          >
+            <option value="vencimiento">Por vencimiento</option>
+            <option value="manual">Manual</option>
           </select>
         </div>
         <div v-if="grupoActivo.estados.length > 0" class="w-full pb-3 sm:w-64">
@@ -602,7 +654,12 @@ function terminarArrastre(): void {
                           <p v-else class="text-muted-foreground px-2 py-1 text-sm">
                             No hay otros estados en el grupo.
                           </p>
-                          <template v-if="posicionEnColumna(tarea) > 0 || puedeBajar(tarea)">
+                          <template
+                            v-if="
+                              modoOrden === 'manual' &&
+                              (posicionEnColumna(tarea) > 0 || puedeBajar(tarea))
+                            "
+                          >
                             <p
                               :id="`menu-orden-${tarea.id}`"
                               class="mt-1 border-t px-2 pt-2 pb-1 text-sm font-medium"
