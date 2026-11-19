@@ -88,13 +88,19 @@ async function descargar(ruta: string): Promise<Blob> {
   return await respuesta.blob()
 }
 
-async function subirArchivo<T>(ruta: string, campo: string, fichero: File): Promise<T> {
+async function subirArchivo<T>(
+  ruta: string,
+  campo: string,
+  fichero: File,
+  cabeceras?: Record<string, string>,
+): Promise<T> {
   const formData = new FormData()
   formData.append(campo, fichero)
 
   const respuesta = await fetch(`${URL_BASE_API}${ruta}`, {
     method: 'POST',
     body: formData,
+    ...(cabeceras ? { headers: cabeceras } : {}),
   })
 
   if (!respuesta.ok) {

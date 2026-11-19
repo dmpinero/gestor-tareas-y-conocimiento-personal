@@ -5,6 +5,9 @@
  * pintarlo con `v-html` (defensa en profundidad) con la misma lista de
  * etiquetas y atributos que el backend. Usa su propia instancia de DOMPurify
  * para que sus hooks no afecten a otros usos (p. ej. el historial de cambios).
+ *
+ * Las imágenes (`img`) solo se conservan si su `src` es la URL de una imagen
+ * subida a la aplicación (`/api/v1/imagenes/<id>`), como en el backend.
  */
 import DOMPurify, { type DOMPurify as InstanciaDOMPurify } from 'dompurify'
 
@@ -21,8 +24,9 @@ const ETIQUETAS_PERMITIDAS = [
   'a',
   'span',
   'mark',
+  'img',
 ]
-const ATRIBUTOS_PERMITIDOS = ['href', 'target', 'rel', 'style', 'data-color']
+const ATRIBUTOS_PERMITIDOS = ['href', 'target', 'rel', 'style', 'data-color', 'src', 'alt']
 // Atributos que solo tienen sentido en ciertas etiquetas.
 const ATRIBUTOS_POR_ETIQUETA: Record<string, string[]> = {
   href: ['a'],
@@ -30,6 +34,8 @@ const ATRIBUTOS_POR_ETIQUETA: Record<string, string[]> = {
   rel: ['a'],
   style: ['span', 'mark'],
   'data-color': ['mark'],
+  src: ['img'],
+  alt: ['img'],
 }
 // Propiedades CSS que se conservan en `style`, según la etiqueta.
 const PROPIEDADES_POR_ETIQUETA: Record<string, string> = {
@@ -38,7 +44,13 @@ const PROPIEDADES_POR_ETIQUETA: Record<string, string> = {
 }
 // Valores de color sencillos: `#rgb`, nombres, `rgb(…)`/`hsl(…)`.
 const VALOR_COLOR = /^[#a-z0-9(),.%\s-]+$/i
-const URL_PERMITIDA = /^(?:https?:|mailto:)/i
+/** La única URL de imagen que admiten los comentarios (relativa, de esta aplicación). */
+export const URL_IMAGEN_PERMITIDA = /^\/api\/v1\/imagenes\/[0-9a-f]{32}$/
+// Para `href` y `src`: esquemas http/https/mailto sin distinguir mayúsculas
+// (como el backend) o la ruta exacta de una imagen. El hook deja en `src` solo
+// URL_IMAGEN_PERMITIDA.
+const URL_PERMITIDA =
+  /^(?:[hH][tT][tT][pP][sS]?:|[mM][aA][iI][lL][tT][oO]:|\/api\/v1\/imagenes\/[0-9a-f]{32}$)/
 const REL_ENLACES = 'noopener noreferrer nofollow'
 
 /**
@@ -46,7 +58,7 @@ const REL_ENLACES = 'noopener noreferrer nofollow'
  * historial): el preflight quita viñetas y márgenes de las listas.
  */
 export const CLASES_CONTENIDO_COMENTARIO =
-  'break-words [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_p:empty]:min-h-[1lh] [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_mark]:rounded-sm [&_mark]:px-0.5 [&_mark]:text-neutral-900'
+  'break-words [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_p:empty]:min-h-[1lh] [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_mark]:rounded-sm [&_mark]:px-0.5 [&_mark]:text-neutral-900 [&_img]:my-1 [&_img]:max-h-80 [&_img]:max-w-full [&_img]:rounded-md [&_img]:border'
 
 function filtrarEstilo(etiqueta: string, estilo: string): string {
   const propiedad = PROPIEDADES_POR_ETIQUETA[etiqueta]
@@ -76,6 +88,10 @@ function obtenerPurificador(): InstanciaDOMPurify {
       datos.keepAttr = false
       return
     }
+    if (datos.attrName === 'src' && !URL_IMAGEN_PERMITIDA.test(datos.attrValue)) {
+      datos.keepAttr = false
+      return
+    }
     if (datos.attrName === 'style') {
       const filtrado = filtrarEstilo(etiqueta, datos.attrValue)
       if (filtrado === '') datos.keepAttr = false
@@ -83,6 +99,11 @@ function obtenerPurificador(): InstanciaDOMPurify {
     }
   })
   instancia.addHook('afterSanitizeAttributes', (nodo) => {
+    // Una imagen sin `src` válido no muestra nada: se quita entera.
+    if (nodo.nodeName.toLowerCase() === 'img') {
+      if (!nodo.hasAttribute('src')) nodo.parentNode?.removeChild(nodo)
+      return
+    }
     if (nodo.nodeName.toLowerCase() !== 'a') return
     nodo.setAttribute('target', '_blank')
     nodo.setAttribute('rel', REL_ENLACES)
@@ -140,7 +161,37 @@ export function htmlComentarioEditable(texto: string): string {
   return esTextoPlano(texto) ? textoPlanoAHtml(texto) : texto
 }
 
+/**
+ * Si el comentario tiene algo que guardar: texto visible o alguna imagen subida
+ * a la aplicación (un comentario puede ser solo una captura de pantalla).
+ */
+export function tieneContenidoComentario(html: string): boolean {
+  if (textoVisible(html) !== '') return true
+  if (html === '') return false
+  const documento = new DOMParser().parseFromString(html, 'text/html')
+  return [...documento.querySelectorAll('img')].some((imagen) =>
+    URL_IMAGEN_PERMITIDA.test(imagen.getAttribute('src') ?? ''),
+  )
+}
+
+/** Envuelve cada imagen (no enlazada ya) en un enlace que la abre entera en una pestaña nueva. */
+function enlazarImagenes(html: string): string {
+  if (!html.includes('<img')) return html
+  const plantilla = document.createElement('template')
+  plantilla.innerHTML = html
+  for (const imagen of plantilla.content.querySelectorAll('img')) {
+    if (imagen.closest('a')) continue
+    const enlace = document.createElement('a')
+    enlace.setAttribute('href', imagen.getAttribute('src') ?? '')
+    enlace.setAttribute('target', '_blank')
+    enlace.setAttribute('rel', REL_ENLACES)
+    imagen.replaceWith(enlace)
+    enlace.append(imagen)
+  }
+  return plantilla.innerHTML
+}
+
 /** HTML saneado de un comentario, listo para `v-html`. */
 export function htmlComentarioMostrado(texto: string): string {
-  return sanitizarHtmlComentario(htmlComentarioEditable(texto))
+  return enlazarImagenes(sanitizarHtmlComentario(htmlComentarioEditable(texto)))
 }

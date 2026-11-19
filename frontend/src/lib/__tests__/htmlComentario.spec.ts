@@ -5,6 +5,7 @@ import {
   sanitizarHtmlComentario,
   textoPlanoAHtml,
   textoVisible,
+  tieneContenidoComentario,
 } from '../htmlComentario'
 
 describe('sanitizarHtmlComentario', () => {
@@ -90,5 +91,108 @@ describe('textoPlanoAHtml y htmlComentarioMostrado', () => {
   it('muestra el texto plano como párrafos y el HTML saneado', () => {
     expect(htmlComentarioMostrado('Línea 1\nLínea 2')).toBe('<p>Línea 1</p><p>Línea 2</p>')
     expect(htmlComentarioMostrado('<p>Hola</p><script>x</script>')).toBe('<p>Hola</p>')
+  })
+})
+
+describe('imágenes de los comentarios', () => {
+  const ID = '0123456789abcdef0123456789abcdef'
+  const SRC = `/api/v1/imagenes/${ID}`
+
+  it('conserva las imágenes guardadas en la aplicación con su texto alternativo', () => {
+    const html = `<p>Mira:</p><img src="${SRC}" alt="Captura de pantalla">`
+
+    expect(sanitizarHtmlComentario(html)).toBe(html)
+  })
+
+  it.each([
+    'https://ejemplo.com/a.png',
+    `//ejemplo.com${SRC}`,
+    'data:image/png;base64,iVBORw0KGgo=',
+    'javascript:alert(1)',
+    '/api/v1/imagenes/../tareas',
+    `${SRC}/../../tareas`,
+    `${SRC}?x=1`,
+    '/api/v1/imagenes/123',
+    '/api/v1/tareas/1',
+    '',
+  ])('quita las imágenes que no son de la aplicación (%s)', (src) => {
+    expect(sanitizarHtmlComentario(`<p>a</p><img src="${src}" alt="x">`)).toBe('<p>a</p>')
+  })
+
+  it('quita a las imágenes los atributos no permitidos', () => {
+    expect(
+      sanitizarHtmlComentario(
+        `<img src="${SRC}" alt="x" onerror="alert(1)" style="position:fixed" width="9" title="t" class="c" srcset="https://e.com/a.png 2x">`,
+      ),
+    ).toBe(`<img src="${SRC}" alt="x">`)
+  })
+
+  it('tieneContenidoComentario cuenta las imágenes guardadas como contenido', () => {
+    expect(tieneContenidoComentario(`<img src="${SRC}" alt="x">`)).toBe(true)
+    expect(tieneContenidoComentario('<p>a</p>')).toBe(true)
+    expect(tieneContenidoComentario('<p> </p>')).toBe(false)
+    expect(tieneContenidoComentario('<img src="https://ejemplo.com/a.png">')).toBe(false)
+    expect(tieneContenidoComentario('')).toBe(false)
+  })
+
+  it('al mostrarla, la imagen es un enlace que la abre entera en una pestaña nueva', () => {
+    expect(htmlComentarioMostrado(`<p>a</p><img src="${SRC}" alt="Captura de pantalla">`)).toBe(
+      `<p>a</p><a href="${SRC}" target="_blank" rel="noopener noreferrer nofollow"><img src="${SRC}" alt="Captura de pantalla"></a>`,
+    )
+  })
+
+  it('al mostrarla, una imagen ya enlazada no se vuelve a enlazar', () => {
+    const html = `<a href="https://ejemplo.com" target="_blank" rel="noopener noreferrer nofollow"><img src="${SRC}" alt="x"></a>`
+
+    expect(htmlComentarioMostrado(html)).toBe(html)
+  })
+})
+
+describe('saneado de imágenes y enlaces (pruebas de verificación)', () => {
+  const H = '0123456789abcdef0123456789abcdef'
+  const U = `/api/v1/imagenes/${H}`
+
+  it('conserva el href de los enlaces con el esquema en mayúsculas', () => {
+    expect(htmlComentarioMostrado('<p><a href="HTTPS://example.com">up</a></p>')).toContain(
+      'href="HTTPS://example.com"',
+    )
+    expect(htmlComentarioMostrado('<p><a href="Mailto:a@b.c">m</a></p>')).toContain(
+      'href="Mailto:a@b.c"',
+    )
+  })
+
+  it.each([
+    `<img src="${U.toUpperCase()}">`,
+    `<img src="/api/v1/imagenes/\t${H}">`,
+    `<img src="${U}?x">`,
+    `<img src="//evil.com${U}">`,
+    '<img src="data:image/png;base64,AAAA">',
+    '<img src="javascript:alert(1)">',
+    '<svg><image href="http://e/x"></image></svg>',
+  ])('quita por completo %s', (entrada) => {
+    expect(htmlComentarioMostrado(entrada)).toBe('')
+  })
+
+  it('de una imagen solo quedan src y alt, y se enlaza a sí misma', () => {
+    const salida = htmlComentarioMostrado(
+      `<img src="${U}" alt="&quot; onerror=&quot;x()" onerror="x()" srcset="http://e 1x" class="c">`,
+    )
+    const plantilla = document.createElement('template')
+    plantilla.innerHTML = salida
+    const enlace = plantilla.content.firstElementChild as HTMLAnchorElement
+    expect(enlace.tagName).toBe('A')
+    expect(enlace.getAttribute('href')).toBe(U)
+    expect(enlace.getAttribute('target')).toBe('_blank')
+    expect(enlace.getAttribute('rel')).toBe('noopener noreferrer nofollow')
+    const imagen = enlace.querySelector('img')!
+    expect(imagen.getAttributeNames().sort()).toEqual(['alt', 'src'])
+    expect(imagen.getAttribute('src')).toBe(U)
+    expect(imagen.getAttribute('alt')).toBe('" onerror="x()')
+  })
+
+  it('una imagen dentro de un enlace javascript: no conserva el javascript', () => {
+    expect(
+      htmlComentarioMostrado(`<a href="javascript:alert(1)"><img src="${U}"></a>`),
+    ).not.toContain('javascript')
   })
 })

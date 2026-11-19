@@ -24,6 +24,18 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 
+    # Subida de imagenes de los comentarios: la API admite hasta 5 MB por
+    # imagen (y responde 413 con su mensaje si pasa); el limite por defecto
+    # de nginx (1 MB) las cortaria antes. Se deja 1 MB de margen para el
+    # resto del multipart. Solo esta ruta; el resto de la API sigue con 1 MB.
+    location = /api/v1/imagenes {
+        client_max_body_size 6m;
+        set $backend ${URL_BACKEND};
+        proxy_pass $backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
     location /api/v1/ {
         # Con una variable en proxy_pass, nginx ignora la parte de ruta del
         # destino para el reemplazo del prefijo de location y reenvia la URI
