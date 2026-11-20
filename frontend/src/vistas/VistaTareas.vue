@@ -1674,13 +1674,21 @@ async function guardar(): Promise<void> {
             <template v-if="!estaPlegado(grupo.id) && agruparSubestado">
               <!-- Una sección por subestado: su cabecera nombra el grupo de filas. -->
               <TableBody
-                v-for="seccion in seccionesPorGrupo[grupo.id]"
+                v-for="(seccion, indiceSeccion) in seccionesPorGrupo[grupo.id]"
                 :id="seccion.idCuerpo"
                 :key="seccion.clave"
                 :data-grupo="grupo.id"
                 :data-subgrupo="seccion.clave"
               >
-                <TableRow class="hover:bg-transparent">
+                <!-- Una línea separa cada sección de subestado de la anterior. -->
+                <TableRow
+                  :data-separador-subestado="indiceSeccion > 0 ? '' : undefined"
+                  :class="
+                    indiceSeccion > 0
+                      ? 'border-foreground/20 border-t-2 hover:bg-transparent'
+                      : 'hover:bg-transparent'
+                  "
+                >
                   <TableHead
                     scope="rowgroup"
                     :colspan="numeroColumnasTabla"

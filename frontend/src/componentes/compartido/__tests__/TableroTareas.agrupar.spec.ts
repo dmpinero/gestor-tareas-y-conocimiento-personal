@@ -231,6 +231,28 @@ describe('TableroTareas: agrupar por subestado', () => {
     expect(localStorage.getItem(CLAVE_AGRUPAR)).toBe('false')
   })
 
+  it('una línea horizontal separa cada grupo del anterior, sin línea antes del primero ni sin agrupar', async () => {
+    await montar()
+    expect(document.body.querySelector('[data-separador-subestado]')).toBeNull()
+
+    botonAgrupar().click()
+    await flushPromises()
+
+    const separadores = [...columna('Pendiente').querySelectorAll('[data-separador-subestado]')]
+    expect(separadores).toHaveLength(2)
+    // Cada línea va justo antes de la cabecera del grupo que separa.
+    expect(separadores.map((s) => nombreAccesible(s.nextElementSibling as HTMLElement))).toEqual([
+      'En espera (1 tarea)',
+      'Sin subestado (1 tarea)',
+    ])
+    for (const separador of separadores) {
+      expect(separador.tagName).toBe('HR')
+      expect(separador.getAttribute('aria-hidden')).toBe('true')
+    }
+    // Una columna con un único grupo no lleva línea.
+    expect(columna('Hecho').querySelector('[data-separador-subestado]')).toBeNull()
+  })
+
   it('cada grupo se pliega y despliega con aria-expanded, solo en su columna, y se recuerda', async () => {
     await montar()
     botonAgrupar().click()
