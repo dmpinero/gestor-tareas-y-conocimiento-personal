@@ -25,12 +25,15 @@ const esPersona = computed(() => props.seleccion?.tipo === 'persona')
 const tareasRelacionadas = computed<Tarea[]>(() => {
   const seleccion = props.seleccion
   if (seleccion === null) return []
-  return props.tareas.filter((tarea) =>
-    (seleccion.tipo === 'etiqueta' ? tarea.etiquetas : tarea.asignados).includes(seleccion.nombre),
-  )
+  return props.tareas.filter((tarea) => {
+    if (seleccion.tipo === 'subestado') return tarea.subestado === seleccion.nombre
+    return (seleccion.tipo === 'etiqueta' ? tarea.etiquetas : tarea.asignados).includes(
+      seleccion.nombre,
+    )
+  })
 })
 
-// Las subtareas solo tienen persona asignada, no etiquetas.
+// Las subtareas solo tienen persona asignada, no etiquetas ni subestado.
 const subtareasRelacionadas = computed<{ subtarea: Subtarea; tarea: Tarea }[]>(() => {
   const seleccion = props.seleccion
   if (seleccion === null || seleccion.tipo !== 'persona') return []
@@ -44,14 +47,15 @@ const subtareasRelacionadas = computed<{ subtarea: Subtarea; tarea: Tarea }[]>((
 const titulo = computed(() => {
   const seleccion = props.seleccion
   if (seleccion === null) return ''
-  return `${seleccion.tipo === 'etiqueta' ? 'Etiqueta' : 'Persona'}: ${seleccion.nombre}`
+  const tipo = { etiqueta: 'Etiqueta', persona: 'Persona', subestado: 'Subestado' }[seleccion.tipo]
+  return `${tipo}: ${seleccion.nombre}`
 })
 
-const descripcion = computed(() =>
-  esPersona.value
-    ? 'Tareas y subtareas asignadas a esta persona.'
-    : 'Tareas que llevan esta etiqueta.',
-)
+const descripcion = computed(() => {
+  if (esPersona.value) return 'Tareas y subtareas asignadas a esta persona.'
+  if (props.seleccion?.tipo === 'subestado') return 'Tareas con este subestado.'
+  return 'Tareas que llevan esta etiqueta.'
+})
 
 const CLASE_ELEMENTO =
   'focus-visible:ring-ring/50 w-full rounded-md px-2 py-1.5 text-left text-sm outline-none [overflow-wrap:anywhere] hover:bg-accent focus-visible:ring-[3px]'

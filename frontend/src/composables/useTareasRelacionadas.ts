@@ -1,6 +1,6 @@
 import { inject, provide, ref, type InjectionKey, type Ref } from 'vue'
 
-export type TipoRelacion = 'etiqueta' | 'persona'
+export type TipoRelacion = 'etiqueta' | 'persona' | 'subestado'
 
 export interface SeleccionRelacionada {
   tipo: TipoRelacion

@@ -124,3 +124,31 @@ test('agrupa las tarjetas del tablero por subestado y mover solo cambia el estad
   await page.setViewportSize({ width: 390, height: 844 })
   await sinDesbordar(page)
 })
+
+test('pulsar un subestado muestra todas las tareas con ese subestado', async ({
+  page,
+  request,
+}) => {
+  const marca = `Pulsar${Date.now()}`
+  const bloqueada = `Bloqueada ${marca}`
+  await crearTarea(request, `${marca} uno`, { subestado: bloqueada })
+  await crearTarea(request, `${marca} dos`, { subestado: bloqueada })
+  await crearTarea(request, `${marca} tres`)
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Ver como lista' }).click()
+  await page.getByLabel('Buscar').fill(marca)
+  await page
+    .locator('tr[data-fila-tarea]', { hasText: `${marca} uno` })
+    .getByRole('button', { name: `Ver tareas con el subestado ${bloqueada}` })
+    .click()
+
+  const modal = page.getByRole('dialog', { name: `Subestado: ${bloqueada}` })
+  await expect(modal).toContainText('Tareas con este subestado.')
+  const tareas = modal.getByRole('list', { name: 'Tareas' })
+  await expect(tareas).toContainText(`${marca} uno`)
+  await expect(tareas).toContainText(`${marca} dos`)
+  await expect(tareas).not.toContainText(`${marca} tres`)
+  await page.screenshot({ path: 'e2e/capturas/agrupar-03-subestado-relacionadas.png' })
+  await sinViolaciones(page)
+})

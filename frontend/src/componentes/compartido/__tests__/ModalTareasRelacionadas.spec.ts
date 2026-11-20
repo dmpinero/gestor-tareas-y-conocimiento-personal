@@ -24,7 +24,13 @@ function tarea(datos: Partial<Tarea> & Pick<Tarea, 'id' | 'nombre'>): Tarea {
 }
 
 const TAREAS: Tarea[] = [
-  tarea({ id: 1, nombre: 'Preparar demo', etiquetas: ['Urgente'], asignados: ['Ana'] }),
+  tarea({
+    id: 1,
+    nombre: 'Preparar demo',
+    etiquetas: ['Urgente'],
+    asignados: ['Ana'],
+    subestado: 'Bloqueada',
+  }),
   tarea({
     id: 2,
     nombre: 'Revisar contrato',
@@ -35,10 +41,15 @@ const TAREAS: Tarea[] = [
       subtarea({ id: 11, nombre: 'Firmar', asignado: 'Luis' }),
     ],
   }),
-  tarea({ id: 3, nombre: 'Llamar a cliente', etiquetas: ['Urgente', 'Legal'] }),
+  tarea({
+    id: 3,
+    nombre: 'Llamar a cliente',
+    etiquetas: ['Urgente', 'Legal'],
+    subestado: 'Bloqueada',
+  }),
 ]
 
-function montar(seleccion: { tipo: 'etiqueta' | 'persona'; nombre: string } | null) {
+function montar(seleccion: { tipo: 'etiqueta' | 'persona' | 'subestado'; nombre: string } | null) {
   return mount(ModalTareasRelacionadas, {
     props: { seleccion, tareas: TAREAS },
     attachTo: document.body,
@@ -76,6 +87,16 @@ describe('ModalTareasRelacionadas', () => {
     const envoltorio = montar({ tipo: 'etiqueta', nombre: 'Urgente' })
     await flushPromises()
     expect(dialogo().querySelector('h2')?.textContent).toContain('Etiqueta: Urgente')
+    expect(textosDe('Tareas')).toEqual(['Preparar demo', 'Llamar a cliente'])
+    expect(dialogo().querySelector('ul[aria-label="Subtareas"]')).toBeNull()
+    envoltorio.unmount()
+  })
+
+  it('un subestado lista todas las tareas que lo tienen, sin sección de subtareas', async () => {
+    const envoltorio = montar({ tipo: 'subestado', nombre: 'Bloqueada' })
+    await flushPromises()
+    expect(dialogo().querySelector('h2')?.textContent).toContain('Subestado: Bloqueada')
+    expect(dialogo().textContent).toContain('Tareas con este subestado.')
     expect(textosDe('Tareas')).toEqual(['Preparar demo', 'Llamar a cliente'])
     expect(dialogo().querySelector('ul[aria-label="Subtareas"]')).toBeNull()
     envoltorio.unmount()

@@ -28,6 +28,21 @@ describe('NombreRelacionado', () => {
     expect(proveedor!.seleccion.value).toEqual({ tipo: 'persona', nombre: 'Ana' })
   })
 
+  it('un subestado abre el modal con su nombre y lo dice en su nombre accesible', async () => {
+    let proveedor: ReturnType<typeof useProveedorTareasRelacionadas> | null = null
+    const vista = defineComponent({
+      setup() {
+        proveedor = useProveedorTareasRelacionadas()
+        return () => h(NombreRelacionado, { tipo: 'subestado', nombre: 'Bloqueada' })
+      },
+    })
+    const boton = mount(vista).get('button')
+    expect(boton.attributes('aria-label')).toBe('Ver tareas con el subestado Bloqueada')
+
+    await boton.trigger('click')
+    expect(proveedor!.seleccion.value).toEqual({ tipo: 'subestado', nombre: 'Bloqueada' })
+  })
+
   it('admite otro contenido (p. ej. un avatar) sin cambiar su nombre accesible', () => {
     const vista = defineComponent({
       setup() {

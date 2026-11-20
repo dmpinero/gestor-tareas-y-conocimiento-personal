@@ -809,10 +809,15 @@ function terminarArrastre(): void {
 
                       <p v-if="tarea.subestado" class="flex">
                         <span class="sr-only">{{ 'Subestado: ' }}</span>
-                        <span
-                          data-testid="subestado-tablero"
-                          :class="`${CLASE_PILDORA} ${colorEtiqueta(tarea.subestado)} [overflow-wrap:anywhere]`"
-                          >{{ tarea.subestado }}</span
+                        <NombreRelacionado
+                          tipo="subestado"
+                          :nombre="tarea.subestado"
+                          class="rounded-full"
+                          ><span
+                            data-testid="subestado-tablero"
+                            :class="`${CLASE_PILDORA} ${colorEtiqueta(tarea.subestado)} [overflow-wrap:anywhere]`"
+                            >{{ tarea.subestado }}</span
+                          ></NombreRelacionado
                         >
                       </p>
 

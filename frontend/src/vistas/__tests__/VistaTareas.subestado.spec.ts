@@ -331,3 +331,84 @@ describe('VistaTareas: subestado en el tablero', () => {
     }
   })
 })
+
+describe('VistaTareas: pulsar un subestado abre sus tareas, como las etiquetas', () => {
+  function tituloModal(): string[] {
+    return [...document.body.querySelectorAll('[role="dialog"] h2')].map(
+      (h) => h.textContent?.trim() ?? '',
+    )
+  }
+
+  function tareasDelModal(): string[] {
+    const dialogo = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+      (d) => d.querySelector('h2')?.textContent?.trim() === 'Subestado: Bloqueado',
+    )
+    if (!dialogo) throw new Error('No se abrió el modal del subestado')
+    return [...dialogo.querySelectorAll('ul[aria-label="Tareas"] li')].map(
+      (li) => li.textContent?.trim() ?? '',
+    )
+  }
+
+  const OTRA_BLOQUEADA = { ...EN_PAUSA, id: 3, nombre: 'Otra bloqueada', subestado: 'Bloqueado' }
+
+  it('desde la columna de la lista', async () => {
+    const envoltorio = await montar([BLOQUEADA, EN_PAUSA, OTRA_BLOQUEADA])
+
+    await envoltorio
+      .get('[data-columna="subestado"] button[aria-label="Ver tareas con el subestado Bloqueado"]')
+      .trigger('click')
+    await flushPromises()
+
+    expect(tituloModal()).toContain('Subestado: Bloqueado')
+    expect(tareasDelModal().join(' | ')).toContain('Bloqueada')
+    expect(tareasDelModal().join(' | ')).toContain('Otra bloqueada')
+    expect(tareasDelModal().join(' | ')).not.toContain('En pausa')
+  })
+
+  it('desde la tarjeta del tablero', async () => {
+    const grupo = {
+      id: 1,
+      nombre: 'Desarrollo',
+      tareas: 1,
+      estados: [{ id: 10, nombre: 'Pendiente', posicion: 1, tareas: 1 }],
+    }
+    const enGrupo = {
+      ...BLOQUEADA,
+      grupo_estados: { id: 1, nombre: 'Desarrollo' },
+      estado: { id: 10, nombre: 'Pendiente' },
+    }
+    const envoltorio = await montar([enGrupo, OTRA_BLOQUEADA], [grupo])
+    document.body.querySelector<HTMLButtonElement>('button[aria-label="Ver como tablero"]')!.click()
+    await flushPromises()
+
+    const boton = envoltorio.get('button[aria-label="Ver tareas con el subestado Bloqueado"]')
+    expect(boton.find('[data-testid="subestado-tablero"]').exists()).toBe(true)
+    await boton.trigger('click')
+    await flushPromises()
+
+    expect(tituloModal()).toContain('Subestado: Bloqueado')
+    expect(tareasDelModal().join(' | ')).toContain('Otra bloqueada')
+  })
+
+  it('desde el detalle de la tarea', async () => {
+    const envoltorio = await montar([BLOQUEADA, OTRA_BLOQUEADA])
+    await envoltorio.get('button[aria-label="Acciones de la tarea Bloqueada"]').trigger('click')
+    await flushPromises()
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="Ver detalle de la tarea Bloqueada"]')!
+      .click()
+    await flushPromises()
+
+    const detalle = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find((d) =>
+      d.querySelector('[data-testid="subestado-detalle"]'),
+    )!
+    const boton = detalle.querySelector<HTMLButtonElement>(
+      'button[aria-label="Ver tareas con el subestado Bloqueado"]',
+    )
+    expect(boton).not.toBeNull()
+    boton!.click()
+    await flushPromises()
+
+    expect(tituloModal()).toContain('Subestado: Bloqueado')
+  })
+})
