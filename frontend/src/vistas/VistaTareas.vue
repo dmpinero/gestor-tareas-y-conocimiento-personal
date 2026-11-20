@@ -1193,8 +1193,8 @@ async function guardar(): Promise<void> {
             v-if="tarea.subestado"
             data-testid="pildora-subestado"
             :class="`${CLASE_PILDORA} ${colorEtiqueta(tarea.subestado)}`"
-            >{{ tarea.subestado }}</span
-          >
+            ><NombreRelacionado tipo="subestado" :nombre="tarea.subestado"
+          /></span>
           <template v-else>—</template>
         </TableCell>
         <TableCell v-if="esVisible('fechaCreacion')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{

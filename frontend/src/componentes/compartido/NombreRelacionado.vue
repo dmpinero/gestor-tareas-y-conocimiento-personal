@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useAbrirTareasRelacionadas, type TipoRelacion } from '@/composables/useTareasRelacionadas'
 
-// Nombre de una etiqueta o persona que, dentro de una vista que ofrece el modal
+// Nombre de una etiqueta, persona o subestado que, dentro de una vista que ofrece el modal
 // de tareas relacionadas, se pulsa para abrirlo. Fuera de ella es solo texto.
 // El contenido visible puede cambiarse por la ranura (p. ej. un avatar); el
 // nombre accesible es siempre el mismo.
@@ -13,11 +13,11 @@ const props = defineProps<{
 
 const abrir = useAbrirTareasRelacionadas()
 
-const etiquetaAccesible = computed(() =>
-  props.tipo === 'etiqueta'
-    ? `Ver tareas con la etiqueta ${props.nombre}`
-    : `Ver tareas y subtareas de ${props.nombre}`,
-)
+const etiquetaAccesible = computed(() => {
+  if (props.tipo === 'etiqueta') return `Ver tareas con la etiqueta ${props.nombre}`
+  if (props.tipo === 'subestado') return `Ver tareas con el subestado ${props.nombre}`
+  return `Ver tareas y subtareas de ${props.nombre}`
+})
 </script>
 
 <template>

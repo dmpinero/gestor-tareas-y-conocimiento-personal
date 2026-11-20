@@ -362,10 +362,12 @@ function alCambiarApertura(abierta: boolean): void {
                     </ul>
                   </dd>
                   <dd v-else-if="campo.pildora" class="min-w-0 text-sm">
-                    <span
-                      data-testid="subestado-detalle"
-                      :class="`${CLASE_PILDORA} ${colorEtiqueta(campo.pildora)} [overflow-wrap:anywhere]`"
-                      >{{ campo.pildora }}</span
+                    <NombreRelacionado tipo="subestado" :nombre="campo.pildora" class="rounded-full"
+                      ><span
+                        data-testid="subestado-detalle"
+                        :class="`${CLASE_PILDORA} ${colorEtiqueta(campo.pildora)} [overflow-wrap:anywhere]`"
+                        >{{ campo.pildora }}</span
+                      ></NombreRelacionado
                     >
                   </dd>
                   <dd
