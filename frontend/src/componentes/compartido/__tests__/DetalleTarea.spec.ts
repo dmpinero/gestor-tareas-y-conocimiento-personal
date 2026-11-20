@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/vue-3'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -149,6 +149,26 @@ function botonCerrar(): HTMLButtonElement {
   if (botones.length !== 1) throw new Error(`Se esperaba un botón "Cerrar" y hay ${botones.length}`)
   return botones[0] as HTMLButtonElement
 }
+
+// jsdom no da medidas a los rangos de texto: ProseMirror (el editor de los
+// comentarios) las pide para desplazarse hasta el cursor, también después de
+// que un test termine de editar un comentario.
+const rectVacio = () => new DOMRect(0, 0, 0, 0)
+const listaVacia = () => [] as unknown as DOMRectList
+const medidasOriginales = {
+  getClientRects: Range.prototype.getClientRects,
+  getBoundingClientRect: Range.prototype.getBoundingClientRect,
+}
+
+beforeAll(() => {
+  Range.prototype.getClientRects = listaVacia
+  Range.prototype.getBoundingClientRect = rectVacio
+})
+
+afterAll(() => {
+  Range.prototype.getClientRects = medidasOriginales.getClientRects
+  Range.prototype.getBoundingClientRect = medidasOriginales.getBoundingClientRect
+})
 
 describe('DetalleTarea', () => {
   beforeEach(() => {
@@ -771,6 +791,72 @@ describe('DetalleTarea', () => {
       await pulsarFuera()
       expect(confirmacionDescarte()).not.toBeNull()
       expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+    })
+
+    async function confirmarEdicionComentario(envoltorio: VueWrapper): Promise<void> {
+      modal().querySelector<HTMLButtonElement>('button[aria-label^="Editar comentario "]')!.click()
+      await flushPromises()
+      await escribirEnEditor(envoltorio, 'Nuevo texto del comentario', '<p>Cambiado</p>')
+      await pulsarEn(
+        modal().querySelector<HTMLElement>('form[aria-label="Editar comentario"]')!,
+        'Guardar',
+      )
+      const grupo = modal().querySelector<HTMLElement>(
+        '[role="group"][aria-label="¿Guardar los cambios del comentario?"]',
+      )!
+      await pulsarEn(grupo, 'Guardar')
+    }
+
+    it('con la edición de un comentario ya confirmada y guardándose, Escape cierra sin preguntar', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValueOnce([COMENTARIO])
+      // La petición sigue en curso: lo escrito no se pierde aunque se cierre.
+      let resolverGuardado: (valor: unknown) => void = () => {}
+      vi.mocked(clienteApi.actualizar).mockReturnValueOnce(
+        new Promise((resolver) => {
+          resolverGuardado = resolver
+        }),
+      )
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await confirmarEdicionComentario(envoltorio)
+
+      modal().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await flushPromises()
+
+      expect(confirmacionDescarte()).toBeNull()
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+      resolverGuardado({ ...COMENTARIO, texto: '<p>Cambiado</p>' })
+      await flushPromises()
+    })
+
+    it('tras guardar la edición de un comentario, Escape cierra sin preguntar', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValueOnce([COMENTARIO])
+      vi.mocked(clienteApi.actualizar).mockResolvedValueOnce({
+        ...COMENTARIO,
+        texto: '<p>Cambiado</p>',
+      })
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await confirmarEdicionComentario(envoltorio)
+      expect(modal().querySelector('form[aria-label="Editar comentario"]')).toBeNull()
+
+      modal().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await flushPromises()
+
+      expect(confirmacionDescarte()).toBeNull()
+      expect(envoltorio.emitted('cerrar')).toHaveLength(1)
+    })
+
+    it('si falla el guardado de la edición de un comentario, Escape vuelve a pedir confirmación', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValueOnce([COMENTARIO])
+      vi.mocked(clienteApi.actualizar).mockRejectedValueOnce(new Error('Sin conexión'))
+      const envoltorio = await montar(TAREA_SIN_TIPO)
+      await confirmarEdicionComentario(envoltorio)
+      expect(modal().querySelector('form[aria-label="Editar comentario"]')).not.toBeNull()
+
+      modal().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await flushPromises()
+
+      expect(confirmacionDescarte()).not.toBeNull()
+      expect(envoltorio.emitted('cerrar')).toBeUndefined()
     })
   })
 })

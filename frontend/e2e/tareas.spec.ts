@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './base'
+import { test, expect, type APIRequestContext, type Locator, type Page } from './base'
 import AxeBuilder from '@axe-core/playwright'
 import { activarModoOscuro } from './utilidades'
 
@@ -720,6 +720,149 @@ test('edita y borra subtareas y comentarios pidiendo confirmación', async ({ pa
   await accionDeFila(page, nombre, 'Ver detalle de la tarea')
   await expect(detalle.getByText('Esta tarea no tiene subtareas.')).toBeVisible()
   await expect(detalle.getByText('Todavía no hay comentarios.')).toBeVisible()
+})
+
+// Regresiones del cierre del detalle tras editar un comentario: no debe pedir
+// descartar lo ya guardado ni dejar la página bloqueada (el <body> con
+// `pointer-events: none` o el resto de la página oculto a la accesibilidad).
+async function crearTareaConComentario(
+  request: APIRequestContext,
+  nombre: string,
+): Promise<number> {
+  const creada = await request.post('/api/v1/tareas', {
+    data: { nombre, descripcion: 'Cierre del detalle', fecha_creacion: '2026-01-01T09:00:00' },
+  })
+  expect(creada.status()).toBe(201)
+  const { id } = (await creada.json()) as { id: number }
+  const comentario = await request.post(`/api/v1/tareas/${id}/comentarios`, {
+    data: { texto: 'Comentario original' },
+  })
+  expect(comentario.status()).toBe(201)
+  return id
+}
+
+async function abrirEdicionComentario(page: Page, nombre: string, texto: string) {
+  await page.goto('/tareas')
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
+  const detalle = page.getByRole('dialog', { name: nombre })
+  await detalle.getByRole('button', { name: /^Editar comentario de las / }).click()
+  const campo = detalle.getByRole('textbox', { name: 'Nuevo texto del comentario' })
+  // El editor se enfoca al crearse; antes, rellenar añadiría al texto anterior.
+  await expect(campo).toBeFocused()
+  await campo.fill(texto)
+  return detalle
+}
+
+async function confirmarEdicionComentario(detalle: Locator): Promise<void> {
+  await detalle
+    .getByRole('form', { name: 'Editar comentario' })
+    .getByRole('button', { name: 'Guardar' })
+    .click()
+  await detalle
+    .getByRole('group', { name: '¿Guardar los cambios del comentario?' })
+    .getByRole('button', { name: 'Guardar' })
+    .click()
+}
+
+async function esperarPaginaUtilizable(page: Page, nombre: string): Promise<void> {
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => document.body.style.pointerEvents)).not.toBe('none')
+  // Una acción de fila responde: la página no se ha quedado bloqueada.
+  await accionDeFila(page, nombre, 'Ver detalle de la tarea')
+  await expect(page.getByRole('dialog', { name: nombre })).toBeVisible()
+}
+
+test('tras editar y guardar un comentario, Escape cierra el detalle sin bloquear la página', async ({
+  page,
+  request,
+}) => {
+  const nombre = `Cierre tras editar ${Date.now()}`
+  const id = await crearTareaConComentario(request, nombre)
+
+  const detalle = await abrirEdicionComentario(page, nombre, 'Comentario guardado')
+  await confirmarEdicionComentario(detalle)
+  await expect(detalle.getByRole('form', { name: 'Editar comentario' })).toHaveCount(0)
+  await expect(detalle.getByTestId('texto-comentario')).toHaveText('Comentario guardado')
+
+  await page.keyboard.press('Escape')
+
+  await esperarPaginaUtilizable(page, nombre)
+  const guardados = (await (await request.get(`/api/v1/tareas/${id}/comentarios`)).json()) as {
+    texto: string
+  }[]
+  expect(guardados.map((comentario) => comentario.texto)).toEqual(['<p>Comentario guardado</p>'])
+})
+
+test('Escape mientras se guarda la edición de un comentario cierra el detalle y la guarda', async ({
+  page,
+  request,
+}) => {
+  const nombre = `Cierre guardando ${Date.now()}`
+  const id = await crearTareaConComentario(request, nombre)
+  // La petición de guardado no responde hasta que el test lo decide.
+  let soltarGuardado: () => void = () => {}
+  const guardadoRetenido = new Promise<void>((resolver) => {
+    soltarGuardado = resolver
+  })
+  let guardadoPedido: () => void = () => {}
+  const peticionRecibida = new Promise<void>((resolver) => {
+    guardadoPedido = resolver
+  })
+  await page.route(`**/api/v1/tareas/${id}/comentarios/*`, async (ruta) => {
+    if (ruta.request().method() !== 'PUT') return ruta.fallback()
+    guardadoPedido()
+    await guardadoRetenido
+    await ruta.fallback()
+  })
+
+  const detalle = await abrirEdicionComentario(page, nombre, 'Guardado al cerrar')
+  await confirmarEdicionComentario(detalle)
+  await peticionRecibida
+  // El clic en "Guardar" de la confirmación deja el foco fuera de ella.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.keyboard.press('Escape')
+
+  // Lo escrito no se pierde (la petición sigue): no pide descartar.
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  soltarGuardado()
+  await expect
+    .poll(async () => {
+      const respuesta = await request.get(`/api/v1/tareas/${id}/comentarios`)
+      return ((await respuesta.json()) as { texto: string }[]).map((c) => c.texto)
+    })
+    .toEqual(['<p>Guardado al cerrar</p>'])
+  await esperarPaginaUtilizable(page, nombre)
+})
+
+test('con la edición de un comentario cambiada sin guardar, Escape pide descartar los cambios', async ({
+  page,
+  request,
+}) => {
+  const nombre = `Descartar edición ${Date.now()}`
+  await crearTareaConComentario(request, nombre)
+
+  const detalle = await abrirEdicionComentario(page, nombre, 'Sin guardar')
+  // Escape dentro del editor cancela la edición; fuera de él cierra el detalle.
+  await detalle.getByRole('button', { name: 'Añadir subtarea' }).focus()
+  await page.keyboard.press('Escape')
+
+  const confirmacion = page.getByRole('alertdialog', { name: '¿Descartar los cambios?' })
+  await expect(confirmacion).toBeVisible()
+  await confirmacion.getByRole('button', { name: 'Seguir editando' }).click()
+  await expect(confirmacion).toBeHidden()
+  await expect(detalle.getByRole('textbox', { name: 'Nuevo texto del comentario' })).toHaveText(
+    'Sin guardar',
+  )
+
+  await detalle.getByRole('button', { name: 'Añadir subtarea' }).focus()
+  await page.keyboard.press('Escape')
+  await confirmacion.getByRole('button', { name: 'Descartar' }).click()
+  await esperarPaginaUtilizable(page, nombre)
+  await expect(
+    page.getByRole('dialog', { name: nombre }).getByTestId('texto-comentario'),
+  ).toHaveText('Comentario original')
 })
 
 test('en pantallas estrechas muestra las subtareas como tarjetas sin desbordar', async ({

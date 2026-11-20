@@ -738,6 +738,37 @@ describe('ComentariosTarea: editar', () => {
     expect(actualizar).not.toHaveBeenCalled()
   })
 
+  it('mientras se guarda la edición, Escape no vuelve a la edición ni la cancela', async () => {
+    obtener.mockResolvedValue(COMENTARIOS)
+    let resolverGuardado: (valor: Comentario) => void = () => {}
+    actualizar.mockReturnValue(
+      new Promise<Comentario>((resolver) => {
+        resolverGuardado = resolver
+      }),
+    )
+    const envoltorio = await montar()
+    await abrirEdicion(envoltorio)
+    await campoEdicion(envoltorio).setValue('Texto nuevo')
+    await flushPromises()
+    await pedirGuardar(envoltorio)
+    await botonDe(envoltorio, GRUPO_GUARDAR, 'Guardar').trigger('click')
+    await flushPromises()
+
+    await envoltorio.get(GRUPO_GUARDAR).trigger('keydown', { key: 'Escape' })
+    await campoEdicion(envoltorio).trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+
+    expect(envoltorio.find(GRUPO_GUARDAR).exists()).toBe(true)
+    expect((campoEdicion(envoltorio).element as HTMLTextAreaElement).value).toBe('Texto nuevo')
+
+    resolverGuardado({ ...COMENTARIOS[1]!, texto: 'Texto nuevo', editado: COMENTARIOS[1]!.creado })
+    await flushPromises()
+    expect(envoltorio.find('textarea[aria-label="Nuevo texto del comentario"]').exists()).toBe(
+      false,
+    )
+    expect(textosComentarios(envoltorio)).toContain('Texto nuevo')
+  })
+
   it('Cancelar en el formulario restaura el comentario y devuelve el foco al botón de editar', async () => {
     obtener.mockResolvedValue(COMENTARIOS)
     const envoltorio = await montar()
