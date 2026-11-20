@@ -292,6 +292,18 @@ class TareaActualizarEsquema(TareaCrearEsquema):
     )
 
 
+class TareaSubestadoEsquema(BaseModel):
+    """Cuerpo del cambio de subestado de una tarea: solo cambia el subestado."""
+
+    subestado: NombreSubestado | None = Field(
+        description=(
+            "Obligatorio. Nombre del nuevo subestado, con las mismas reglas que en el "
+            "alta (se busca en el catálogo sin distinguir mayúsculas y se da de alta si "
+            "no existe), o null para dejar la tarea sin subestado."
+        ),
+    )
+
+
 class TareaCompletadaEsquema(BaseModel):
     """Cuerpo del cambio de estado. Solo admite ``true`` o ``false`` de JSON: una
     cadena como ``"true"``, un número o ``null`` se rechazan con 422."""
