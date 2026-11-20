@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { obtenerUltimaVersion } from '@/api/github'
+import { obtenerVersionMostrada } from '@/api/github'
 
 const version = ref<string | null>(null)
 
 onMounted(async () => {
   try {
-    version.value = await obtenerUltimaVersion()
+    version.value = await obtenerVersionMostrada()
   } catch {
-    // Sin conexión con GitHub (offline, límite de peticiones...): se omite el
-    // número de versión en vez de romper la barra de estado.
+    // Sin conexión con GitHub y sin ninguna versión guardada en el navegador:
+    // se omite el número de versión en vez de romper la barra de estado.
     version.value = null
   }
 })
