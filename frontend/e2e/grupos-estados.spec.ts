@@ -247,3 +247,76 @@ test('los carriles del tablero ocupan todo el ancho disponible', async ({ page, 
   )
   expect(desborda).toBe(false)
 })
+
+test('el tablero muestra 1 o 2 tarjetas por fila en cada estado según se elija', async ({
+  page,
+  request,
+}) => {
+  const marca = `Fila${Date.now()}`
+  const grupo = `Grupo ${marca}`
+  const creado = await request.post('/api/v1/grupos-estados', { data: { nombre: grupo } })
+  expect(creado.status()).toBe(201)
+  const { id } = (await creado.json()) as { id: number }
+  for (const estado of ['Pendiente', 'En curso', 'Hecho']) {
+    const respuesta = await request.post(`/api/v1/grupos-estados/${id}/estados`, {
+      data: { nombre: estado },
+    })
+    expect(respuesta.status()).toBe(201)
+  }
+  for (const nombre of [
+    'Preparar propuesta',
+    'Llamar al cliente',
+    'Revisar contrato',
+    'Enviar factura',
+  ]) {
+    const respuesta = await request.post('/api/v1/tareas', {
+      data: {
+        nombre: `${nombre} ${marca}`,
+        descripcion: 'Tarjetas por fila',
+        fecha_creacion: '2026-01-01T09:00:00',
+        grupo_estados_id: id,
+      },
+    })
+    expect(respuesta.status()).toBe(201)
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Ver como tablero' }).click()
+  await page.getByRole('combobox', { name: 'Grupo del tablero' }).selectOption({ label: grupo })
+  await page.getByLabel('Buscar').fill(marca)
+  const opciones = page.getByRole('radiogroup', { name: 'Tarjetas por fila' })
+  await expect(opciones.getByRole('radio', { name: '1' })).toBeChecked()
+
+  const tarjetas = page
+    .getByRole('region', { name: 'Estado Pendiente' })
+    .getByRole('list', { name: 'Tareas en Pendiente' })
+    .locator(':scope > li')
+  await expect(tarjetas).toHaveCount(4)
+  const posiciones = async () =>
+    Promise.all([0, 1].map(async (i) => (await tarjetas.nth(i).boundingBox())!))
+  let [primera, segunda] = await posiciones()
+  expect(segunda!.y).toBeGreaterThan(primera!.y) // una debajo de otra
+  await page.screenshot({ path: 'e2e/capturas/grupos-06-tablero-1-por-fila.png' })
+
+  await opciones.getByRole('radio', { name: '2' }).check()
+  ;[primera, segunda] = await posiciones()
+  expect(Math.abs(segunda!.y - primera!.y)).toBeLessThanOrEqual(1) // lado a lado
+  expect(segunda!.x).toBeGreaterThan(primera!.x)
+  await page.screenshot({ path: 'e2e/capturas/grupos-07-tablero-2-por-fila.png' })
+  const resultado = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(resultado.violations).toEqual([])
+
+  // Se recuerda al recargar y en un móvil no desborda la página.
+  await page.reload()
+  await expect(
+    page.getByRole('radiogroup', { name: 'Tarjetas por fila' }).getByRole('radio', { name: '2' }),
+  ).toBeChecked()
+  await page.setViewportSize({ width: 390, height: 844 })
+  const desborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  )
+  expect(desborda).toBe(false)
+})

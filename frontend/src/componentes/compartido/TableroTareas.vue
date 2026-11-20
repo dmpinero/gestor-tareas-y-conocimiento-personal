@@ -170,6 +170,31 @@ function colocar(tarea: Tarea, estado: EstadoGrupo, indice: number): void {
   guardarOrden()
 }
 
+// --- Tarjetas por fila ---------------------------------------------------------
+// Cada estado puede mostrar 1 tarjeta por fila (por defecto) o 2, para ver más
+// tareas a la vez. Se recuerda en este navegador; un valor no válido vale 1.
+const CLAVE_TARJETAS_POR_FILA = 'gestor-tareas:tarjetas-por-fila-tablero'
+const OPCIONES_TARJETAS_POR_FILA = [1, 2] as const
+type TarjetasPorFila = (typeof OPCIONES_TARJETAS_POR_FILA)[number]
+
+function leerTarjetasPorFila(): TarjetasPorFila {
+  try {
+    return localStorage.getItem(CLAVE_TARJETAS_POR_FILA) === '2' ? 2 : 1
+  } catch {
+    return 1
+  }
+}
+
+const tarjetasPorFila = ref<TarjetasPorFila>(leerTarjetasPorFila())
+
+watch(tarjetasPorFila, (valor) => {
+  try {
+    localStorage.setItem(CLAVE_TARJETAS_POR_FILA, String(valor))
+  } catch {
+    // Sin almacenamiento la elección dura la sesión.
+  }
+})
+
 // --- Agrupar por subestado ---------------------------------------------------
 // Con "Agrupar por subestado", las tarjetas de cada columna (en su orden) se
 // reparten en bloques plegables por subestado; mover una tarjeta solo cambia
@@ -585,6 +610,34 @@ function terminarArrastre(): void {
           <ListTree aria-hidden="true" />
           Agrupar por subestado
         </Button>
+        <div class="flex flex-col gap-1.5">
+          <span id="tablero-tarjetas-por-fila" class="text-sm leading-none font-medium select-none"
+            >Tarjetas por fila</span
+          >
+          <!-- Control segmentado con radios nativos: el radio, transparente, cubre
+               cada opción para que el clic y el teclado sigan siendo los del radio. -->
+          <div
+            role="radiogroup"
+            aria-labelledby="tablero-tarjetas-por-fila"
+            class="bg-muted inline-flex rounded-md border p-0.5"
+          >
+            <div v-for="opcion in OPCIONES_TARJETAS_POR_FILA" :key="opcion" class="relative">
+              <input
+                :id="`tablero-tarjetas-por-fila-${opcion}`"
+                v-model="tarjetasPorFila"
+                type="radio"
+                name="tablero-tarjetas-por-fila"
+                :value="opcion"
+                class="peer absolute inset-0 z-10 cursor-pointer opacity-0"
+              />
+              <Label
+                :for="`tablero-tarjetas-por-fila-${opcion}`"
+                class="text-muted-foreground peer-checked:bg-background peer-checked:text-foreground peer-focus-visible:ring-ring/50 flex h-8 min-w-10 items-center justify-center rounded-sm px-3 font-normal peer-checked:shadow-sm peer-focus-visible:ring-[3px]"
+                >{{ opcion }}</Label
+              >
+            </div>
+          </div>
+        </div>
         <div v-if="grupoActivo.estados.length > 0" class="w-full pb-3 sm:w-64">
           <BarraEstados :estados="estadosBarra" :titulo="grupoActivo.nombre" />
         </div>
@@ -606,7 +659,7 @@ function terminarArrastre(): void {
              textos sr-only (posición absoluta) de las columnas se recorten aquí:
              sin él se posicionaban respecto a un antecesor fuera del scroll y
              ensanchaban la página. Los carriles se reparten el ancho por igual
-             (flex-1 basis-0) con un mínimo de 18rem: con pocos estados llenan el
+             (flex-1 basis-0) con un mínimo de 18rem (30rem con 2 tarjetas por fila): con pocos estados llenan el
              tablero y con muchos desplazan en horizontal. -->
         <div class="relative flex max-w-full items-start gap-3 overflow-x-auto pb-2">
           <section
@@ -615,7 +668,8 @@ function terminarArrastre(): void {
             :aria-label="`Estado ${estado.nombre}`"
             :data-destino="idColumnaDestino === estado.id ? 'true' : undefined"
             :class="[
-              'bg-muted relative flex min-w-72 flex-1 basis-0 flex-col rounded-lg border',
+              'bg-muted relative flex flex-1 basis-0 flex-col rounded-lg border',
+              tarjetasPorFila === 2 ? 'min-w-[30rem]' : 'min-w-72',
               idColumnaDestino === estado.id && 'ring-primary ring-2',
             ]"
             @dragover="alArrastrarSobre($event, estado)"
@@ -672,7 +726,7 @@ function terminarArrastre(): void {
                   v-if="!estaPlegado(estado, bloque)"
                   :id="agrupar ? idBloque(estado, indice) : undefined"
                   :aria-label="etiquetaLista(estado, bloque)"
-                  class="flex flex-col gap-2"
+                  :class="['grid gap-2', tarjetasPorFila === 2 ? 'grid-cols-2' : 'grid-cols-1']"
                 >
                   <!-- Una línea encima o debajo marca dónde quedará la tarjeta. -->
                   <li
