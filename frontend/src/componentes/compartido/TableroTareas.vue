@@ -197,8 +197,10 @@ watch(tarjetasPorFila, (valor) => {
 
 // --- Agrupar por subestado ---------------------------------------------------
 // Con "Agrupar por subestado", las tarjetas de cada columna (en su orden) se
-// reparten en bloques plegables por subestado; mover una tarjeta solo cambia
-// su estado. Se recuerda en este navegador si se agrupa y qué bloques están
+// reparten en bloques plegables por subestado. "Mover a…" solo cambia su
+// estado; al arrastrarla, soltarla sobre un bloque (su cabecera o sus
+// tarjetas) le pone también ese subestado ("Sin subestado" se lo quita), y
+// soltarla fuera de los bloques solo cambia su estado. Se recuerda en este navegador si se agrupa y qué bloques están
 // plegados, por columna (`<id del estado>:<clave del grupo>`).
 const CLAVE_AGRUPAR = 'gestor-tareas:agrupar-subestado-tablero'
 const CLAVE_PLEGADOS = 'gestor-tareas:subestados-plegados-tablero'
@@ -392,14 +394,29 @@ async function desplazar(tarea: Tarea, paso: -1 | 1): Promise<void> {
   moviendo = false
 }
 
-async function mover(tarea: Tarea, estado: EstadoGrupo, indice?: number): Promise<void> {
+// Lleva la tarjeta a `estado` (si es otro) y, si se indica `subestado`, le
+// pone ese subestado (`null` lo quita). Si falla el estado no se intenta el
+// subestado; el error lo muestra la vista.
+async function mover(
+  tarea: Tarea,
+  estado: EstadoGrupo,
+  indice?: number,
+  subestado?: string | null,
+): Promise<void> {
   moviendo = true
   idMenuAbierto.value = null
   anuncio.value = ''
-  const correcto = await tienda.cambiarEstadoTarea(tarea.id, estado.id)
-  if (correcto) {
+  const cambiaEstado = tarea.estado?.id !== estado.id
+  const correcto = !cambiaEstado || (await tienda.cambiarEstadoTarea(tarea.id, estado.id))
+  const conSubestado =
+    correcto && subestado !== undefined && (await tienda.cambiarSubestadoTarea(tarea.id, subestado))
+  if (correcto && (cambiaEstado || conSubestado)) {
     if (indice !== undefined) colocar(tarea, estado, indice)
-    anuncio.value = `${tarea.nombre} movida a ${estado.nombre}`
+    const destinos = [
+      ...(cambiaEstado ? [estado.nombre] : []),
+      ...(conSubestado ? [subestado ?? 'Sin subestado'] : []),
+    ]
+    anuncio.value = `${tarea.nombre} movida a ${destinos.join(', ')}`
   }
   // La tarea ya llega recolocada desde la tienda; si su bloque está plegado se
   // despliega para que su "Mover a…" pueda recibir el foco.
@@ -485,6 +502,26 @@ async function guardarSubtarea(tarea: Tarea): Promise<void> {
 // --- Arrastrar y soltar ------------------------------------------------------
 const idArrastrada = ref<number | null>(null)
 const idColumnaDestino = ref<number | null>(null)
+// Clave del bloque de subestado de esa columna sobre el que se arrastra, o
+// `null` fuera de los bloques (o sin agrupar).
+const claveBloqueDestino = ref<string | null>(null)
+
+// Bloque de subestado que hay bajo el evento: el elemento marcado con
+// `data-bloque-subestado` más cercano (cabecera o lista del bloque).
+function claveBloqueDelEvento(evento: DragEvent): string | null {
+  if (!agrupar.value || !(evento.target instanceof Element)) return null
+  return (
+    evento.target.closest('[data-bloque-subestado]')?.getAttribute('data-bloque-subestado') ?? null
+  )
+}
+
+function esBloqueDestino(estado: EstadoGrupo, bloque: BloqueColumna): boolean {
+  return (
+    idArrastrada.value !== null &&
+    idColumnaDestino.value === estado.id &&
+    claveBloqueDestino.value === bloque.clave
+  )
+}
 // Tarjeta sobre la que se está arrastrando y si se soltaría encima o debajo.
 const insercion = ref<{ idTarea: number; lado: 'antes' | 'despues' } | null>(null)
 
@@ -526,6 +563,7 @@ function alArrastrarSobre(evento: DragEvent, estado: EstadoGrupo): void {
   evento.preventDefault()
   if (evento.dataTransfer) evento.dataTransfer.dropEffect = 'move'
   idColumnaDestino.value = estado.id
+  claveBloqueDestino.value = claveBloqueDelEvento(evento)
 }
 
 function alSalirDeColumna(evento: DragEvent, estado: EstadoGrupo): void {
@@ -534,6 +572,7 @@ function alSalirDeColumna(evento: DragEvent, estado: EstadoGrupo): void {
   if (destino && (evento.currentTarget as HTMLElement).contains(destino)) return
   if (idColumnaDestino.value === estado.id) {
     idColumnaDestino.value = null
+    claveBloqueDestino.value = null
     insercion.value = null
   }
 }
@@ -542,11 +581,16 @@ function alSoltar(evento: DragEvent, estado: EstadoGrupo): void {
   evento.preventDefault()
   const tarea = tareasDelGrupo.value.find((t) => t.id === idArrastrada.value)
   const indice = indiceDestino(estado)
+  const claveBloque = claveBloqueDelEvento(evento)
   terminarArrastre()
   if (!tarea) return
   const manual = modoOrden.value === 'manual'
-  if (tarea.estado?.id !== estado.id) {
-    void mover(tarea, estado, manual ? indice : undefined)
+  // Soltada sobre un bloque de otro subestado, se le pone ese subestado.
+  const bloque = bloquesDe(estado).find((b) => b.clave === claveBloque)
+  const subestado =
+    bloque && bloque.subestado !== (tarea.subestado ?? null) ? bloque.subestado : undefined
+  if (tarea.estado?.id !== estado.id || subestado !== undefined) {
+    void mover(tarea, estado, manual ? indice : undefined, subestado)
     return
   }
   // Por vencimiento el orden de la columna no se elige a mano.
@@ -558,6 +602,7 @@ function alSoltar(evento: DragEvent, estado: EstadoGrupo): void {
 function terminarArrastre(): void {
   idArrastrada.value = null
   idColumnaDestino.value = null
+  claveBloqueDestino.value = null
   insercion.value = null
 }
 </script>
@@ -699,7 +744,17 @@ function terminarArrastre(): void {
                   aria-hidden="true"
                   :class="['my-1 border-t-2', colorDe(estado).separador]"
                 />
-                <h4 v-if="agrupar" class="text-sm">
+                <h4
+                  v-if="agrupar"
+                  :data-bloque-subestado="bloque.clave"
+                  :data-destino-subestado="
+                    esBloqueDestino(estado, bloque) ? nombreBloque(bloque) : undefined
+                  "
+                  :class="[
+                    'rounded-md text-sm',
+                    esBloqueDestino(estado, bloque) && 'bg-background/80 ring-ring ring-2',
+                  ]"
+                >
                   <button
                     type="button"
                     data-cabecera-grupo
@@ -733,7 +788,15 @@ function terminarArrastre(): void {
                   v-if="!estaPlegado(estado, bloque)"
                   :id="agrupar ? idBloque(estado, indice) : undefined"
                   :aria-label="etiquetaLista(estado, bloque)"
-                  :class="['grid gap-2', tarjetasPorFila === 2 ? 'grid-cols-2' : 'grid-cols-1']"
+                  :data-bloque-subestado="agrupar ? bloque.clave : undefined"
+                  :data-destino-subestado="
+                    esBloqueDestino(estado, bloque) ? nombreBloque(bloque) : undefined
+                  "
+                  :class="[
+                    'grid gap-2 rounded-md',
+                    tarjetasPorFila === 2 ? 'grid-cols-2' : 'grid-cols-1',
+                    esBloqueDestino(estado, bloque) && 'ring-ring ring-2 ring-offset-2',
+                  ]"
                 >
                   <!-- Una línea encima o debajo marca dónde quedará la tarjeta. -->
                   <li
