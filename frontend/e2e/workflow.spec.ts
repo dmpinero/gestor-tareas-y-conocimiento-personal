@@ -62,7 +62,10 @@ function comentario(panel: Locator, texto: string) {
   return panel.locator('ol ol > li').filter({ hasText: texto })
 }
 
-/** Edita un comentario de `ComentariosTarea` confirmando el cambio. */
+/**
+ * Edita un comentario de `ComentariosTarea` confirmando el cambio y espera a
+ * que se haya guardado (el formulario de edición desaparece).
+ */
 async function editarComentario(
   panel: Locator,
   contexto: string,
@@ -72,16 +75,21 @@ async function editarComentario(
   await comentario(panel, anterior)
     .getByRole('button', { name: /^Editar comentario de las / })
     .click()
-  await panel.getByRole('textbox', { name: `Nuevo texto del comentario ${contexto}` }).fill(nuevo)
-  await panel
-    .getByRole('form', { name: `Editar comentario ${contexto}` })
-    .getByRole('button', { name: 'Guardar' })
-    .click()
+  const campo = panel.getByRole('textbox', { name: `Nuevo texto del comentario ${contexto}` })
+  // El editor se enfoca al terminar de crearse (cursor al final): si se rellena
+  // antes, el texto nuevo se añade al anterior en vez de sustituirlo.
+  await expect(campo).toBeFocused()
+  await campo.fill(nuevo)
+  const formulario = panel.getByRole('form', { name: `Editar comentario ${contexto}` })
+  await formulario.getByRole('button', { name: 'Guardar' }).click()
   await panel
     .getByRole('group', { name: `¿Guardar los cambios del comentario ${contexto}?` })
     .getByRole('button', { name: 'Guardar' })
     .click()
-  await expect(comentario(panel, nuevo)).toBeVisible()
+  // El campo en edición ya contiene el texto nuevo: hay que esperar a que se
+  // cierre el formulario para saber que la petición ha terminado.
+  await expect(formulario).toHaveCount(0)
+  await expect(comentario(panel, nuevo).getByTestId('texto-comentario')).toHaveText(nuevo)
 }
 
 async function esperarAnimaciones(elemento: Locator): Promise<void> {
@@ -327,7 +335,10 @@ test('los comentarios del paso se copian a las subtareas y luego son independien
 
   // Editar la copia en la subtarea no cambia el paso.
   await editarComentario(panel, 'de la subtarea Llamar', 'Guion de llamada', 'Guion adaptado')
+  // Ya guardado: Escape cierra el detalle sin pedir confirmación de descarte.
   await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
 
   // Elegir el workflow al editar otra tarea también copia los comentarios.
   await accionDeFila(page, conEdicion, 'Editar tarea')
