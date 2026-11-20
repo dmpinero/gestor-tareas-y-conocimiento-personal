@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test, expect, type APIRequestContext, type Page } from './base'
 import AxeBuilder from '@axe-core/playwright'
 
 // Cada test crea sus tareas, subestados y grupo de estados con una marca única

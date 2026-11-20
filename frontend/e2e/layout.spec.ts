@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, VERSION_SIMULADA } from './base'
 import { activarModoOscuro, SECCIONES } from './utilidades'
 
 test('el panel de navegación colapsa y expande, y resalta la sección activa', async ({ page }) => {
@@ -87,4 +87,22 @@ test('el historial de cambios se descarga una sola vez aunque se reabra el menú
   }
 
   expect(peticionesHistorial).toBe(1)
+})
+
+// Ningún e2e llama a la API real de GitHub (agotaría el cupo de 60 peticiones
+// por hora de quien los ejecuta): la versión del pie es la simulada.
+test('la versión del pie sale de la API de GitHub simulada en los e2e', async ({ page }) => {
+  const peticionesReales: string[] = []
+  page.on('requestfinished', (peticion) => {
+    if (peticion.url().startsWith('https://api.github.com/')) {
+      void peticion.response().then((respuesta) => {
+        if (respuesta && respuesta.headers()['x-github-request-id']) {
+          peticionesReales.push(peticion.url())
+        }
+      })
+    }
+  })
+  await page.goto('/')
+  await expect(page.locator('footer')).toContainText(VERSION_SIMULADA)
+  expect(peticionesReales).toEqual([])
 })
