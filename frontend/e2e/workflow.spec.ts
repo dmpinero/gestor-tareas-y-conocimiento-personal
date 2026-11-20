@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { test, expect, type APIRequestContext, type Locator, type Page } from './base'
 import AxeBuilder from '@axe-core/playwright'
 import { activarModoOscuro } from './utilidades'
 

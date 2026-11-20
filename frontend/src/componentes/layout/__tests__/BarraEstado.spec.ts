@@ -4,10 +4,12 @@ import BarraEstado from '../BarraEstado.vue'
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn<typeof fetch>())
+  localStorage.clear()
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  localStorage.clear()
 })
 
 describe('BarraEstado', () => {
@@ -31,5 +33,19 @@ describe('BarraEstado', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('span').exists()).toBe(false)
+  })
+
+  it('si GitHub falla muestra la última versión conocida', async () => {
+    localStorage.setItem(
+      'gestor-tareas:version',
+      JSON.stringify({ version: '1.48.0', consultada: 0 }),
+    )
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 403 }))
+
+    const wrapper = mount(BarraEstado)
+    await new Promise((resolver) => setTimeout(resolver, 0))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('v1.48.0')
   })
 })
