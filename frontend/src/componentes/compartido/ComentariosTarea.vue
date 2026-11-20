@@ -141,7 +141,9 @@ async function enviar(): Promise<void> {
 // --- Editar y eliminar, con confirmación en línea -------------------------
 // Se confirma dentro del propio comentario y no con otra modal: el detalle ya
 // es una modal y anidar otra complica el foco y el Escape. Solo hay una acción
-// abierta a la vez; abrir otra descarta la anterior.
+// abierta a la vez; abrir otra descarta la anterior. Mientras se guarda una
+// edición, Escape dentro de ella no hace nada: volver a editar o cancelar no
+// detendría la petición en curso.
 const idEditando = ref<number | null>(null)
 const textoEdicion = ref('')
 // Texto del comentario al abrir su edición, para saber si se ha cambiado.
@@ -151,6 +153,8 @@ const confirmandoEdicion = ref(false)
 const subiendoEdicion = ref(false)
 const idConfirmandoEliminar = ref<number | null>(null)
 const procesando = ref(false)
+// Cierto mientras se guarda una edición confirmada.
+const guardandoEdicion = ref(false)
 // Error de la última acción sobre un comentario, junto a él.
 const errorAccion = ref<{ id: number; mensaje: string } | null>(null)
 
@@ -193,11 +197,15 @@ function abrirEdicion(comentario: ComentarioMostrado): void {
 }
 
 // Si la modal que lo contiene se cierra, se perdería el comentario a medio
-// escribir o la edición cambiada: la modal pide confirmación.
+// escribir o la edición cambiada: la modal pide confirmación. Una edición ya
+// confirmada que se está guardando no es un borrador: la petición sigue aunque
+// se cierre la modal (si falla, vuelve a la edición y vuelve a contar).
 registrarBorrador(
   () =>
     tieneContenidoComentario(texto.value) ||
-    (idEditando.value !== null && textoEdicion.value !== textoAntesDeEditar),
+    (idEditando.value !== null &&
+      !guardandoEdicion.value &&
+      textoEdicion.value !== textoAntesDeEditar),
 )
 
 async function cancelarEdicion(id: number): Promise<void> {
@@ -225,6 +233,7 @@ async function confirmarEdicion(id: number): Promise<void> {
   if (procesando.value) return
   const ruta = props.ruta
   procesando.value = true
+  guardandoEdicion.value = true
   anuncio.value = ''
   try {
     const editado = await clienteApi.actualizar<Comentario>(`${ruta}/${id}`, {
@@ -239,10 +248,12 @@ async function confirmarEdicion(id: number): Promise<void> {
   } catch (error) {
     if (ruta !== props.ruta) return
     // Se conserva el texto en edición para poder reintentar.
+    guardandoEdicion.value = false
     errorAccion.value = { id, mensaje: `No se pudo guardar el comentario: ${mensajeDe(error)}` }
     await volverAEdicion()
   } finally {
     procesando.value = false
+    guardandoEdicion.value = false
   }
 }
 
@@ -366,7 +377,7 @@ watch(() => props.ruta, cargar, { immediate: true })
                 :aria-label="`Editar comentario${sufijo}`"
                 novalidate
                 @submit.prevent="pedirConfirmacionEdicion(comentario.id)"
-                @keydown.esc.stop.prevent="cancelarEdicion(comentario.id)"
+                @keydown.esc.stop.prevent="!guardandoEdicion && cancelarEdicion(comentario.id)"
               >
                 <EditorComentario
                   :id="idCampoEdicion"
@@ -387,7 +398,7 @@ watch(() => props.ruta, cargar, { immediate: true })
                   role="group"
                   :aria-label="`¿Guardar los cambios del comentario${sufijo}?`"
                   class="flex flex-wrap items-center justify-end gap-2"
-                  @keydown.esc.stop.prevent="volverAEdicion"
+                  @keydown.esc.stop.prevent="!guardandoEdicion && volverAEdicion()"
                 >
                   <span class="text-sm" aria-hidden="true"
                     >¿Guardar los cambios del comentario?</span
