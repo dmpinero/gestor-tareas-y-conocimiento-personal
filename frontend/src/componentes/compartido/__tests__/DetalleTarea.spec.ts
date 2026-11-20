@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/vue-3'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -149,6 +149,26 @@ function botonCerrar(): HTMLButtonElement {
   if (botones.length !== 1) throw new Error(`Se esperaba un botón "Cerrar" y hay ${botones.length}`)
   return botones[0] as HTMLButtonElement
 }
+
+// jsdom no da medidas a los rangos de texto: ProseMirror (el editor de los
+// comentarios) las pide para desplazarse hasta el cursor, también después de
+// que un test termine de editar un comentario.
+const rectVacio = () => new DOMRect(0, 0, 0, 0)
+const listaVacia = () => [] as unknown as DOMRectList
+const medidasOriginales = {
+  getClientRects: Range.prototype.getClientRects,
+  getBoundingClientRect: Range.prototype.getBoundingClientRect,
+}
+
+beforeAll(() => {
+  Range.prototype.getClientRects = listaVacia
+  Range.prototype.getBoundingClientRect = rectVacio
+})
+
+afterAll(() => {
+  Range.prototype.getClientRects = medidasOriginales.getClientRects
+  Range.prototype.getBoundingClientRect = medidasOriginales.getBoundingClientRect
+})
 
 describe('DetalleTarea', () => {
   beforeEach(() => {
