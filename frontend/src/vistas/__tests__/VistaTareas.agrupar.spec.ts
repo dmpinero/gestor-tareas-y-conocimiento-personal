@@ -179,6 +179,22 @@ describe('VistaTareas: agrupar por subestado', () => {
     }
   })
 
+  it('una línea horizontal separa cada sección de la anterior, sin línea en la primera', async () => {
+    const envoltorio = await montar()
+    await agrupar(envoltorio)
+
+    const conLinea = envoltorio
+      .findAll('tbody[data-grupo="pendientes"][data-subgrupo]')
+      .map((cuerpo) => cuerpo.find('tr[data-separador-subestado]').exists())
+    expect(conLinea).toEqual([false, true, true])
+    const fila = envoltorio.get('tbody[data-subgrupo="sin"] tr[data-separador-subestado]')
+    expect(fila.classes()).toEqual(expect.arrayContaining(['border-t-2', 'border-foreground/20']))
+    // Un grupo con una sola sección no lleva línea.
+    expect(
+      envoltorio.find('tbody[data-grupo="completadas"] tr[data-separador-subestado]').exists(),
+    ).toBe(false)
+  })
+
   it('la cabecera de la sección es un th de grupo de filas que ocupa todas las columnas visibles', async () => {
     const envoltorio = await montar()
     await agrupar(envoltorio)

@@ -692,6 +692,13 @@ function terminarArrastre(): void {
             <div class="flex flex-col gap-2 p-2">
               <!-- Sin agrupar hay un único bloque, sin cabecera. -->
               <template v-for="(bloque, indice) in bloquesDe(estado)" :key="bloque.clave">
+                <!-- Una línea separa cada grupo de subestado del anterior. -->
+                <hr
+                  v-if="agrupar && indice > 0"
+                  data-separador-subestado
+                  aria-hidden="true"
+                  :class="['my-1 border-t-2', colorDe(estado).separador]"
+                />
                 <h4 v-if="agrupar" class="text-sm">
                   <button
                     type="button"
