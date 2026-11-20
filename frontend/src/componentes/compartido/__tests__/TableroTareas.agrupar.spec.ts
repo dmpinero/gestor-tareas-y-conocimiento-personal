@@ -248,6 +248,10 @@ describe('TableroTareas: agrupar por subestado', () => {
     for (const separador of separadores) {
       expect(separador.tagName).toBe('HR')
       expect(separador.getAttribute('aria-hidden')).toBe('true')
+      // Del mismo color que el carril: Pendiente es el primero, gris.
+      expect([...separador.classList]).toEqual(
+        expect.arrayContaining(['border-gray-600', 'dark:border-gray-400']),
+      )
     }
     // Una columna con un único grupo no lleva línea.
     expect(columna('Hecho').querySelector('[data-separador-subestado]')).toBeNull()

@@ -55,11 +55,12 @@ export function pildoraEstado(indice: number, total: number): string {
   return indice === total - 1 ? PILDORA_ESTADO_FINAL : PILDORA_ESTADO_INTERMEDIO
 }
 
-/** Colores de un estado en el tablero: la cabecera de su columna y su tramo
- * en la barra de distribución. */
+/** Colores de un estado en el tablero: la cabecera de su columna, su tramo
+ * en la barra de distribución y la línea que separa sus grupos de subestado. */
 export interface ColorEstadoTablero {
   cabecera: string
   relleno: string
+  separador: string
 }
 
 // Mismo criterio que la píldora de la tabla (el primero gris, el último verde
@@ -70,17 +71,39 @@ export interface ColorEstadoTablero {
 const ESTADO_TABLERO_INICIAL: ColorEstadoTablero = {
   cabecera: 'bg-gray-600 text-white',
   relleno: 'bg-gray-600 dark:bg-gray-400',
+  separador: 'border-gray-600 dark:border-gray-400',
 }
 const ESTADO_TABLERO_FINAL: ColorEstadoTablero = {
   cabecera: 'bg-emerald-700 text-white',
   relleno: 'bg-emerald-700 dark:bg-emerald-500',
+  separador: 'border-emerald-700 dark:border-emerald-500',
 }
 const ESTADOS_TABLERO_INTERMEDIOS: readonly ColorEstadoTablero[] = [
-  { cabecera: 'bg-blue-700 text-white', relleno: 'bg-blue-700 dark:bg-blue-500' },
-  { cabecera: 'bg-orange-700 text-white', relleno: 'bg-orange-700 dark:bg-orange-500' },
-  { cabecera: 'bg-violet-700 text-white', relleno: 'bg-violet-700 dark:bg-violet-500' },
-  { cabecera: 'bg-pink-700 text-white', relleno: 'bg-pink-700 dark:bg-pink-500' },
-  { cabecera: 'bg-teal-700 text-white', relleno: 'bg-teal-700 dark:bg-teal-500' },
+  {
+    cabecera: 'bg-blue-700 text-white',
+    relleno: 'bg-blue-700 dark:bg-blue-500',
+    separador: 'border-blue-700 dark:border-blue-500',
+  },
+  {
+    cabecera: 'bg-orange-700 text-white',
+    relleno: 'bg-orange-700 dark:bg-orange-500',
+    separador: 'border-orange-700 dark:border-orange-500',
+  },
+  {
+    cabecera: 'bg-violet-700 text-white',
+    relleno: 'bg-violet-700 dark:bg-violet-500',
+    separador: 'border-violet-700 dark:border-violet-500',
+  },
+  {
+    cabecera: 'bg-pink-700 text-white',
+    relleno: 'bg-pink-700 dark:bg-pink-500',
+    separador: 'border-pink-700 dark:border-pink-500',
+  },
+  {
+    cabecera: 'bg-teal-700 text-white',
+    relleno: 'bg-teal-700 dark:bg-teal-500',
+    separador: 'border-teal-700 dark:border-teal-500',
+  },
 ]
 
 /** Color de la columna de un estado según su posición en el grupo. */

@@ -697,7 +697,7 @@ function terminarArrastre(): void {
                   v-if="agrupar && indice > 0"
                   data-separador-subestado
                   aria-hidden="true"
-                  class="border-foreground/20 my-1 border-t-2"
+                  :class="['my-1 border-t-2', colorDe(estado).separador]"
                 />
                 <h4 v-if="agrupar" class="text-sm">
                   <button

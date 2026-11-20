@@ -58,6 +58,14 @@ describe('colorEstadoTablero', () => {
     expect(new Set(colores).size).toBe(5)
   })
 
+  it('el separador de subestados lleva el mismo tono que la cabecera de su columna', () => {
+    for (const indice of [0, 1, 2, 3, 4, 5, 6, 7]) {
+      const { cabecera, separador } = colorEstadoTablero(indice, 8)
+      const tono = cabecera.match(/^bg-(\S+)/)![1]
+      expect(separador).toMatch(new RegExp(`^border-${tono} dark:border-\\S+$`))
+    }
+  })
+
   it('las cabeceras llevan texto blanco y el relleno de la barra su variante oscura', () => {
     for (const indice of [0, 1, 2, 3, 4, 5, 6, 7]) {
       const { cabecera, relleno } = colorEstadoTablero(indice, 8)
