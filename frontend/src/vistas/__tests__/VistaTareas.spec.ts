@@ -1,6 +1,6 @@
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { clienteApi } from '@/api/cliente'
@@ -2586,6 +2586,39 @@ describe('VistaTareas', () => {
       await alternar(envoltorio, 'Filtrar por asignado a', 'José Manuel Viega')
       await alternar(envoltorio, 'Filtrar por asignado a', 'Sin asignar')
       expect(nombresEnTabla(envoltorio)).toEqual([])
+    })
+
+    it('en el tablero resalta las tareas y subtareas de las personas filtradas', async () => {
+      // La vista elegida se recuerda: se deja en lista para los demás tests.
+      onTestFinished(() => localStorage.removeItem('gestor-tareas:vista-tareas'))
+      const enGeneral = (tarea: (typeof TAREAS_FILTRO)[number]) => ({
+        ...tarea,
+        grupo_estados: { id: 50, nombre: 'General' },
+        estado: { id: 500, nombre: 'Por hacer' },
+      })
+      const envoltorio = await montarConFiltros([
+        enGeneral(TAREAS_FILTRO[0]!),
+        {
+          ...enGeneral(TAREAS_FILTRO[1]!),
+          subtareas: [{ ...SUBTAREAS[1], asignado: 'Ana' }],
+        },
+      ])
+      const tablero = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+        (b) => b.getAttribute('aria-label') === 'Ver como tablero',
+      )!
+      tablero.click()
+      await flushPromises()
+      const resaltadas = () =>
+        [
+          ...document.querySelectorAll(
+            '[data-resaltada] [data-nombre-tarjeta], [data-resaltada] [data-nombre-subtarea]',
+          ),
+        ].map((e) => e.firstChild!.textContent!.trim())
+      expect(resaltadas()).toEqual([])
+
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Luis')
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Sin asignar')
+      expect(resaltadas()).toEqual(['Preparar reunión', 'Enviar propuesta'])
     })
 
     it('filtra por fecha de creación con ambos extremos incluidos por día', async () => {

@@ -418,6 +418,13 @@ const prioridadesFiltro = ref<number[]>(ITEMS_PRIORIDAD.map((item) => item.id))
 const etiquetasFiltro = ref<string[]>(itemsEtiquetasFiltro.value.map((item) => item.id))
 const asignadosFiltro = ref<string[]>(itemsAsignadosFiltro.value.map((item) => item.id))
 const subestadosFiltro = ref<string[]>(itemsSubestadosFiltro.value.map((item) => item.id))
+// Con el filtro "Asignado a" activo (no están todas marcadas), el tablero
+// resalta las tareas y subtareas de las personas elegidas.
+const personasResaltadas = computed(() =>
+  asignadosFiltro.value.length === itemsAsignadosFiltro.value.length
+    ? []
+    : asignadosFiltro.value.filter((nombre) => nombre !== SIN_NOMBRE),
+)
 const tiposFiltro = ref<string[]>(ITEMS_TIPO.map((item) => item.id))
 
 // Estado de las tareas que se muestran: todas, solo las completadas o solo las
@@ -1627,6 +1634,7 @@ async function guardar(): Promise<void> {
       :tareas="filasOrdenadas"
       :grupos="tiendaGrupos.grupos"
       :cargando-grupos="tiendaGrupos.cargando"
+      :personas-resaltadas="personasResaltadas"
       @ver-detalle="(id) => (idEnDetalle = id)"
       @anadir-tarea="abrirAltaEnEstado"
     />

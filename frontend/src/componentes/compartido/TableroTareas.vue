@@ -13,7 +13,7 @@ import {
 import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import type { EstadoGrupo, GrupoEstados, Tarea } from '@/api/tipos'
+import type { EstadoGrupo, GrupoEstados, Subtarea, Tarea } from '@/api/tipos'
 import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BarraEstados from '@/componentes/compartido/BarraEstados.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
@@ -53,10 +53,14 @@ import { useTiendaTareas } from '@/stores/tareas'
 // Cada columna lleva una cabecera del color de su estado (por posición, como
 // la píldora de la tabla) y una barra resume cuántas tareas hay en cada uno.
 // Las subtareas se despliegan bajo su tarjeta, donde también se añaden.
+// Con el filtro "Asignado a" activo, `personasResaltadas` son las personas
+// elegidas: sus tareas y subtareas se resaltan, y las tarjetas con subtareas
+// suyas se despliegan.
 const props = defineProps<{
   tareas: Tarea[]
   grupos: GrupoEstados[]
   cargandoGrupos?: boolean
+  personasResaltadas?: string[]
 }>()
 const idGrupo = defineModel<number | null>('idGrupo', { required: true })
 const emit = defineEmits<{
@@ -472,6 +476,44 @@ function idBotonAgregar(tarea: Tarea): string {
   return `agregar-subtarea-tablero-${tarea.id}`
 }
 
+// --- Resaltar a las personas filtradas ------------------------------------
+const CLASES_RESALTADA =
+  'border-amber-400 bg-amber-50 ring-2 ring-amber-400 dark:border-amber-500 dark:bg-amber-950 dark:ring-amber-500'
+
+function estaResaltada(asignados: (string | null)[]): boolean {
+  const personas = props.personasResaltadas ?? []
+  return asignados.some((persona) => persona !== null && personas.includes(persona))
+}
+
+function tareaResaltada(tarea: Tarea): boolean {
+  return estaResaltada(tarea.asignados)
+}
+
+function subtareaResaltada(subtarea: Subtarea): boolean {
+  return estaResaltada([subtarea.asignado])
+}
+
+// Las tarjetas desplegadas por el filtro se pliegan al quitarlo; las que se
+// desplegaron a mano se quedan como estaban. También se pueden plegar a mano.
+const idsConSubtareasResaltadas = computed(
+  () =>
+    new Set(
+      props.tareas.filter((tarea) => tarea.subtareas.some(subtareaResaltada)).map((t) => t.id),
+    ),
+)
+watch(
+  idsConSubtareasResaltadas,
+  (actuales, anteriores) => {
+    for (const id of anteriores ?? []) {
+      if (!actuales.has(id)) idsDesplegadas.value.delete(id)
+    }
+    for (const id of actuales) {
+      if (!anteriores?.has(id)) idsDesplegadas.value.add(id)
+    }
+  },
+  { immediate: true },
+)
+
 function alternarSubtareas(tarea: Tarea): void {
   if (idsDesplegadas.value.has(tarea.id)) {
     idsDesplegadas.value.delete(tarea.id)
@@ -884,8 +926,10 @@ function terminarArrastre(): void {
                     <div
                       data-tarjeta
                       draggable="true"
+                      :data-resaltada="tareaResaltada(tarea) ? '' : undefined"
                       :class="[
-                        'bg-card text-card-foreground relative flex flex-col gap-2 rounded-lg border p-3 shadow-xs',
+                        'text-card-foreground relative flex flex-col gap-2 rounded-lg border p-3 shadow-xs',
+                        tareaResaltada(tarea) ? CLASES_RESALTADA : 'bg-card',
                         idArrastrada === tarea.id && 'opacity-50',
                       ]"
                       @dragstart="alEmpezarArrastre($event, tarea)"
@@ -899,7 +943,10 @@ function terminarArrastre(): void {
                           :class="tarea.completada ? 'line-through' : ''"
                           @click="emit('verDetalle', tarea.id)"
                         >
-                          {{ tarea.nombre }}
+                          {{ tarea.nombre
+                          }}<span v-if="tareaResaltada(tarea)" class="sr-only">{{
+                            ' (Asignada a la persona filtrada)'
+                          }}</span>
                         </button>
                         <AvisoVencimiento
                           class="mt-0.5"
@@ -1112,7 +1159,12 @@ function terminarArrastre(): void {
                           class="before:border-border relative before:absolute before:top-1/2 before:-left-3 before:w-3 before:border-t-2"
                         >
                           <div
-                            class="bg-card text-card-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5 shadow-xs"
+                            data-subtarea
+                            :data-resaltada="subtareaResaltada(subtarea) ? '' : undefined"
+                            :class="[
+                              'text-card-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5 shadow-xs',
+                              subtareaResaltada(subtarea) ? CLASES_RESALTADA : 'bg-card',
+                            ]"
                           >
                             <button
                               type="button"
@@ -1124,6 +1176,9 @@ function terminarArrastre(): void {
                               {{ subtarea.nombre
                               }}<span v-if="subtarea.resuelta" class="sr-only">{{
                                 ' (resuelta)'
+                              }}</span
+                              ><span v-if="subtareaResaltada(subtarea)" class="sr-only">{{
+                                ' (Asignada a la persona filtrada)'
                               }}</span>
                             </button>
                             <NombreRelacionado
