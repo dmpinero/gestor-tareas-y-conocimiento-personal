@@ -33,10 +33,18 @@ const BASE = {
   oportunidad: null,
   completada: false,
   subtareas: [],
-  grupo_estados: null,
-  estado: null,
+  // El grupo de estados es obligatorio al guardar desde el formulario.
+  grupo_estados: { id: 50, nombre: 'General' },
+  estado: { id: 500, nombre: 'Por hacer' },
   workflow: null,
   congelada_en: null,
+}
+
+const GRUPO_GENERAL = {
+  id: 50,
+  nombre: 'General',
+  tareas: 3,
+  estados: [{ id: 500, nombre: 'Por hacer', posicion: 1, tareas: 3 }],
 }
 const BLOQUEADA = {
   ...BASE,
@@ -69,7 +77,10 @@ const VISTA = 'gestor-tareas:vista-tareas'
 
 let contenedor: VueWrapper | null = null
 
-async function montar(tareas: unknown[] = TAREAS, grupos: unknown[] = []): Promise<VueWrapper> {
+async function montar(
+  tareas: unknown[] = TAREAS,
+  grupos: unknown[] = [GRUPO_GENERAL],
+): Promise<VueWrapper> {
   vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
     if (ruta === '/subestados') return Promise.resolve(structuredClone(SUBESTADOS))
     if (ruta === '/etiquetas' || ruta === '/personas' || ruta === '/workflows') {

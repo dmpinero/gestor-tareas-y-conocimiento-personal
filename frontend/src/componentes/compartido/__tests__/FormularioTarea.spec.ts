@@ -70,7 +70,7 @@ function contenedor(envoltorio: VueWrapper, id: string) {
   return caja
 }
 
-const OBLIGATORIOS = ['tarea-nombre', 'tarea-descripcion', 'fecha-creacion']
+const OBLIGATORIOS = ['tarea-nombre', 'tarea-descripcion', 'fecha-creacion', 'tarea-grupo-estados']
 const OPCIONALES = [
   'tarea-prioridad',
   'etiquetas',
@@ -78,7 +78,6 @@ const OPCIONALES = [
   'subestado',
   'fecha-vencimiento',
   'tarea-tipo',
-  'tarea-grupo-estados',
   'tarea-workflow',
 ]
 
