@@ -1592,6 +1592,7 @@ async function guardar(): Promise<void> {
       :cargando-grupos="tiendaGrupos.cargando"
       @ver-detalle="(id) => (idEnDetalle = id)"
       @anadir-tarea="abrirAltaEnEstado"
+      @ver-en-lista="vista = 'lista'"
     />
 
     <CalendarioTareas

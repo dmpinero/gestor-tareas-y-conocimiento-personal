@@ -53,6 +53,7 @@ const idGrupo = defineModel<number | null>('idGrupo', { required: true })
 const emit = defineEmits<{
   verDetalle: [id: number]
   anadirTarea: [idGrupo: number, idEstado: number]
+  verEnLista: []
 }>()
 
 const tienda = useTiendaTareas()
@@ -72,6 +73,10 @@ const seleccionGrupo = computed<number | null>({
 const tareasDelGrupo = computed(() =>
   props.tareas.filter((tarea) => tarea.grupo_estados?.id === grupoActivo.value?.id),
 )
+
+// Las tareas sin grupo de estados no caben en ningún tablero: se avisa de
+// cuántas de las que llegan (ya filtradas) quedan fuera, con un atajo a la lista.
+const numeroSinGrupo = computed(() => props.tareas.filter((t) => !t.grupo_estados).length)
 
 // --- Orden de las tarjetas ---------------------------------------------------
 // Orden visual de cada columna, solo en este navegador: no cambia la tarea.
@@ -687,6 +692,21 @@ function terminarArrastre(): void {
           <BarraEstados :estados="estadosBarra" :titulo="grupoActivo.nombre" />
         </div>
       </div>
+
+      <p v-if="numeroSinGrupo > 0" data-aviso-sin-grupo class="text-muted-foreground text-sm">
+        {{
+          numeroSinGrupo === 1
+            ? '1 tarea no se ve en el tablero porque no tiene grupo de estados.'
+            : `${numeroSinGrupo} tareas no se ven en el tablero porque no tienen grupo de estados.`
+        }}
+        <button
+          type="button"
+          class="text-primary focus-visible:ring-ring/50 rounded-sm underline underline-offset-4 outline-none focus-visible:ring-[3px]"
+          @click="emit('verEnLista')"
+        >
+          {{ numeroSinGrupo === 1 ? 'Verla en la lista' : 'Verlas en la lista' }}
+        </button>
+      </p>
 
       <p v-if="grupoActivo.estados.length === 0" class="text-muted-foreground text-sm">
         Este grupo no tiene estados. Añádelos en
