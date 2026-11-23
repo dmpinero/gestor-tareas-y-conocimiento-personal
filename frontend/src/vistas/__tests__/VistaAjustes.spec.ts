@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 
 import router from '@/router'
 import VistaAjustes from '../VistaAjustes.vue'
+import VistaCodigosServicio from '../VistaCodigosServicio.vue'
 import VistaGruposEstados from '../VistaGruposEstados.vue'
 import VistaSubestados from '../VistaSubestados.vue'
 import VistaWorkflows from '../VistaWorkflows.vue'
@@ -16,6 +17,7 @@ function crearRouter() {
       { path: '/ajustes/workflows', component: { template: '<div />' } },
       { path: '/ajustes/grupos-estados', component: { template: '<div />' } },
       { path: '/ajustes/subestados', component: { template: '<div />' } },
+      { path: '/ajustes/codigos-servicio', component: { template: '<div />' } },
     ],
   })
 }
@@ -49,6 +51,19 @@ describe('VistaAjustes', () => {
     const enlace = contenedor.get('a[href="/ajustes/subestados"]')
     expect(enlace.get('.font-medium').text()).toBe('Subestados')
   })
+
+  it('muestra la opción "Códigos de servicio" enlazada a su página, tras la de subestados', async () => {
+    const enrutador = crearRouter()
+    await enrutador.push('/ajustes')
+    const contenedor = mount(VistaAjustes, { global: { plugins: [enrutador] } })
+
+    const enlace = contenedor.get('a[href="/ajustes/codigos-servicio"]')
+    expect(enlace.get('.font-medium').text()).toBe('Códigos de servicio')
+    const destinos = contenedor.findAll('a').map((a) => a.attributes('href'))
+    expect(destinos.indexOf('/ajustes/codigos-servicio')).toBe(
+      destinos.indexOf('/ajustes/subestados') + 1,
+    )
+  })
 })
 
 describe('router', () => {
@@ -78,5 +93,12 @@ describe('router', () => {
 
     expect(resuelta.name).toBe('subestados')
     expect(resuelta.matched[0]?.components?.default).toBe(VistaSubestados)
+  })
+
+  it('la ruta /ajustes/codigos-servicio muestra VistaCodigosServicio', () => {
+    const resuelta = router.resolve('/ajustes/codigos-servicio')
+
+    expect(resuelta.name).toBe('codigos-servicio')
+    expect(resuelta.matched[0]?.components?.default).toBe(VistaCodigosServicio)
   })
 })

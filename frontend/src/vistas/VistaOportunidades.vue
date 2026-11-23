@@ -1,36 +1,63 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   lanzarAlta,
+  lanzarAltaAxasMs3,
   obtenerConfiguracionAlta,
+  obtenerConfiguracionAxasMs3,
   obtenerEjecucionAlta,
   responderPreguntaAlta,
   urlCapturaAlta,
   type EjecucionAlta,
   type ResumenConfiguracionAlta,
+  type ResumenConfiguracionAxasMs3,
 } from '@/api/altaOportunidades'
 import { ErrorApi } from '@/api/cliente'
-import { NOMBRE_MENU_ALTA_PREDETERMINADO } from '@/composables/useNombreMenuAlta'
+import {
+  NOMBRE_MENU_ALTA_PREDETERMINADO,
+  NOMBRE_MENU_AXAS_MS3_PREDETERMINADO,
+} from '@/composables/useNombreMenuAlta'
+import ComboboxCodigoServicio from '@/componentes/oportunidades/ComboboxCodigoServicio.vue'
 import PanelPreguntaAlta from '@/componentes/oportunidades/PanelPreguntaAlta.vue'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
 import {
   aSolicitudAlta,
+  aSolicitudAltaAxasMs3,
   INTERVALO_SEGUIMIENTO_MS,
   nombrePrevisto,
+  nombrePrevistoAxasMs3,
   validarCamposAlta,
+  validarCamposAxasMs3,
   type CamposAlta,
+  type CamposAltaAxasMs3,
 } from '@/lib/altaOportunidad'
 
-type Campo = keyof CamposAlta
+// Dos variantes del alta con el mismo seguimiento: ANES (código PRJ y
+// descripción opcional, que se busca en Notion) y AXAS MS3 (código de servicio
+// del catálogo y descripción obligatoria).
+const props = withDefaults(defineProps<{ variante?: 'anes' | 'axas-ms3' }>(), {
+  variante: 'anes',
+})
+const esAxasMs3 = computed(() => props.variante === 'axas-ms3')
 
-const CAMPOS: {
+type Campos = CamposAlta & CamposAltaAxasMs3
+type Campo = keyof Campos
+
+interface DefinicionCampo {
   campo: Campo
   etiqueta: string
   ayuda?: string
   modo: 'text' | 'numeric' | 'decimal'
-}[] = [
+}
+
+const CAMPOS_COMUNES: DefinicionCampo[] = [
+  { campo: 'duracion', etiqueta: 'Duración (meses)', modo: 'numeric' },
+  { campo: 'importe', etiqueta: 'Importe total previsto (EUR)', modo: 'decimal' },
+  { campo: 'coste', etiqueta: 'Coste total previsto (EUR)', modo: 'decimal' },
+]
+const CAMPOS_ANES: DefinicionCampo[] = [
   { campo: 'prj', etiqueta: 'Código del proyecto', ayuda: 'Formato PRJ-XXXXX.', modo: 'text' },
   {
     campo: 'descripcion',
@@ -38,10 +65,19 @@ const CAMPOS: {
     ayuda: 'Si la dejas vacía, se busca en Notion.',
     modo: 'text',
   },
-  { campo: 'duracion', etiqueta: 'Duración (meses)', modo: 'numeric' },
-  { campo: 'importe', etiqueta: 'Importe total previsto (EUR)', modo: 'decimal' },
-  { campo: 'coste', etiqueta: 'Coste total previsto (EUR)', modo: 'decimal' },
+  ...CAMPOS_COMUNES,
 ]
+const CAMPOS_AXAS_MS3: DefinicionCampo[] = [
+  {
+    campo: 'codigo',
+    etiqueta: 'Código de servicio',
+    ayuda: 'Sus 2 últimos caracteres van al nombre. Si no existe, escríbelo y créalo.',
+    modo: 'text',
+  },
+  { campo: 'descripcion', etiqueta: 'Descripción', modo: 'text' },
+  ...CAMPOS_COMUNES,
+]
+const CAMPOS = computed(() => (esAxasMs3.value ? CAMPOS_AXAS_MS3 : CAMPOS_ANES))
 
 const ETIQUETAS_ESTADO: Record<EjecucionAlta['estado'], string> = {
   en_curso: 'En curso',
@@ -50,8 +86,9 @@ const ETIQUETAS_ESTADO: Record<EjecucionAlta['estado'], string> = {
   error: 'Error',
 }
 
-const campos = reactive<CamposAlta>({
+const campos = reactive<Campos>({
   prj: '',
+  codigo: '',
   descripcion: '',
   duracion: '',
   importe: '',
@@ -59,7 +96,7 @@ const campos = reactive<CamposAlta>({
 })
 const tocados = reactive<Partial<Record<Campo, boolean>>>({})
 const intentado = ref(false)
-const configuracion = ref<ResumenConfiguracionAlta | null>(null)
+const configuracion = ref<ResumenConfiguracionAlta | ResumenConfiguracionAxasMs3 | null>(null)
 const errorCarga = ref<string | null>(null)
 const errorAccion = ref<string | null>(null)
 const ejecucion = ref<EjecucionAlta | null>(null)
@@ -67,7 +104,24 @@ const enviando = ref(false)
 let temporizador: ReturnType<typeof setTimeout> | undefined
 let montada = true
 
-const errores = computed(() => validarCamposAlta(campos))
+const errores = computed<Partial<Record<Campo, string>>>(() =>
+  esAxasMs3.value ? validarCamposAxasMs3(campos) : validarCamposAlta(campos),
+)
+const nombreDeLaOportunidad = computed(() =>
+  esAxasMs3.value
+    ? nombrePrevistoAxasMs3(campos.codigo, campos.descripcion)
+    : nombrePrevisto(campos.prj || 'PRJ-XXXXX', campos.descripcion),
+)
+const titulo = computed(
+  () =>
+    configuracion.value?.nombre_menu ??
+    (esAxasMs3.value ? NOMBRE_MENU_AXAS_MS3_PREDETERMINADO : NOMBRE_MENU_ALTA_PREDETERMINADO),
+)
+// Valores que solo tiene AXAS MS3 (o `null` en ANES).
+const valoresMs3 = computed(() => {
+  const valores = configuracion.value?.valores
+  return valores && 'area_ms3' in valores ? valores : null
+})
 const enCurso = computed(() => ejecucion.value !== null && !ejecucion.value.terminada)
 const sePuedeLanzar = computed(
   () => configuracion.value?.valores != null && !enCurso.value && !enviando.value,
@@ -109,7 +163,9 @@ async function lanzar(): Promise<void> {
   if (!sePuedeLanzar.value) return
   enviando.value = true
   try {
-    ejecucion.value = await lanzarAlta(aSolicitudAlta(campos))
+    ejecucion.value = esAxasMs3.value
+      ? await lanzarAltaAxasMs3(aSolicitudAltaAxasMs3(campos))
+      : await lanzarAlta(aSolicitudAlta(campos))
     programarSeguimiento()
   } catch (error) {
     errorAccion.value = mensajeDe(error)
@@ -133,15 +189,38 @@ async function responder(valor: string): Promise<void> {
   programarSeguimiento()
 }
 
-onMounted(async () => {
+async function cargarConfiguracion(): Promise<void> {
+  configuracion.value = null
+  errorCarga.value = null
+  // Si se cambia de variante mientras llega, la respuesta ya no vale.
+  const variante = props.variante
   try {
-    configuracion.value = await obtenerConfiguracionAlta()
+    const leida = esAxasMs3.value
+      ? await obtenerConfiguracionAxasMs3()
+      : await obtenerConfiguracionAlta()
+    if (props.variante === variante) configuracion.value = leida
   } catch (error) {
-    errorCarga.value = mensajeDe(error)
+    if (props.variante === variante) errorCarga.value = mensajeDe(error)
   }
+}
+
+onMounted(async () => {
+  await cargarConfiguracion()
   // Recupera el alta en curso si se recarga la página a mitad.
   await refrescar()
 })
+
+// El router reutiliza la vista al pasar de una opción del menú a la otra.
+watch(
+  () => props.variante,
+  async () => {
+    Object.assign(campos, { prj: '', codigo: '', descripcion: '' })
+    for (const campo of Object.keys(tocados) as Campo[]) delete tocados[campo]
+    intentado.value = false
+    errorAccion.value = null
+    await cargarConfiguracion()
+  },
+)
 
 onBeforeUnmount(() => {
   montada = false
@@ -153,7 +232,7 @@ onBeforeUnmount(() => {
   <section class="grid max-w-3xl gap-6">
     <div>
       <h2 class="text-xl font-semibold">
-        {{ configuracion?.nombre_menu ?? NOMBRE_MENU_ALTA_PREDETERMINADO }}
+        {{ titulo }}
       </h2>
       <p class="text-muted-foreground mt-1 text-sm">
         Alta automática de una oportunidad en Digital Desktop. Rellena los campos variables, revisa
@@ -183,7 +262,21 @@ onBeforeUnmount(() => {
           :class="{ 'sm:col-span-2': definicion.campo === 'descripcion' }"
         >
           <Label :for="`alta-${definicion.campo}`">{{ definicion.etiqueta }}</Label>
+          <ComboboxCodigoServicio
+            v-if="definicion.campo === 'codigo'"
+            id="alta-codigo"
+            v-model="campos.codigo"
+            :invalido="!!errorVisible('codigo')"
+            :descrito-por="
+              [errorVisible('codigo') ? 'error-alta-codigo' : '', 'ayuda-alta-codigo']
+                .filter(Boolean)
+                .join(' ')
+            "
+            :deshabilitado="enCurso"
+            @blur="tocados.codigo = true"
+          />
           <Input
+            v-else
             :id="`alta-${definicion.campo}`"
             v-model="campos[definicion.campo]"
             :inputmode="definicion.modo"
@@ -221,7 +314,7 @@ onBeforeUnmount(() => {
       <h3 id="titulo-resumen-alta" class="font-semibold">Qué se va a crear</h3>
       <dl class="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
         <dt class="text-muted-foreground">Nombre</dt>
-        <dd>{{ nombrePrevisto(campos.prj || 'PRJ-XXXXX', campos.descripcion) }}</dd>
+        <dd>{{ nombreDeLaOportunidad }}</dd>
         <dt class="text-muted-foreground">Fecha límite</dt>
         <dd>{{ configuracion?.fecha_limite ?? '—' }}</dd>
         <dt class="text-muted-foreground">Fecha de inicio</dt>
@@ -229,12 +322,22 @@ onBeforeUnmount(() => {
         <template v-if="configuracion?.valores">
           <dt class="text-muted-foreground">Responsable</dt>
           <dd>{{ configuracion.valores.perfil }}</dd>
+          <template v-if="valoresMs3">
+            <dt class="text-muted-foreground">Responsable de Operaciones</dt>
+            <dd>{{ valoresMs3.responsable_operaciones }}</dd>
+            <dt class="text-muted-foreground">Responsable técnico</dt>
+            <dd>{{ valoresMs3.responsable_tecnico }}</dd>
+          </template>
           <dt class="text-muted-foreground">Cliente</dt>
           <dd>{{ configuracion.valores.cliente }}</dd>
           <dt class="text-muted-foreground">Grupo y tipo</dt>
           <dd>{{ configuracion.valores.grupo }} · {{ configuracion.valores.tipo }}</dd>
           <dt class="text-muted-foreground">Segmentación</dt>
           <dd>{{ configuracion.valores.segmentacion }}</dd>
+          <template v-if="valoresMs3">
+            <dt class="text-muted-foreground">Área MS3</dt>
+            <dd>{{ valoresMs3.area_ms3 }}</dd>
+          </template>
           <dt class="text-muted-foreground">Fase y probabilidad</dt>
           <dd>{{ configuracion.valores.fase }} · {{ configuracion.valores.probabilidad }} %</dd>
           <dt class="text-muted-foreground">Tipo de servicio</dt>

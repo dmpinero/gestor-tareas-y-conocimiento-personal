@@ -17,7 +17,7 @@ import {
   SidebarMenuSubItem,
   SidebarTrigger,
 } from '@/componentes/ui/sidebar'
-import { useNombreMenuAlta } from '@/composables/useNombreMenuAlta'
+import { useNombreMenuAlta, useNombreMenuAltaAxasMs3 } from '@/composables/useNombreMenuAlta'
 
 interface ElementoNavegacion {
   a: string
@@ -45,6 +45,7 @@ interface GrupoNavegacion {
 
 const ruta = useRoute()
 const nombreMenuAlta = useNombreMenuAlta()
+const nombreMenuAxasMs3 = useNombreMenuAltaAxasMs3()
 
 const grupos = computed<GrupoNavegacion[]>(() => [
   {
@@ -61,7 +62,10 @@ const grupos = computed<GrupoNavegacion[]>(() => [
             etiqueta: 'Oportunidades',
             icono: BriefcaseBusiness,
             color: 'text-amber-500',
-            enlaces: [{ a: '/tareas/oportunidades', etiqueta: nombreMenuAlta.value }],
+            enlaces: [
+              { a: '/tareas/oportunidades', etiqueta: nombreMenuAlta.value },
+              { a: '/tareas/oportunidades/axas-ms3', etiqueta: nombreMenuAxasMs3.value },
+            ],
           },
         ],
       },
@@ -77,6 +81,15 @@ const grupos = computed<GrupoNavegacion[]>(() => [
 function estaActivo(destino: string): boolean {
   if (destino === '/') return ruta.path === '/'
   return ruta.path === destino || ruta.path.startsWith(`${destino}/`)
+}
+
+/** Enlace de un grupo activo, salvo que lo esté otro del grupo que cuelga de su ruta
+ * (en /tareas/oportunidades/axas-ms3 solo se marca el alta AXAS MS3, no la de ANES). */
+function enlaceActivo(destino: string, hermanos: { a: string }[]): boolean {
+  return (
+    estaActivo(destino) &&
+    !hermanos.some((otro) => otro.a.startsWith(`${destino}/`) && estaActivo(otro.a))
+  )
 }
 
 function destinos(hijo: SubElementoNavegacion): string[] {
@@ -129,10 +142,15 @@ function esPaginaActual(elemento: ElementoNavegacion): boolean {
                     </span>
                     <SidebarMenuSub>
                       <SidebarMenuSubItem v-for="enlace in hijo.enlaces" :key="enlace.a">
-                        <SidebarMenuSubButton as-child :is-active="estaActivo(enlace.a)">
+                        <SidebarMenuSubButton
+                          as-child
+                          :is-active="enlaceActivo(enlace.a, hijo.enlaces)"
+                        >
                           <RouterLink
                             :to="enlace.a"
-                            :aria-current="estaActivo(enlace.a) ? 'page' : undefined"
+                            :aria-current="
+                              enlaceActivo(enlace.a, hijo.enlaces) ? 'page' : undefined
+                            "
                           >
                             <span>{{ enlace.etiqueta }}</span>
                           </RouterLink>

@@ -197,6 +197,30 @@ Requisitos:
   página espera hasta 5 minutos. La sesión se guarda en el volumen
   `perfil_navegador`, así que no hay que repetirlo.
 
+#### Alta AXAS MS3
+
+La segunda entrada del grupo, **Tareas → Oportunidades → Oportunidades AXAS MS3**
+(`/tareas/oportunidades/axas-ms3`), usa el mismo seguimiento con estas
+diferencias:
+
+- En lugar del PRJ se elige un **código de servicio** (p. ej. `AXAS0024`) en un
+  combobox. Si no existe, se escribe y se crea desde el propio combobox; la
+  página **Ajustes → Códigos de servicio** permite renombrarlos y borrarlos.
+  Un código tiene de 2 a 20 caracteres, sin espacios.
+- La **descripción es obligatoria** (no se busca en Notion).
+- El nombre de la oportunidad (y sus observaciones) es
+  `AXAS-MS3-EV-` + los 2 últimos caracteres del código + `-` + la descripción:
+  `AXAS0024` y «Migración portal» dan `AXAS-MS3-EV-24-Migración portal`.
+  Antes de rellenar se busca entre las oportunidades del cliente si ya existe
+  una con ese nombre.
+- Sus valores fijos van en el bloque opcional `axas_ms3` del mismo archivo de
+  configuración (mira el ejemplo): perfil delegado (que también es el
+  Responsable), cliente, grupo, tipo, responsables de operaciones y técnico,
+  segmentación, área MS3, fase y probabilidad, tipo de servicio, líneas de
+  negocio y comunidades. Los campos `*_busqueda` son el texto que se escribe en
+  los desplegables que cargan sus opciones al buscar. Si el bloque falta, la
+  página lo explica y no deja lanzar el alta; el alta de ANES no cambia.
+
 Solo puede haber un alta a la vez. Los tests y la CI nunca abren un navegador
 contra Digital Desktop ni Notion: la automatización se sustituye por dobles.
 

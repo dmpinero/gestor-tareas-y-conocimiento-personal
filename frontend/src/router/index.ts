@@ -3,6 +3,7 @@ import VistaInicio from '@/vistas/VistaInicio.vue'
 import VistaTareas from '@/vistas/VistaTareas.vue'
 import VistaConocimiento from '@/vistas/VistaConocimiento.vue'
 import VistaAjustes from '@/vistas/VistaAjustes.vue'
+import VistaCodigosServicio from '@/vistas/VistaCodigosServicio.vue'
 import VistaGruposEstados from '@/vistas/VistaGruposEstados.vue'
 import VistaWorkflows from '@/vistas/VistaWorkflows.vue'
 import VistaOportunidades from '@/vistas/VistaOportunidades.vue'
@@ -25,6 +26,12 @@ const router = createRouter({
       path: '/tareas/oportunidades',
       name: 'oportunidades',
       component: VistaOportunidades,
+    },
+    {
+      path: '/tareas/oportunidades/axas-ms3',
+      name: 'oportunidades-axas-ms3',
+      component: VistaOportunidades,
+      props: { variante: 'axas-ms3' },
     },
     {
       path: '/conocimiento',
@@ -55,6 +62,11 @@ const router = createRouter({
       path: '/ajustes/subestados',
       name: 'subestados',
       component: VistaSubestados,
+    },
+    {
+      path: '/ajustes/codigos-servicio',
+      name: 'codigos-servicio',
+      component: VistaCodigosServicio,
     },
   ],
 })

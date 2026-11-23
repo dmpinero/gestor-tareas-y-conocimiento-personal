@@ -38,6 +38,27 @@ export interface ResumenConfiguracionAlta {
   nombre_menu: string
 }
 
+/** Valores fijos del alta AXAS MS3: los de ANES más los que solo tiene MS3. */
+export interface ValoresFijosAxasMs3 extends ValoresFijosAlta {
+  responsable_operaciones: string
+  responsable_tecnico: string
+  area_ms3: string
+}
+
+/** Respuesta de `GET /alta-oportunidades/axas-ms3/configuracion`. */
+export interface ResumenConfiguracionAxasMs3 extends Omit<ResumenConfiguracionAlta, 'valores'> {
+  valores: ValoresFijosAxasMs3 | null
+}
+
+/** Cuerpo de `POST /alta-oportunidades/axas-ms3/ejecucion`. */
+export interface SolicitudAltaAxasMs3 {
+  codigo_servicio: string
+  descripcion: string
+  duracion: number
+  importe: number
+  coste: number
+}
+
 /** Cuerpo de `POST /alta-oportunidades/ejecucion`. */
 export interface SolicitudAlta {
   prj: string
@@ -82,7 +103,15 @@ export function lanzarAlta(solicitud: SolicitudAlta): Promise<EjecucionAlta> {
   return clienteApi.crear<EjecucionAlta>(`${RUTA}/ejecucion`, solicitud)
 }
 
-/** Estado del último alta; rechaza con `ErrorApi` 404 si no se ha lanzado ninguno. */
+export function obtenerConfiguracionAxasMs3(): Promise<ResumenConfiguracionAxasMs3> {
+  return clienteApi.obtener<ResumenConfiguracionAxasMs3>(`${RUTA}/axas-ms3/configuracion`)
+}
+
+export function lanzarAltaAxasMs3(solicitud: SolicitudAltaAxasMs3): Promise<EjecucionAlta> {
+  return clienteApi.crear<EjecucionAlta>(`${RUTA}/axas-ms3/ejecucion`, solicitud)
+}
+
+/** Estado del último alta (de cualquiera de las dos variantes); rechaza con `ErrorApi` 404 si no se ha lanzado ninguno. */
 export function obtenerEjecucionAlta(): Promise<EjecucionAlta> {
   return clienteApi.obtener<EjecucionAlta>(`${RUTA}/ejecucion`)
 }
