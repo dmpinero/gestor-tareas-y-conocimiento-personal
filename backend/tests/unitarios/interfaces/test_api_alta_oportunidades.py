@@ -312,5 +312,7 @@ def test_la_api_del_automatizador_documenta_sus_rutas_en_openapi() -> None:
         f"{RUTA}/ejecucion",
         f"{RUTA}/ejecucion/respuesta",
         f"{RUTA}/ejecucion/captura",
+        f"{RUTA}/axas-ms3/configuracion",
+        f"{RUTA}/axas-ms3/ejecucion",
     }
     assert cliente.get(f"{RUTA}/salud").json() == {"estado": "ok"}

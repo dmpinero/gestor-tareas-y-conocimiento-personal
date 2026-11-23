@@ -7,7 +7,7 @@ Ningún test abre un navegador real: el puerto del navegador se sustituye por
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 
 from fastapi.testclient import TestClient
@@ -23,6 +23,7 @@ from gestor_tareas.aplicacion.oportunidad.servicio import ServicioAltaOportunida
 from gestor_tareas.dominio.oportunidad.entidades import (
     Asignacion,
     ConfiguracionAltaOportunidad,
+    ConfiguracionAxasMs3,
     DatosFormulario,
 )
 from gestor_tareas.interfaces.api.v1.enrutadores.alta_oportunidades import obtener_servicio
@@ -51,6 +52,37 @@ CONFIGURACION = ConfiguracionAltaOportunidad(
 
 SOLICITUD = {"prj": "PRJ-00001", "duracion": 2, "importe": 10000, "coste": 8500}
 
+CONFIGURACION_MS3 = ConfiguracionAxasMs3(
+    perfil="Persona Ms3",
+    responsable_busqueda="Persona",
+    cliente_busqueda="Cliente Ms3",
+    cliente="[CMS] Cliente Ms3 S.A.",
+    grupo="Grupo Ms3",
+    tipo="Tipo Ms3",
+    responsable_operaciones="Responsable Operaciones Ejemplo",
+    responsable_tecnico="Responsable Técnico Ejemplo",
+    responsable_tecnico_busqueda=None,
+    segmentacion="Segmentación Ms3",
+    area_ms3="Área Ejemplo",
+    fase="1 - Fase Ms3",
+    probabilidad="60",
+    dias_fecha_limite=10,
+    tipo_servicio="Servicio Ms3",
+    lineas_negocio=(Asignacion("Línea Ms3", "100"),),
+    comunidades=(Asignacion("Comunidad X", "80"), Asignacion("Comunidad Y", "20")),
+)
+CONFIGURACION_CON_MS3 = replace(CONFIGURACION, axas_ms3=CONFIGURACION_MS3)
+
+RUTA_MS3 = f"{RUTA}/axas-ms3"
+SOLICITUD_MS3 = {
+    "codigo_servicio": "AXAS0024",
+    "descripcion": "Migración portal",
+    "duracion": 2,
+    "importe": 10000,
+    "coste": 8500,
+}
+NOMBRE_MS3 = "AXAS-MS3-EV-24-Migración portal"
+
 
 @dataclass
 class NavegadorSimulado:
@@ -66,6 +98,9 @@ class NavegadorSimulado:
     liberar_inicio_sesion: threading.Event = field(default_factory=threading.Event)
     llamadas: list[str] = field(default_factory=list)
     datos: DatosFormulario | None = None
+    configuracion_ms3: ConfiguracionAxasMs3 | None = None
+    perfil: str | None = None
+    busqueda_duplicado: tuple[str, str, str] | None = None
     cerrado: bool = False
 
     def _paso(self, nombre: str) -> None:
@@ -92,19 +127,32 @@ class NavegadorSimulado:
             canal.ocultar_espera()
         canal.informar("Sesión iniciada")
 
-    def cambiar_perfil(self, canal: CanalEjecucion) -> None:
+    def cambiar_perfil(self, perfil: str, canal: CanalEjecucion) -> None:
+        self.perfil = perfil
         self._paso("cambiar_perfil")
         if self.pedir_intervencion:
             canal.pedir_intervencion("No pude confirmar el cambio de perfil. Cámbialo tú a mano.")
         canal.informar("Perfil activo")
 
-    def existe_oportunidad(self, prj: str) -> bool:
+    def existe_oportunidad(self, cliente: str, cliente_busqueda: str, texto: str) -> bool:
+        self.busqueda_duplicado = (cliente, cliente_busqueda, texto)
         self._paso("existe_oportunidad")
         return self.existe
 
     def rellenar(self, datos: DatosFormulario, canal: CanalEjecucion) -> None:
         self.datos = datos
         self._paso("rellenar")
+        canal.informar("Datos de la oportunidad")
+
+    def rellenar_axas_ms3(
+        self,
+        datos: DatosFormulario,
+        configuracion: ConfiguracionAxasMs3,
+        canal: CanalEjecucion,
+    ) -> None:
+        self.datos = datos
+        self.configuracion_ms3 = configuracion
+        self._paso("rellenar_axas_ms3")
         canal.informar("Datos de la oportunidad")
 
     def resumen_formulario(self) -> str:
