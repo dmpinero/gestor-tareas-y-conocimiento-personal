@@ -295,6 +295,7 @@ test('cada paso tiene su historial de comentarios en Ajustes', async ({ page }) 
 test('los comentarios del paso se copian a las subtareas y luego son independientes', async ({
   page,
   request,
+  grupoE2e,
 }) => {
   const marca = Date.now()
   const workflow = `Copia ${marca}`
@@ -306,6 +307,7 @@ test('los comentarios del paso se copian a las subtareas y luego son independien
       nombre: conEdicion,
       descripcion: 'Sin workflow',
       fecha_creacion: '2026-01-01T09:00:00',
+      grupo_estados_id: grupoE2e,
     },
   })
   expect(sinWorkflow.status()).toBe(201)

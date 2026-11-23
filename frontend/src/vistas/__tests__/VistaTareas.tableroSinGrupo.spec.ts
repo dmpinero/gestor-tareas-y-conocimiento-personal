@@ -1,0 +1,192 @@
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
+
+import { clienteApi } from '@/api/cliente'
+import VistaTareas from '../VistaTareas.vue'
+
+vi.mock('@/lib/exportarTabla', () => ({
+  exportarTablaExcel: vi.fn<(...args: unknown[]) => Promise<void>>(),
+  exportarTablaPDF: vi.fn<(...args: unknown[]) => Promise<void>>(),
+}))
+
+vi.mock('@/api/cliente', () => ({
+  clienteApi: {
+    obtener: vi.fn<(...args: unknown[]) => unknown>(),
+    crear: vi.fn<(...args: unknown[]) => unknown>(),
+    actualizar: vi.fn<(...args: unknown[]) => unknown>(),
+    parchear: vi.fn<(...args: unknown[]) => unknown>(),
+    eliminar: vi.fn<(...args: unknown[]) => unknown>(),
+  },
+}))
+
+const GRUPO = {
+  id: 1,
+  nombre: 'Desarrollo',
+  tareas: 1,
+  estados: [{ id: 10, nombre: 'Pendiente', posicion: 1, tareas: 1 }],
+}
+
+function tarea(id: number, nombre: string, enGrupo: boolean) {
+  return {
+    id,
+    nombre,
+    prioridad: null,
+    descripcion: 'd',
+    fecha_creacion: '2026-11-10T09:00:00',
+    fecha_vencimiento: null,
+    etiquetas: [],
+    asignados: [],
+    tipo: null,
+    oportunidad: null,
+    completada: false,
+    subtareas: [],
+    grupo_estados: enGrupo ? { id: 1, nombre: 'Desarrollo' } : null,
+    estado: enGrupo ? { id: 10, nombre: 'Pendiente' } : null,
+    workflow: null,
+    subestado: null,
+    congelada_en: null,
+  }
+}
+
+const EN_GRUPO = tarea(1, 'Con grupo', true)
+const SUELTA_A = tarea(2, 'Suelta axas uno', false)
+const SUELTA_B = tarea(3, 'Suelta axas dos', false)
+
+const VISTA = 'gestor-tareas:vista-tareas'
+let contenedor: VueWrapper | null = null
+
+async function montarEnTablero(tareas: unknown[]): Promise<VueWrapper> {
+  vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
+    if (ruta === '/grupos-estados') return Promise.resolve([structuredClone(GRUPO)])
+    if (ruta === '/tareas') return Promise.resolve(structuredClone(tareas))
+    return Promise.resolve([])
+  })
+  localStorage.setItem(VISTA, 'tablero')
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const enrutador = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/tareas', component: { template: '<div />' } },
+      { path: '/ajustes/grupos-estados', component: { template: '<div />' } },
+    ],
+  })
+  await enrutador.push('/tareas')
+  contenedor = mount(VistaTareas, {
+    global: { plugins: [pinia, enrutador] },
+    attachTo: document.body,
+  })
+  await flushPromises()
+  return contenedor
+}
+
+function aviso(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>('[data-aviso-sin-grupo]')
+}
+
+function texto(elemento: Element): string {
+  return elemento.textContent!.replace(/\s+/g, ' ').trim()
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  localStorage.removeItem(VISTA)
+})
+
+afterEach(() => {
+  contenedor?.unmount()
+  contenedor = null
+  document.body.innerHTML = ''
+  localStorage.removeItem(VISTA)
+})
+
+describe('VistaTareas: aviso del tablero por las tareas sin grupo de estados', () => {
+  it('avisa de cuántas tareas no se ven en el tablero por no tener grupo', async () => {
+    await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
+
+    expect(texto(aviso()!.querySelector('p')!)).toBe(
+      '2 tareas no se ven en el tablero porque no tienen grupo de estados.',
+    )
+    expect(texto(aviso()!.querySelector('button')!)).toBe('Ver tareas')
+  })
+
+  it('es una alerta de aviso que destaca: rol status, icono y botón para ver las tareas', async () => {
+    await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
+
+    const alerta = aviso()!
+    expect(alerta.getAttribute('role')).toBe('status')
+    expect(alerta.getAttribute('data-variante')).toBe('aviso')
+    expect(alerta.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true')
+    const boton = alerta.querySelector('button')!
+    expect(boton.textContent!.trim()).toBe('Ver tareas')
+    expect(boton.getAttribute('aria-haspopup')).toBe('dialog')
+    // Un botón de verdad (contorno, pequeño), no un enlace subrayado dentro del texto.
+    expect([...boton.classList]).toEqual(expect.arrayContaining(['border', 'h-8']))
+  })
+
+  it('en singular si es una sola', async () => {
+    await montarEnTablero([EN_GRUPO, SUELTA_A])
+
+    expect(texto(aviso()!.querySelector('p')!)).toBe(
+      '1 tarea no se ve en el tablero porque no tiene grupo de estados.',
+    )
+    expect(texto(aviso()!.querySelector('button')!)).toBe('Ver tarea')
+  })
+
+  it('"Ver tareas" abre una ventana modal con las tareas sin grupo que pasan los filtros', async () => {
+    const envoltorio = await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
+    await envoltorio.get('#filtro-buscar').setValue('axas')
+    await flushPromises()
+
+    aviso()!.querySelector('button')!.click()
+    await flushPromises()
+
+    const modal = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(texto(modal.querySelector('h2')!)).toBe('Tareas sin grupo de estados')
+    expect(modal.textContent).toContain(
+      'No se ven en el tablero. Ábrelas para asignarles un grupo de estados.',
+    )
+    const nombres = [...modal.querySelectorAll('ul[aria-label="Tareas sin grupo de estados"] li')]
+    expect(nombres.map((li) => texto(li))).toEqual(['Suelta axas uno', 'Suelta axas dos'])
+    // Sigue en el tablero.
+    expect(
+      document.body
+        .querySelector('button[aria-label="Ver como tablero"]')!
+        .getAttribute('aria-pressed'),
+    ).toBe('true')
+  })
+
+  it('pulsar una tarea de la ventana la cierra y abre el detalle de la tarea', async () => {
+    await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
+    aviso()!.querySelector('button')!.click()
+    await flushPromises()
+
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="Abrir la tarea Suelta axas dos"]')!
+      .click()
+    await flushPromises()
+
+    const dialogos = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')]
+    expect(dialogos.map((d) => texto(d.querySelector('h2')!))).toEqual(['Suelta axas dos'])
+  })
+
+  it('solo cuenta las que pasan los filtros', async () => {
+    const envoltorio = await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
+
+    await envoltorio.get('#filtro-buscar').setValue('uno')
+    await flushPromises()
+    expect(texto(aviso()!)).toContain('1 tarea no se ve en el tablero')
+
+    await envoltorio.get('#filtro-buscar').setValue('Con grupo')
+    await flushPromises()
+    expect(aviso()).toBeNull()
+  })
+
+  it('sin tareas sueltas no hay aviso', async () => {
+    await montarEnTablero([EN_GRUPO])
+
+    expect(aviso()).toBeNull()
+  })
+})

@@ -7,6 +7,7 @@ import { clienteApi } from '@/api/cliente'
 import { colorEtiqueta } from '@/lib/coloresTarea'
 import { exportarTablaExcel, exportarTablaPDF } from '@/lib/exportarTabla'
 import { useTiendaTareas } from '@/stores/tareas'
+import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import VistaTareas from '../VistaTareas.vue'
 
 vi.mock('@/lib/exportarTabla', () => ({
@@ -71,13 +72,22 @@ const PERSONAS = [
 ]
 
 // Campos de una tarea que el test no rellena: sin vencimiento, etiquetas, personas ni tipo.
+// El grupo de estados es obligatorio para crear tareas: por defecto hay uno,
+// que las altas proponen.
+const GRUPO_GENERAL = {
+  id: 50,
+  nombre: 'General',
+  tareas: 0,
+  estados: [{ id: 500, nombre: 'Por hacer', posicion: 1, tareas: 0 }],
+}
+
 const SIN_EXTRAS = {
   fecha_vencimiento: null,
   etiquetas: [],
   asignados: [],
   tipo: null,
   oportunidad: null,
-  grupo_estados_id: null,
+  grupo_estados_id: 50,
   workflow_id: null,
   subestado: null,
 }
@@ -123,7 +133,7 @@ let contenedor: VueWrapper | null = null
 
 async function montar(
   tareas: unknown[] = TAREAS,
-  grupos: unknown[] = [],
+  grupos: unknown[] = [GRUPO_GENERAL],
   workflows: unknown[] = [],
 ): Promise<VueWrapper> {
   // Copia para que los tests que editan no alteren los datos compartidos.
@@ -172,6 +182,22 @@ async function abrirPanel(envoltorio: VueWrapper): Promise<HTMLElement> {
   await botonCrear(envoltorio).trigger('click')
   await flushPromises()
   return panelActual()
+}
+
+// La primera tarea de ejemplo, ya en el grupo por defecto.
+const EN_GENERAL = {
+  ...TAREAS[0],
+  grupo_estados: { id: 50, nombre: 'General' },
+  estado: { id: 500, nombre: 'Por hacer' },
+}
+
+// Las tareas de ejemplo no tienen grupo de estados, que es obligatorio al
+// guardar: los tests que editan y guardan eligen el grupo por defecto.
+async function elegirGrupoGeneral(raiz: HTMLElement): Promise<void> {
+  const selector = campo<HTMLSelectElement>(raiz, '#tarea-grupo-estados')
+  selector.value = '50'
+  selector.dispatchEvent(new Event('change'))
+  await flushPromises()
 }
 
 type AccionFila = 'Editar tarea' | 'Ver detalle de la tarea' | 'Eliminar la tarea'
@@ -573,7 +599,7 @@ describe('VistaTareas', () => {
       asignados: ['Luis'],
       tipo: null,
       oportunidad: null,
-      grupo_estados_id: null,
+      grupo_estados_id: 50,
       workflow_id: null,
       subestado: null,
     })
@@ -612,6 +638,7 @@ describe('VistaTareas', () => {
 
   it('con un vencimiento anterior a la creación muestra el error y no llama a la API', async () => {
     const panel = await abrirPanelEdicion(await montar(), 'Escribir informe')
+    await elegirGrupoGeneral(panel)
 
     await escribir(campo(panel, SELECTOR_VENCIMIENTO), '10/11/2026 09:29:59')
     await enviar(panel)
@@ -629,6 +656,7 @@ describe('VistaTareas', () => {
       fecha_vencimiento: '2026-11-10T09:30:00',
     })
     const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+    await elegirGrupoGeneral(panel)
 
     await escribir(campo(panel, SELECTOR_VENCIMIENTO), '10/11/2026 09:30:00')
     await enviar(panel)
@@ -671,6 +699,7 @@ describe('VistaTareas', () => {
       oportunidad: null,
     })
     const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+    await elegirGrupoGeneral(panel)
 
     await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Informe final')
     await escribir(campo(panel, 'input[placeholder="Prioridad"]'), '')
@@ -691,7 +720,7 @@ describe('VistaTareas', () => {
       asignados: ['Ana'],
       tipo: null,
       oportunidad: null,
-      grupo_estados_id: null,
+      grupo_estados_id: 50,
       workflow_id: null,
       subestado: null,
     })
@@ -737,6 +766,7 @@ describe('VistaTareas', () => {
     const envoltorio = await montar()
     vi.mocked(clienteApi.actualizar).mockRejectedValue(new Error('Tarea no encontrada'))
     const panel = await abrirPanelEdicion(envoltorio, 'Leer artículo')
+    await elegirGrupoGeneral(panel)
 
     await enviar(panel)
 
@@ -982,6 +1012,7 @@ describe('VistaTareas', () => {
       const envoltorio = await montar([TAREA_OPORTUNIDAD])
       vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...TAREAS[0] })
       const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+      await elegirGrupoGeneral(panel)
 
       await elegirTipo(panel, '')
       expect(panel.querySelector('#oportunidad-codigo')).toBeNull()
@@ -3026,22 +3057,81 @@ describe('VistaTareas', () => {
     }
 
     describe('formulario', () => {
-      it('ofrece "Grupo de estados" con "Sin grupo" y los grupos; los grupos sin estados no se pueden elegir', async () => {
+      it('"Grupo de estados" es obligatorio: asterisco, required y sin la opción "Sin grupo"', async () => {
         const envoltorio = await montar([], GRUPOS)
         const panel = await abrirPanel(envoltorio)
 
-        expect(campo(panel, 'label[for="tarea-grupo-estados"]').textContent?.trim()).toBe(
-          'Grupo de estados',
-        )
-        const opciones = [...campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').options]
+        const etiqueta = campo(panel, 'label[for="tarea-grupo-estados"]')
+        expect(etiqueta.textContent?.trim()).toBe('Grupo de estados*')
+        expect(etiqueta.querySelector('[data-testid="marca-obligatorio"]')).not.toBeNull()
+        const selector = campo<HTMLSelectElement>(panel, '#tarea-grupo-estados')
+        expect(selector.required).toBe(true)
+        expect(selector.closest('.campo-obligatorio')).not.toBeNull()
+        const opciones = [...selector.options]
         expect(opciones.map((o) => o.textContent?.trim())).toEqual([
-          'Sin grupo',
+          'Elige un grupo',
           'Desarrollo',
           'Soporte',
           'Vacío (sin estados)',
         ])
-        expect(opciones.map((o) => o.disabled)).toEqual([false, false, false, true])
+        // El marcador no se puede elegir, igual que los grupos sin estados.
+        expect(opciones.map((o) => o.disabled)).toEqual([true, false, false, true])
+      })
+
+      it('al crear propone el grupo del tablero y, sin él, el primero con estados', async () => {
+        localStorage.setItem(CLAVE_GRUPO, '2')
+        const envoltorio = await montar([], GRUPOS)
+        let panel = await abrirPanel(envoltorio)
+        expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('2')
+        envoltorio.unmount()
+        document.body.innerHTML = ''
+
+        localStorage.removeItem(CLAVE_GRUPO)
+        const otro = await montar([], [SIN_ESTADOS, DESARROLLO, SOPORTE])
+        panel = await abrirPanel(otro)
+        expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('1')
+      })
+
+      it('si el alta se abre antes de que lleguen los grupos, propone uno al llegar', async () => {
+        let resolverGrupos: (grupos: unknown) => void = () => {}
+        const envoltorio = await montar([], GRUPOS)
+        const pendientes = new Promise((resolver) => {
+          resolverGrupos = resolver
+        })
+        const obtener = vi.mocked(clienteApi.obtener).getMockImplementation()!
+        vi.mocked(clienteApi.obtener).mockImplementation((ruta) =>
+          ruta === '/grupos-estados' ? (pendientes as Promise<never>) : obtener(ruta),
+        )
+        const tiendaGrupos = useTiendaGruposEstados()
+        tiendaGrupos.grupos = []
+        const recarga = tiendaGrupos.cargar()
+        const panel = await abrirPanel(envoltorio)
         expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('')
+
+        resolverGrupos(structuredClone(GRUPOS))
+        await recarga
+        await flushPromises()
+
+        expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('1')
+        // Proponerlo no cuenta como un cambio sin guardar.
+        ;[...panel.querySelectorAll('button')]
+          .find((b) => b.textContent?.trim() === 'Cancelar')!
+          .click()
+        await flushPromises()
+        expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+      })
+
+      it('no guarda sin grupo de estados: avisa y no llama a la API', async () => {
+        const envoltorio = await montar([], [SIN_ESTADOS])
+        const panel = await abrirPanel(envoltorio)
+
+        await escribir(campo(panel, 'input[placeholder="Nombre"]'), 'Nueva')
+        await escribir(campo(panel, 'textarea[placeholder="Descripción"]'), 'Detalle')
+        expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('')
+        await enviar(panel)
+
+        expect(clienteApi.crear).not.toHaveBeenCalled()
+        expect(panel.textContent).toContain('Elige un grupo de estados.')
       })
 
       it('al crear envía el grupo elegido en grupo_estados_id', async () => {
@@ -3061,24 +3151,70 @@ describe('VistaTareas', () => {
         expect(clienteApi.parchear).not.toHaveBeenCalled()
       })
 
-      it('al editar carga el grupo de la tarea y "Sin grupo" envía null', async () => {
+      it('al editar una tarea sin grupo obliga a elegir uno antes de guardar', async () => {
         const envoltorio = await montar(TAREAS_GRUPO, GRUPOS)
         vi.mocked(clienteApi.actualizar).mockResolvedValue({
-          ...INFORME,
-          grupo_estados: null,
-          estado: null,
-          workflow: null,
+          ...SUELTA,
+          grupo_estados: EN_DESARROLLO,
         })
-        const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+        const panel = await abrirPanelEdicion(envoltorio, 'Sin grupo')
 
-        expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('1')
-        await elegirGrupo(panel, '')
+        expect(campo<HTMLSelectElement>(panel, '#tarea-grupo-estados').value).toBe('')
         await enviar(panel)
+        expect(clienteApi.actualizar).not.toHaveBeenCalled()
+        expect(panel.textContent).toContain('Elige un grupo de estados.')
 
+        await elegirGrupo(panel, '1')
+        await enviar(panel)
         expect(clienteApi.actualizar).toHaveBeenCalledWith(
-          '/tareas/1',
-          expect.objectContaining({ grupo_estados_id: null }),
+          '/tareas/3',
+          expect.objectContaining({ grupo_estados_id: 1 }),
         )
+      })
+
+      it('"+ Agregar tarea" crea la tarea en el grupo del tablero o, sin él, en el primero con estados', async () => {
+        vi.mocked(clienteApi.crear).mockResolvedValue({ ...INFORME, id: 9, nombre: 'Rápida' })
+        localStorage.setItem(CLAVE_GRUPO, '2')
+        const envoltorio = await montar(TAREAS, GRUPOS)
+        const entrada = envoltorio.get<HTMLInputElement>(
+          'input[aria-label="Agregar tarea a Pendientes"]',
+        )
+        await escribir(entrada.element, 'Rápida')
+        await pulsarEnter(entrada.element)
+        expect(clienteApi.crear).toHaveBeenLastCalledWith(
+          '/tareas',
+          expect.objectContaining({ nombre: 'Rápida', grupo_estados_id: 2 }),
+        )
+        envoltorio.unmount()
+        document.body.innerHTML = ''
+
+        localStorage.removeItem(CLAVE_GRUPO)
+        const otro = await montar(TAREAS, [SIN_ESTADOS, DESARROLLO])
+        const otraEntrada = otro.get<HTMLInputElement>(
+          'input[aria-label="Agregar tarea a Pendientes"]',
+        )
+        await escribir(otraEntrada.element, 'Rápida')
+        await pulsarEnter(otraEntrada.element)
+        expect(clienteApi.crear).toHaveBeenLastCalledWith(
+          '/tareas',
+          expect.objectContaining({ grupo_estados_id: 1 }),
+        )
+      })
+
+      it('"+ Agregar tarea" sin ningún grupo con estados avisa y no llama a la API', async () => {
+        const envoltorio = await montar(TAREAS, [SIN_ESTADOS])
+        const entrada = envoltorio.get<HTMLInputElement>(
+          'input[aria-label="Agregar tarea a Pendientes"]',
+        )
+
+        await escribir(entrada.element, 'Rápida')
+        await pulsarEnter(entrada.element)
+
+        expect(clienteApi.crear).not.toHaveBeenCalled()
+        expect(envoltorio.text()).toContain(
+          'Crea un grupo de estados con estados en Ajustes para poder crear tareas.',
+        )
+        expect(entrada.element.value).toBe('Rápida')
       })
 
       it('al editar sin cambiar el grupo lo vuelve a enviar', async () => {
@@ -3901,7 +4037,7 @@ describe('VistaTareas', () => {
     }
 
     it('carga los workflows y los ofrece en el campo "Workflow" del alta', async () => {
-      const envoltorio = await montar([], [], WORKFLOWS)
+      const envoltorio = await montar([], [GRUPO_GENERAL], WORKFLOWS)
       const panel = await abrirPanel(envoltorio)
 
       expect(clienteApi.obtener).toHaveBeenCalledWith('/workflows')
@@ -3915,7 +4051,7 @@ describe('VistaTareas', () => {
     })
 
     it('al crear envía el workflow elegido en workflow_id', async () => {
-      const envoltorio = await montar([], [], WORKFLOWS)
+      const envoltorio = await montar([], [GRUPO_GENERAL], WORKFLOWS)
       vi.mocked(clienteApi.crear).mockResolvedValue({ ...TAREAS[0], id: 9, nombre: 'Nueva' })
       const panel = await abrirPanel(envoltorio)
 
@@ -3930,7 +4066,7 @@ describe('VistaTareas', () => {
     })
 
     it('al crear una oportunidad sin workflow preselecciona "Workflow Oportunidades" y lo envía', async () => {
-      const envoltorio = await montar([], [], WORKFLOWS)
+      const envoltorio = await montar([], [GRUPO_GENERAL], WORKFLOWS)
       vi.mocked(clienteApi.crear).mockResolvedValue({ ...TAREAS[0], id: 9, nombre: 'Nueva' })
       const panel = await abrirPanel(envoltorio)
 
@@ -3948,9 +4084,10 @@ describe('VistaTareas', () => {
 
     it('al editar carga el workflow de la tarea y lo vuelve a enviar', async () => {
       const conWorkflow = { ...TAREAS[0], workflow: { id: 2, nombre: 'Altas' } }
-      const envoltorio = await montar([conWorkflow], [], WORKFLOWS)
+      const envoltorio = await montar([conWorkflow], [GRUPO_GENERAL], WORKFLOWS)
       vi.mocked(clienteApi.actualizar).mockResolvedValue(conWorkflow)
       const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+      await elegirGrupoGeneral(panel)
 
       expect(campo<HTMLSelectElement>(panel, '#tarea-workflow').value).toBe('2')
       await enviar(panel)
@@ -3963,9 +4100,10 @@ describe('VistaTareas', () => {
 
     it('al editar se puede cambiar o quitar el workflow', async () => {
       const conWorkflow = { ...TAREAS[0], workflow: { id: 2, nombre: 'Altas' } }
-      const envoltorio = await montar([conWorkflow], [], WORKFLOWS)
+      const envoltorio = await montar([conWorkflow], [GRUPO_GENERAL], WORKFLOWS)
       vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...conWorkflow, workflow: null })
       const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+      await elegirGrupoGeneral(panel)
 
       await elegirWorkflow(panel, '')
       await enviar(panel)
@@ -3977,9 +4115,10 @@ describe('VistaTareas', () => {
     })
 
     it('al editar y elegir el tipo Oportunidad no preselecciona ningún workflow', async () => {
-      const envoltorio = await montar(TAREAS, [], WORKFLOWS)
+      const envoltorio = await montar(TAREAS, [GRUPO_GENERAL], WORKFLOWS)
       vi.mocked(clienteApi.actualizar).mockResolvedValue(TAREA_OPORTUNIDAD)
       const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
+      await elegirGrupoGeneral(panel)
 
       await elegirTipo(panel, 'oportunidad')
       expect(campo<HTMLSelectElement>(panel, '#tarea-workflow').value).toBe('')
@@ -4322,8 +4461,8 @@ describe('VistaTareas', () => {
     })
 
     it('"Guardar" actualiza la tarea y vuelve a los datos ya cambiados', async () => {
-      const envoltorio = await montar()
-      vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...TAREAS[0], nombre: 'Informe final' })
+      const envoltorio = await montar([EN_GENERAL])
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...EN_GENERAL, nombre: 'Informe final' })
       const modal = await abrirDetalle(envoltorio, 'Escribir informe')
       await pulsar(modal, 'Editar')
 
@@ -4340,7 +4479,7 @@ describe('VistaTareas', () => {
         asignados: ['Ana'],
         tipo: null,
         oportunidad: null,
-        grupo_estados_id: null,
+        grupo_estados_id: 50,
         workflow_id: null,
         subestado: null,
       })
@@ -4351,7 +4490,7 @@ describe('VistaTareas', () => {
     })
 
     it('si falla al guardar, sigue editando y muestra el error', async () => {
-      const envoltorio = await montar()
+      const envoltorio = await montar([EN_GENERAL])
       vi.mocked(clienteApi.actualizar).mockRejectedValue(new Error('Tarea no encontrada'))
       const modal = await abrirDetalle(envoltorio, 'Escribir informe')
       await pulsar(modal, 'Editar')

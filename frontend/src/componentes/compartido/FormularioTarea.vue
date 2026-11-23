@@ -171,14 +171,22 @@ watch(
           </option>
         </select>
       </div>
-      <div class="campo-opcional flex flex-col gap-1.5">
-        <Label for="tarea-grupo-estados">Grupo de estados</Label>
+      <div class="campo-obligatorio flex flex-col gap-1.5">
+        <Label for="tarea-grupo-estados"
+          >Grupo de estados<span
+            data-testid="marca-obligatorio"
+            aria-hidden="true"
+            class="text-destructive"
+            >*</span
+          ></Label
+        >
         <select
           id="tarea-grupo-estados"
           v-model="valores.grupoEstadosId"
+          required
           class="border-input dark:bg-input/30 bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
         >
-          <option value="">Sin grupo</option>
+          <option value="" disabled>Elige un grupo</option>
           <option
             v-for="grupo in tiendaGrupos.grupos"
             :key="grupo.id"

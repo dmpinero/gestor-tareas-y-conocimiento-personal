@@ -297,6 +297,20 @@ watch(idGrupoTablero, (id) => {
   if (id !== null) guardarPreferencia(CLAVE_GRUPO_TABLERO, String(id))
 })
 
+// El grupo de estados es obligatorio al crear y editar. Las altas proponen el
+// grupo del tablero o, si no lo hay (o no tiene estados), el primero con
+// estados; sin ninguno, no se pueden crear tareas.
+const ERROR_SIN_GRUPO = 'Elige un grupo de estados.'
+const ERROR_SIN_GRUPOS_CON_ESTADOS =
+  'Crea un grupo de estados con estados en Ajustes para poder crear tareas.'
+
+const idGrupoPropuesto = computed<number | null>(() => {
+  const conEstados = tiendaGrupos.grupos.filter((grupo) => grupo.estados.length > 0)
+  return (
+    conEstados.find((grupo) => grupo.id === idGrupoTablero.value)?.id ?? conEstados[0]?.id ?? null
+  )
+})
+
 // "Añadir tarea" en una columna del tablero: el alta se abre con su grupo y,
 // como la tarea empieza en el primer estado, al crearla se coloca en el de la
 // columna si es otro (y si no se cambió el grupo en el formulario).
@@ -802,6 +816,11 @@ async function crearRapida(id: IdGrupoTabla): Promise<void> {
   if (nombre === '' || creandoRapida[id]) return
   const fechaCreacion = aFechaHoraIso(formatearFechaHora(new Date()))
   if (fechaCreacion === null) return
+  const idGrupo = idGrupoPropuesto.value
+  if (idGrupo === null) {
+    errorAltaRapida[id] = ERROR_SIN_GRUPOS_CON_ESTADOS
+    return
+  }
   creandoRapida[id] = true
   errorAltaRapida[id] = null
   try {
@@ -815,7 +834,7 @@ async function crearRapida(id: IdGrupoTabla): Promise<void> {
       asignados: [],
       tipo: null,
       oportunidad: null,
-      grupo_estados_id: null,
+      grupo_estados_id: idGrupo,
       workflow_id: null,
       subestado: null,
     })
@@ -911,9 +930,19 @@ function alCambiarAperturaFormulario(abierta: boolean): void {
 function abrirParaCrear(): void {
   limpiarFormulario()
   formulario.fechaCreacion = formatearFechaHora(new Date())
+  formulario.grupoEstadosId = idGrupoPropuesto.value ?? ''
   modalAltaAbierta.value = true
   void fijarFotoFormulario()
 }
+
+// Si el alta se abrió antes de que llegaran los grupos, se propone uno al
+// llegar (sin contarlo como un cambio sin guardar).
+watch(idGrupoPropuesto, (id) => {
+  if (id === null || !modalAltaAbierta.value || idEnEdicion.value !== null) return
+  if (formulario.grupoEstadosId !== '') return
+  formulario.grupoEstadosId = id
+  void fijarFotoFormulario()
+})
 
 function cerrarFormulario(): void {
   modalAltaAbierta.value = false
@@ -1063,6 +1092,10 @@ function validarFechas(): { creacion: string; vencimiento: string | null } | { e
 
 async function guardar(): Promise<void> {
   errorFormulario.value = null
+  if (formulario.grupoEstadosId === '') {
+    errorFormulario.value = ERROR_SIN_GRUPO
+    return
+  }
   const fechas = validarFechas()
   if ('error' in fechas) {
     errorFormulario.value = fechas.error
@@ -1078,7 +1111,7 @@ async function guardar(): Promise<void> {
     asignados: [...formulario.asignados],
     tipo: formulario.tipo === '' ? null : formulario.tipo,
     oportunidad: datosOportunidad(),
-    grupo_estados_id: formulario.grupoEstadosId === '' ? null : formulario.grupoEstadosId,
+    grupo_estados_id: formulario.grupoEstadosId,
     workflow_id: formulario.workflowId === '' ? null : formulario.workflowId,
     subestado: formulario.subestado === '' ? null : formulario.subestado,
   }

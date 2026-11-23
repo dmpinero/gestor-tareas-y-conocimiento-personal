@@ -1066,10 +1066,16 @@ for (const { modo, preparar } of MODOS_BORDES) {
   test(`edita la tarea en una ventana modal con los campos obligatorios en rojo y los opcionales en verde (modo ${modo})`, async ({
     page,
     request,
+    grupoE2e,
   }) => {
     const nombre = `Bordes ${modo} ${Date.now()}`
     const creada = await request.post('/api/v1/tareas', {
-      data: { nombre, descripcion: 'Para editar', fecha_creacion: '2026-01-01T09:00:00' },
+      data: {
+        nombre,
+        descripcion: 'Para editar',
+        fecha_creacion: '2026-01-01T09:00:00',
+        grupo_estados_id: grupoE2e,
+      },
     })
     expect(creada.status()).toBe(201)
 
@@ -1087,6 +1093,7 @@ for (const { modo, preparar } of MODOS_BORDES) {
     expect(rojo).not.toBe(verde)
     expect(await borde('#tarea-descripcion')).toBe(rojo)
     expect(await borde('#fecha-creacion')).toBe(rojo)
+    expect(await borde('#tarea-grupo-estados')).toBe(rojo)
     expect(await borde('#tarea-tipo')).toBe(verde)
     expect(await borde('#etiquetas')).toBe(verde)
 
