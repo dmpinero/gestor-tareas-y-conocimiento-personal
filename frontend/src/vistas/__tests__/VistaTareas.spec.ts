@@ -530,6 +530,7 @@ describe('VistaTareas', () => {
       descripcion: 'Detalle',
       fecha_creacion: '2027-01-02T03:04:05',
       ...SIN_EXTRAS,
+      subtareas: [],
     })
     const panel = await abrirPanel(envoltorio)
 
@@ -565,6 +566,7 @@ describe('VistaTareas', () => {
       asignados: ['Luis'],
       tipo: null,
       oportunidad: null,
+      subtareas: [],
     })
     const panel = await abrirPanel(envoltorio)
 
@@ -697,6 +699,7 @@ describe('VistaTareas', () => {
       asignados: ['Ana'],
       tipo: null,
       oportunidad: null,
+      subtareas: [],
     })
     const panel = await abrirPanelEdicion(envoltorio, 'Escribir informe')
     await elegirGrupoGeneral(panel)
@@ -794,6 +797,7 @@ describe('VistaTareas', () => {
       descripcion: 'Detalle',
       fecha_creacion: AHORA_ISO,
       ...SIN_EXTRAS,
+      subtareas: [],
     })
     const panel = await abrirPanel(envoltorio)
 
@@ -831,6 +835,7 @@ describe('VistaTareas', () => {
       descripcion: 'Detalle',
       fecha_creacion: AHORA_ISO,
       ...SIN_EXTRAS,
+      subtareas: [],
     })
     const panel = await abrirPanel(envoltorio)
 
@@ -2564,6 +2569,23 @@ describe('VistaTareas', () => {
 
       await alternar(envoltorio, 'Filtrar por asignado a', 'Ana')
       expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código'])
+    })
+
+    it('filtra por asignado a también por las personas de las subtareas', async () => {
+      const conSubtarea = (indice: number) => ({
+        ...TAREAS_FILTRO[indice]!,
+        subtareas: [{ ...SUBTAREAS[1], asignado: 'José Manuel Viega' }],
+      })
+      const envoltorio = await montarConFiltros([TAREAS_FILTRO[0], conSubtarea(1), conSubtarea(2)])
+
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Ana')
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Luis')
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Sin asignar')
+      expect(nombresEnTabla(envoltorio)).toEqual(['Revisar código', 'Comprar café'])
+
+      await alternar(envoltorio, 'Filtrar por asignado a', 'José Manuel Viega')
+      await alternar(envoltorio, 'Filtrar por asignado a', 'Sin asignar')
+      expect(nombresEnTabla(envoltorio)).toEqual([])
     })
 
     it('filtra por fecha de creación con ambos extremos incluidos por día', async () => {

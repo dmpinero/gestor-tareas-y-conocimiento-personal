@@ -394,12 +394,16 @@ const itemsEtiquetasFiltro = computed(() =>
     'Sin etiquetas',
   ),
 )
+// El filtro "Asignado a" mira las personas de la tarea y las de sus subtareas:
+// "Sin asignar" es que no hay nadie en ninguna de las dos.
+function personasDeTarea(tarea: Tarea): string[] {
+  const deSubtareas = tarea.subtareas.flatMap((subtarea) =>
+    subtarea.asignado ? [subtarea.asignado] : [],
+  )
+  return [...new Set([...tarea.asignados, ...deSubtareas])]
+}
 const itemsAsignadosFiltro = computed(() =>
-  itemsDeNombres(
-    tienda.personas,
-    tienda.tareas.map((tarea) => tarea.asignados),
-    'Sin asignar',
-  ),
+  itemsDeNombres(tienda.personas, tienda.tareas.map(personasDeTarea), 'Sin asignar'),
 )
 
 // El subestado es como mucho uno: se filtra como una lista de cero o un nombres.
@@ -469,7 +473,7 @@ const tareasConFiltros = computed(() =>
   tienda.tareas.filter((tarea) => {
     if (!prioridadesFiltro.value.includes(tarea.prioridad ?? SIN_PRIORIDAD)) return false
     if (!pasaFiltroNombres(tarea.etiquetas, etiquetasFiltro.value)) return false
-    if (!pasaFiltroNombres(tarea.asignados, asignadosFiltro.value)) return false
+    if (!pasaFiltroNombres(personasDeTarea(tarea), asignadosFiltro.value)) return false
     if (!pasaFiltroNombres(nombresSubestado(tarea), subestadosFiltro.value)) return false
     if (!tiposFiltro.value.includes(tarea.tipo ?? SIN_TIPO)) return false
     if (estadoFiltro.value === 'completadas' && !tarea.completada) return false
