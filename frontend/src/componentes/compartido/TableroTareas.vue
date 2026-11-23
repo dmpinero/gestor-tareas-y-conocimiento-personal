@@ -22,6 +22,13 @@ import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import { Alerta } from '@/componentes/ui/alerta'
 import { Button } from '@/componentes/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/componentes/ui/dialog'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
@@ -55,7 +62,6 @@ const idGrupo = defineModel<number | null>('idGrupo', { required: true })
 const emit = defineEmits<{
   verDetalle: [id: number]
   anadirTarea: [idGrupo: number, idEstado: number]
-  verEnLista: []
 }>()
 
 const tienda = useTiendaTareas()
@@ -77,8 +83,16 @@ const tareasDelGrupo = computed(() =>
 )
 
 // Las tareas sin grupo de estados no caben en ningún tablero: se avisa de
-// cuántas de las que llegan (ya filtradas) quedan fuera, con un atajo a la lista.
-const numeroSinGrupo = computed(() => props.tareas.filter((t) => !t.grupo_estados).length)
+// cuántas de las que llegan (ya filtradas) quedan fuera y se pueden ver en una
+// ventana modal; pulsar una la cierra y abre su detalle.
+const tareasSinGrupo = computed(() => props.tareas.filter((t) => !t.grupo_estados))
+const numeroSinGrupo = computed(() => tareasSinGrupo.value.length)
+const modalSinGrupoAbierto = ref(false)
+
+function abrirDesdeSinGrupo(id: number): void {
+  modalSinGrupoAbierto.value = false
+  emit('verDetalle', id)
+}
 
 // --- Orden de las tarjetas ---------------------------------------------------
 // Orden visual de cada columna, solo en este navegador: no cambia la tarea.
@@ -705,11 +719,43 @@ function terminarArrastre(): void {
                 : `${numeroSinGrupo} tareas no se ven en el tablero porque no tienen grupo de estados.`
             }}
           </p>
-          <Button type="button" variant="outline" size="sm" @click="emit('verEnLista')">
-            {{ numeroSinGrupo === 1 ? 'Verla en la lista' : 'Verlas en la lista' }}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-haspopup="dialog"
+            @click="modalSinGrupoAbierto = true"
+          >
+            {{ numeroSinGrupo === 1 ? 'Ver tarea' : 'Ver tareas' }}
           </Button>
         </div>
       </Alerta>
+
+      <Dialog v-model:open="modalSinGrupoAbierto">
+        <DialogContent class="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tareas sin grupo de estados</DialogTitle>
+            <DialogDescription>
+              No se ven en el tablero. Ábrelas para asignarles un grupo de estados.
+            </DialogDescription>
+          </DialogHeader>
+          <ul aria-label="Tareas sin grupo de estados" class="grid gap-1">
+            <li v-for="tarea in tareasSinGrupo" :key="tarea.id">
+              <button
+                type="button"
+                :class="[
+                  'hover:bg-accent focus-visible:ring-ring/50 w-full rounded-md px-2 py-1.5 text-left text-sm outline-none [overflow-wrap:anywhere] focus-visible:ring-[3px]',
+                  tarea.completada && 'line-through',
+                ]"
+                :aria-label="`Abrir la tarea ${tarea.nombre}`"
+                @click="abrirDesdeSinGrupo(tarea.id)"
+              >
+                {{ tarea.nombre }}
+              </button>
+            </li>
+          </ul>
+        </DialogContent>
+      </Dialog>
 
       <p v-if="grupoActivo.estados.length === 0" class="text-muted-foreground text-sm">
         Este grupo no tiene estados. Añádelos en

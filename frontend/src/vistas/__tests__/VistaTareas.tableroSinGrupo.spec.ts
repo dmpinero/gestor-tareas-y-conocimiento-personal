@@ -86,7 +86,7 @@ function aviso(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>('[data-aviso-sin-grupo]')
 }
 
-function texto(elemento: HTMLElement): string {
+function texto(elemento: Element): string {
   return elemento.textContent!.replace(/\s+/g, ' ').trim()
 }
 
@@ -109,10 +109,10 @@ describe('VistaTareas: aviso del tablero por las tareas sin grupo de estados', (
     expect(texto(aviso()!.querySelector('p')!)).toBe(
       '2 tareas no se ven en el tablero porque no tienen grupo de estados.',
     )
-    expect(texto(aviso()!.querySelector('button')!)).toBe('Verlas en la lista')
+    expect(texto(aviso()!.querySelector('button')!)).toBe('Ver tareas')
   })
 
-  it('es una alerta de aviso que destaca: rol status, icono y botón para ir a la lista', async () => {
+  it('es una alerta de aviso que destaca: rol status, icono y botón para ver las tareas', async () => {
     await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
 
     const alerta = aviso()!
@@ -120,7 +120,8 @@ describe('VistaTareas: aviso del tablero por las tareas sin grupo de estados', (
     expect(alerta.getAttribute('data-variante')).toBe('aviso')
     expect(alerta.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true')
     const boton = alerta.querySelector('button')!
-    expect(boton.textContent!.trim()).toBe('Verlas en la lista')
+    expect(boton.textContent!.trim()).toBe('Ver tareas')
+    expect(boton.getAttribute('aria-haspopup')).toBe('dialog')
     // Un botón de verdad (contorno, pequeño), no un enlace subrayado dentro del texto.
     expect([...boton.classList]).toEqual(expect.arrayContaining(['border', 'h-8']))
   })
@@ -131,22 +132,44 @@ describe('VistaTareas: aviso del tablero por las tareas sin grupo de estados', (
     expect(texto(aviso()!.querySelector('p')!)).toBe(
       '1 tarea no se ve en el tablero porque no tiene grupo de estados.',
     )
-    expect(texto(aviso()!.querySelector('button')!)).toBe('Verla en la lista')
+    expect(texto(aviso()!.querySelector('button')!)).toBe('Ver tarea')
   })
 
-  it('"Verlas en la lista" cambia a la vista de lista, donde se ven', async () => {
+  it('"Ver tareas" abre una ventana modal con las tareas sin grupo que pasan los filtros', async () => {
     const envoltorio = await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
+    await envoltorio.get('#filtro-buscar').setValue('axas')
+    await flushPromises()
 
     aviso()!.querySelector('button')!.click()
     await flushPromises()
 
+    const modal = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(texto(modal.querySelector('h2')!)).toBe('Tareas sin grupo de estados')
+    expect(modal.textContent).toContain(
+      'No se ven en el tablero. Ábrelas para asignarles un grupo de estados.',
+    )
+    const nombres = [...modal.querySelectorAll('ul[aria-label="Tareas sin grupo de estados"] li')]
+    expect(nombres.map((li) => texto(li))).toEqual(['Suelta axas uno', 'Suelta axas dos'])
+    // Sigue en el tablero.
     expect(
       document.body
-        .querySelector('button[aria-label="Ver como lista"]')!
+        .querySelector('button[aria-label="Ver como tablero"]')!
         .getAttribute('aria-pressed'),
     ).toBe('true')
-    expect(envoltorio.text()).toContain('Suelta axas uno')
-    expect(envoltorio.text()).toContain('Suelta axas dos')
+  })
+
+  it('pulsar una tarea de la ventana la cierra y abre el detalle de la tarea', async () => {
+    await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
+    aviso()!.querySelector('button')!.click()
+    await flushPromises()
+
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="Abrir la tarea Suelta axas dos"]')!
+      .click()
+    await flushPromises()
+
+    const dialogos = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')]
+    expect(dialogos.map((d) => texto(d.querySelector('h2')!))).toEqual(['Suelta axas dos'])
   })
 
   it('solo cuenta las que pasan los filtros', async () => {
