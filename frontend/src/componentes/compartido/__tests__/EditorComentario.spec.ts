@@ -1,5 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 import EditorComentario from '../EditorComentario.vue'
 
@@ -60,6 +60,42 @@ async function escribirUrl(valor: string): Promise<void> {
   campoUrl.dispatchEvent(new Event('input'))
   await flushPromises()
 }
+
+/** Pega texto plano al final del comentario (jsdom no tiene DataTransfer). */
+async function pegarTexto(envoltorio: VueWrapper, texto: string): Promise<void> {
+  const editor = (
+    envoltorio.vm as unknown as { editor: { commands: { focus: (p: string) => void } } }
+  ).editor
+  editor.commands.focus('end')
+  const evento = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(evento, 'clipboardData', {
+    value: {
+      files: [],
+      items: [],
+      types: ['text/plain'],
+      getData: (tipo: string) => (tipo === 'text/plain' ? texto : ''),
+    },
+  })
+  editable(envoltorio).element.dispatchEvent(evento)
+  await flushPromises()
+}
+
+// jsdom no da medidas a los rangos de texto: ProseMirror las pide para
+// desplazarse hasta el cursor al pegar.
+const rangoOriginal = {
+  getClientRects: Range.prototype.getClientRects,
+  getBoundingClientRect: Range.prototype.getBoundingClientRect,
+}
+
+beforeAll(() => {
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList
+  Range.prototype.getBoundingClientRect = () => new DOMRect(0, 0, 0, 0)
+})
+
+afterAll(() => {
+  Range.prototype.getClientRects = rangoOriginal.getClientRects
+  Range.prototype.getBoundingClientRect = rangoOriginal.getBoundingClientRect
+})
 
 afterEach(() => {
   contenedor?.unmount()
@@ -279,5 +315,24 @@ describe('EditorComentario', () => {
     expect(editable(envoltorio).text()).toBe('😀'.repeat(300))
     const emitidos = (envoltorio.emitted('update:modelValue') ?? []).map((e) => e[0])
     expect(emitidos.every((valor) => valor === guardado)).toBe(true)
+  })
+
+  it('pegar texto plano que empieza por una palabra abreviada no lo convierte en una lista', async () => {
+    // Outlook copia la fecha de envío como «lu. 23/11/2026 16:30».
+    const envoltorio = await montar()
+    await pegarTexto(envoltorio, 'lu. 23/11/2026 16:30')
+    expect(ultimoValor(envoltorio)).toBe('<p>lu. 23/11/2026 16:30</p>')
+  })
+
+  it('pegar varias líneas de texto plano con letras y punto las deja como párrafos', async () => {
+    const envoltorio = await montar()
+    await pegarTexto(envoltorio, 'a. primero\nb. segundo')
+    expect(ultimoValor(envoltorio)).toBe('<p>a. primero</p><p>b. segundo</p>')
+  })
+
+  it('pegar una lista numerada en texto plano sigue creando una lista numerada', async () => {
+    const envoltorio = await montar()
+    await pegarTexto(envoltorio, '1. primero\n2. segundo')
+    expect(ultimoValor(envoltorio)).toBe('<ol><li><p>primero</p></li><li><p>segundo</p></li></ol>')
   })
 })
