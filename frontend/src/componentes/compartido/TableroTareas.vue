@@ -8,6 +8,7 @@ import {
   MessageSquare,
   MoveRight,
   Plus,
+  TriangleAlert,
 } from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -19,6 +20,7 @@ import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
+import { Alerta } from '@/componentes/ui/alerta'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
 import { Label } from '@/componentes/ui/label'
@@ -693,20 +695,21 @@ function terminarArrastre(): void {
         </div>
       </div>
 
-      <p v-if="numeroSinGrupo > 0" data-aviso-sin-grupo class="text-muted-foreground text-sm">
-        {{
-          numeroSinGrupo === 1
-            ? '1 tarea no se ve en el tablero porque no tiene grupo de estados.'
-            : `${numeroSinGrupo} tareas no se ven en el tablero porque no tienen grupo de estados.`
-        }}
-        <button
-          type="button"
-          class="text-primary focus-visible:ring-ring/50 rounded-sm underline underline-offset-4 outline-none focus-visible:ring-[3px]"
-          @click="emit('verEnLista')"
-        >
-          {{ numeroSinGrupo === 1 ? 'Verla en la lista' : 'Verlas en la lista' }}
-        </button>
-      </p>
+      <Alerta v-if="numeroSinGrupo > 0" variant="aviso" data-aviso-sin-grupo>
+        <TriangleAlert aria-hidden="true" />
+        <div class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p class="font-medium">
+            {{
+              numeroSinGrupo === 1
+                ? '1 tarea no se ve en el tablero porque no tiene grupo de estados.'
+                : `${numeroSinGrupo} tareas no se ven en el tablero porque no tienen grupo de estados.`
+            }}
+          </p>
+          <Button type="button" variant="outline" size="sm" @click="emit('verEnLista')">
+            {{ numeroSinGrupo === 1 ? 'Verla en la lista' : 'Verlas en la lista' }}
+          </Button>
+        </div>
+      </Alerta>
 
       <p v-if="grupoActivo.estados.length === 0" class="text-muted-foreground text-sm">
         Este grupo no tiene estados. Añádelos en

@@ -106,17 +106,32 @@ describe('VistaTareas: aviso del tablero por las tareas sin grupo de estados', (
   it('avisa de cuántas tareas no se ven en el tablero por no tener grupo', async () => {
     await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
 
-    expect(texto(aviso()!)).toBe(
-      '2 tareas no se ven en el tablero porque no tienen grupo de estados. Verlas en la lista',
+    expect(texto(aviso()!.querySelector('p')!)).toBe(
+      '2 tareas no se ven en el tablero porque no tienen grupo de estados.',
     )
+    expect(texto(aviso()!.querySelector('button')!)).toBe('Verlas en la lista')
+  })
+
+  it('es una alerta de aviso que destaca: rol status, icono y botón para ir a la lista', async () => {
+    await montarEnTablero([EN_GRUPO, SUELTA_A, SUELTA_B])
+
+    const alerta = aviso()!
+    expect(alerta.getAttribute('role')).toBe('status')
+    expect(alerta.getAttribute('data-variante')).toBe('aviso')
+    expect(alerta.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true')
+    const boton = alerta.querySelector('button')!
+    expect(boton.textContent!.trim()).toBe('Verlas en la lista')
+    // Un botón de verdad (contorno, pequeño), no un enlace subrayado dentro del texto.
+    expect([...boton.classList]).toEqual(expect.arrayContaining(['border', 'h-8']))
   })
 
   it('en singular si es una sola', async () => {
     await montarEnTablero([EN_GRUPO, SUELTA_A])
 
-    expect(texto(aviso()!)).toBe(
-      '1 tarea no se ve en el tablero porque no tiene grupo de estados. Verla en la lista',
+    expect(texto(aviso()!.querySelector('p')!)).toBe(
+      '1 tarea no se ve en el tablero porque no tiene grupo de estados.',
     )
+    expect(texto(aviso()!.querySelector('button')!)).toBe('Verla en la lista')
   })
 
   it('"Verlas en la lista" cambia a la vista de lista, donde se ven', async () => {
