@@ -12,6 +12,7 @@ from gestor_tareas.interfaces.api.middleware.cabeceras_seguridad import (
     MiddlewareCabecerasSeguridad,
 )
 from gestor_tareas.interfaces.api.v1.enrutadores import (
+    codigos_servicio,
     comentarios,
     etiquetas,
     grupos_estados,
@@ -46,6 +47,7 @@ def crear_aplicacion() -> FastAPI:
     aplicacion.include_router(etiquetas.enrutador, prefix="/api/v1")
     aplicacion.include_router(personas.enrutador, prefix="/api/v1")
     aplicacion.include_router(subestados.enrutador, prefix="/api/v1")
+    aplicacion.include_router(codigos_servicio.enrutador, prefix="/api/v1")
     aplicacion.include_router(workflows.enrutador, prefix="/api/v1")
     aplicacion.include_router(comentarios.enrutador_pasos, prefix="/api/v1")
     aplicacion.include_router(grupos_estados.enrutador, prefix="/api/v1")

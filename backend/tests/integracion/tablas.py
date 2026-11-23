@@ -5,9 +5,9 @@ from gestor_tareas.infraestructura.persistencia import modelos
 
 def vaciar_tablas(sesion: Session) -> None:
     """Vacía las tablas de tareas (con sus subtareas y comentarios, también los de
-    las subtareas), catálogos (también los subestados), workflows (con los
-    comentarios de sus pasos) y grupos de estados, y las imágenes de los
-    comentarios, respetando el orden de las claves ajenas."""
+    las subtareas), catálogos (también los subestados y los códigos de servicio),
+    workflows (con los comentarios de sus pasos) y grupos de estados, y las imágenes
+    de los comentarios, respetando el orden de las claves ajenas."""
     for tabla in (
         modelos.ComentarioModelo.__table__,
         modelos.ComentarioSubtareaModelo.__table__,
@@ -19,6 +19,7 @@ def vaciar_tablas(sesion: Session) -> None:
         modelos.OportunidadModelo.__table__,
         modelos.TareaModelo.__table__,
         modelos.SubestadoModelo.__table__,
+        modelos.CodigoServicioModelo.__table__,
         modelos.WorkflowModelo.__table__,
         modelos.EstadoGrupoModelo.__table__,
         modelos.GrupoEstadosModelo.__table__,

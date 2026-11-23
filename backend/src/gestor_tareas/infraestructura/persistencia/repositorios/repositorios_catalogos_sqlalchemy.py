@@ -4,12 +4,19 @@ from sqlalchemy import delete, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from gestor_tareas.dominio.codigo_servicio.entidades import CodigoServicio
+from gestor_tareas.dominio.codigo_servicio.errores import (
+    codigo_servicio_duplicado,
+    codigo_servicio_no_encontrado,
+)
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
+from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError, NombreDuplicadoError
 from gestor_tareas.dominio.nombres_catalogo import clave_orden_nombre
 from gestor_tareas.dominio.persona.entidades import Persona
 from gestor_tareas.dominio.subestado.entidades import Subestado
 from gestor_tareas.dominio.subestado.errores import subestado_duplicado, subestado_no_encontrado
 from gestor_tareas.infraestructura.persistencia.modelos import (
+    CodigoServicioModelo,
     EtiquetaModelo,
     PersonaModelo,
     SubestadoModelo,
@@ -50,11 +57,11 @@ def filas_obtenidas[M: (EtiquetaModelo, PersonaModelo, SubestadoModelo)](
 
 
 class _RepositorioCatalogoSqlAlchemy[
-    E: (Etiqueta, Persona, Subestado),
-    M: (EtiquetaModelo, PersonaModelo, SubestadoModelo),
+    E: (Etiqueta, Persona, Subestado, CodigoServicio),
+    M: (EtiquetaModelo, PersonaModelo, SubestadoModelo, CodigoServicioModelo),
 ]:
-    """Catálogo de nombres únicos sin distinguir mayúsculas (etiquetas, personas o
-    subestados).
+    """Catálogo de nombres únicos sin distinguir mayúsculas (etiquetas, personas,
+    subestados o códigos de servicio).
 
     La comparación de nombres la hace MySQL con la intercalación de la columna
     (ver ``INTERCALACION_NOMBRES_CATALOGO``), que también respalda el índice único.
@@ -131,17 +138,16 @@ class RepositorioPersonasSqlAlchemy(_RepositorioCatalogoSqlAlchemy[Persona, Pers
     _entidad = Persona
 
 
-class RepositorioSubestadosSqlAlchemy(_RepositorioCatalogoSqlAlchemy[Subestado, SubestadoModelo]):
-    """Catálogo de subestados: como el de etiquetas, y además se gestiona (alta,
-    cambio de nombre y borrado). Cada operación de gestión confirma su transacción."""
+class _RepositorioCatalogoGestionableSqlAlchemy[
+    E: (Subestado, CodigoServicio),
+    M: (SubestadoModelo, CodigoServicioModelo),
+](_RepositorioCatalogoSqlAlchemy[E, M]):
+    """Catálogo que además se gestiona (alta, cambio de nombre y borrado). Cada
+    operación de gestión confirma su transacción."""
 
-    _modelo = SubestadoModelo
-    _entidad = Subestado
-    # Borrar un subestado (que deja sus tareas sin él) espera a las tareas que se
-    # están guardando con él, y estas a que termine el borrado: una lectura con
-    # bloqueo ve que ya no existe y lo vuelve a dar de alta. Sin el bloqueo, la
-    # tarea se guardaría con un subestado ya borrado (clave ajena rota, 500).
-    _bloquear_al_reutilizar = True
+    # Errores de dominio (con su mensaje) de cada catálogo.
+    _no_encontrado: Callable[[int], EntidadNoEncontradaError]
+    _duplicado: Callable[[str], NombreDuplicadoError]
 
     def _confirmar[T](self, operacion: Callable[[], T]) -> T:
         with traducir_conflictos(self._sesion):
@@ -153,35 +159,64 @@ class RepositorioSubestadosSqlAlchemy(_RepositorioCatalogoSqlAlchemy[Subestado, 
             self._sesion.commit()
         return resultado
 
-    def crear(self, nombre: str) -> Subestado:
-        def crear() -> Subestado:
-            with nombre_unico(lambda: subestado_duplicado(nombre)):
-                fila = SubestadoModelo(nombre=nombre)
+    def crear(self, nombre: str) -> E:
+        def crear() -> E:
+            with nombre_unico(lambda: self._duplicado(nombre)):
+                fila = self._modelo(nombre=nombre)
                 self._sesion.add(fila)
                 self._sesion.flush()
             return self._a_entidad(fila)
 
         return self._confirmar(crear)
 
-    def renombrar(self, id_subestado: int, nombre: str) -> Subestado:
-        def renombrar() -> Subestado:
-            fila = self._sesion.get(SubestadoModelo, id_subestado, with_for_update=True)
+    def renombrar(self, id_elemento: int, nombre: str) -> E:
+        def renombrar() -> E:
+            fila = self._sesion.get(self._modelo, id_elemento, with_for_update=True)
             if fila is None:
-                raise subestado_no_encontrado(id_subestado)
-            with nombre_unico(lambda: subestado_duplicado(nombre)):
+                raise self._no_encontrado(id_elemento)
+            with nombre_unico(lambda: self._duplicado(nombre)):
                 fila.nombre = nombre
                 self._sesion.flush()
             return self._a_entidad(fila)
 
         return self._confirmar(renombrar)
 
-    def eliminar(self, id_subestado: int) -> None:
+    def eliminar(self, id_elemento: int) -> None:
         def eliminar() -> None:
-            # El ON DELETE SET NULL de la base de datos deja sus tareas sin subestado.
             resultado = self._sesion.execute(
-                delete(SubestadoModelo).where(SubestadoModelo.id == id_subestado)
+                delete(self._modelo).where(self._modelo.id == id_elemento)
             )
             if resultado.rowcount == 0:
-                raise subestado_no_encontrado(id_subestado)
+                raise self._no_encontrado(id_elemento)
 
         self._confirmar(eliminar)
+
+
+class RepositorioSubestadosSqlAlchemy(
+    _RepositorioCatalogoGestionableSqlAlchemy[Subestado, SubestadoModelo]
+):
+    """Catálogo de subestados: como el de etiquetas, y además se gestiona. Borrar un
+    subestado deja sus tareas sin él (ON DELETE SET NULL de la base de datos)."""
+
+    _modelo = SubestadoModelo
+    _entidad = Subestado
+    _no_encontrado = staticmethod(subestado_no_encontrado)
+    _duplicado = staticmethod(subestado_duplicado)
+    # Borrar un subestado (que deja sus tareas sin él) espera a las tareas que se
+    # están guardando con él, y estas a que termine el borrado: una lectura con
+    # bloqueo ve que ya no existe y lo vuelve a dar de alta. Sin el bloqueo, la
+    # tarea se guardaría con un subestado ya borrado (clave ajena rota, 500).
+    _bloquear_al_reutilizar = True
+
+
+class RepositorioCodigosServicioSqlAlchemy(
+    _RepositorioCatalogoGestionableSqlAlchemy[CodigoServicio, CodigoServicioModelo]
+):
+    """Catálogo de códigos de servicio del alta de oportunidades AXAS MS3: se gestiona
+    como el de subestados. Ninguna tabla lo referencia, así que borrarlo no afecta a
+    nada más."""
+
+    _modelo = CodigoServicioModelo
+    _entidad = CodigoServicio
+    _no_encontrado = staticmethod(codigo_servicio_no_encontrado)
+    _duplicado = staticmethod(codigo_servicio_duplicado)

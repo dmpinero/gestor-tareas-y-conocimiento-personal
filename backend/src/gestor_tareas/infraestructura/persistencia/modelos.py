@@ -95,6 +95,18 @@ class SubestadoModelo(Base):
     )
 
 
+class CodigoServicioModelo(Base):
+    """Código de servicio del catálogo del alta de oportunidades AXAS MS3 (p. ej.
+    «AXAS0024»). Ninguna tabla lo referencia."""
+
+    __tablename__ = "codigos_servicio"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(
+        String(20, collation=INTERCALACION_NOMBRES_CATALOGO), nullable=False, unique=True
+    )
+
+
 # Relaciones N:M. Borrar una tarea borra sus enlaces; borrar una etiqueta o una
 # persona en uso lo impide la clave ajena (RESTRICT por defecto).
 tarea_etiquetas = Table(
