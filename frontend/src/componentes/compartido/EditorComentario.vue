@@ -86,6 +86,10 @@ const COLORES_RESALTADO = [
   { nombre: 'Morado', valor: '#e9d5ff' },
 ]
 const URL_PERMITIDA = /^(?:https?:\/\/|mailto:)\S+$/i
+// TipTap convierte en lista el texto plano pegado cuyas líneas empiezan por
+// letras y punto («a.», «iv.»), y así «lu. 23/11/2026» (la fecha de Outlook)
+// se volvía la lista «333.». Solo las listas numeradas se convierten.
+const MARCADOR_LISTA_NO_NUMERICO = /^\s*[a-z]+\.\s/i
 const ALT_IMAGEN = 'Captura de pantalla'
 const ACEPTA_IMAGENES = TIPOS_IMAGEN.join(',')
 
@@ -166,9 +170,9 @@ const editor = useEditor({
       emit('enviar')
       return true
     },
-    handlePaste: (_vista, evento) => {
+    handlePaste: (vista, evento) => {
       const imagenes = imagenesDe(evento.clipboardData)
-      if (imagenes.length === 0) return false
+      if (imagenes.length === 0) return pegarComoTextoPlano(vista, evento)
       evento.preventDefault()
       for (const fichero of imagenes) void anadirImagen(fichero)
       return true
@@ -352,6 +356,20 @@ watch(
   () => subidasEnCurso.value > 0,
   (subiendo) => emit('subiendo', subiendo),
 )
+
+/**
+ * Pega como texto normal el texto plano que TipTap convertiría en una lista de
+ * letras. Sin evento de portapapeles en el reenvío, ningún manejador de pegado
+ * (ni este ni el de la lista) vuelve a actuar sobre él.
+ */
+function pegarComoTextoPlano(vista: EditorView, evento: ClipboardEvent): boolean {
+  const datos = evento.clipboardData
+  if (!datos || datos.getData('text/html').trim()) return false
+  const texto = datos.getData('text/plain')
+  if (!MARCADOR_LISTA_NO_NUMERICO.test(texto)) return false
+  evento.preventDefault()
+  return vista.pasteText(texto, new Event('paste') as ClipboardEvent)
+}
 
 function imagenesDe(datos: DataTransfer | null): File[] {
   if (!datos || props.soloLectura) return []
