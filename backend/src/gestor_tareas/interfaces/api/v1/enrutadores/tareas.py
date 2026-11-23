@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from gestor_tareas.aplicacion.tarea.actualizar_tarea import ActualizarTarea
 from gestor_tareas.aplicacion.tarea.anadir_subtarea import AnadirSubtarea
 from gestor_tareas.aplicacion.tarea.cambiar_estado import CambiarEstadoTarea
+from gestor_tareas.aplicacion.tarea.cambiar_subestado import CambiarSubestadoTarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.editar_subtarea import EditarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_subtarea import EliminarSubtarea
@@ -48,6 +49,7 @@ from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     TareaCompletadaEsquema,
     TareaCrearEsquema,
     TareaSalidaEsquema,
+    TareaSubestadoEsquema,
 )
 
 enrutador = APIRouter(prefix="/tareas", tags=["Tareas"])
@@ -218,6 +220,24 @@ def cambiar_estado(
     tarea = _validando_estado(
         "estado_id", datos.estado_id, lambda: caso_de_uso.ejecutar(id_tarea, datos.estado_id)
     )
+    return _a_esquema(tarea)
+
+
+@enrutador.patch(
+    "/{id_tarea:int}/subestado",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def cambiar_subestado(
+    id_tarea: int, datos: TareaSubestadoEsquema, sesion: Session = Depends(obtener_sesion)
+) -> TareaSalidaEsquema:
+    """Cambia solo el subestado de la tarea y la devuelve con el resto de sus datos sin
+    cambios. Con un nombre, se busca en el catálogo de subestados como en el alta y se
+    da de alta si no existe; con null, la tarea queda sin subestado. 404 si la tarea no
+    existe; 422 si falta `subestado` o no es un nombre válido."""
+    tarea = CambiarSubestadoTarea(
+        RepositorioTareasSqlAlchemy(sesion), RepositorioSubestadosSqlAlchemy(sesion)
+    ).ejecutar(id_tarea, datos.subestado)
     return _a_esquema(tarea)
 
 

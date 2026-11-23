@@ -152,3 +152,79 @@ test('pulsar un subestado muestra todas las tareas con ese subestado', async ({
   await page.screenshot({ path: 'e2e/capturas/agrupar-03-subestado-relacionadas.png' })
   await sinViolaciones(page)
 })
+
+test('arrastrar una tarjeta a otro grupo de subestado le cambia el subestado', async ({
+  page,
+  request,
+}) => {
+  const marca = `Arrastre${Date.now()}`
+  const grupo = `Grupo ${marca}`
+  const bloqueado = `Bloqueado ${marca}`
+  const creado = await request.post('/api/v1/grupos-estados', { data: { nombre: grupo } })
+  expect(creado.status()).toBe(201)
+  const { id } = (await creado.json()) as { id: number }
+  for (const estado of ['Pendiente', 'En curso']) {
+    const respuesta = await request.post(`/api/v1/grupos-estados/${id}/estados`, {
+      data: { nombre: estado },
+    })
+    expect(respuesta.status()).toBe(201)
+  }
+  await crearTarea(request, `${marca} uno`, { grupo_estados_id: id, subestado: bloqueado })
+  await crearTarea(request, `${marca} dos`, { grupo_estados_id: id })
+  const tres = await request.post('/api/v1/tareas', {
+    data: {
+      nombre: `${marca} tres`,
+      descripcion: 'Agrupar',
+      fecha_creacion: '2026-01-01T09:00:00',
+      grupo_estados_id: id,
+    },
+  })
+  expect(tres.status()).toBe(201)
+  const { id: idTres } = (await tres.json()) as { id: number }
+  const grupoCreado = (await (await request.get('/api/v1/grupos-estados')).json()) as {
+    id: number
+    estados: { id: number; nombre: string }[]
+  }[]
+  const enCursoId = grupoCreado.find((g) => g.id === id)!.estados[1]!.id
+  expect(
+    (
+      await request.patch(`/api/v1/tareas/${idTres}/estado`, { data: { estado_id: enCursoId } })
+    ).status(),
+  ).toBe(200)
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Ver como tablero' }).click()
+  await page.getByRole('combobox', { name: 'Grupo del tablero' }).selectOption({ label: grupo })
+  await page.getByLabel('Buscar').fill(marca)
+  await page.getByRole('button', { name: 'Agrupar por subestado' }).click()
+  const pendiente = page.getByRole('region', { name: 'Estado Pendiente' })
+  const enCurso = page.getByRole('region', { name: 'Estado En curso' })
+
+  // Dentro de la misma columna: de "Sin subestado" al grupo del subestado.
+  await pendiente
+    .getByRole('button', { name: `${marca} dos`, exact: true })
+    .dragTo(pendiente.getByRole('button', { name: `${bloqueado} (1 tarea)` }))
+  await expect(pendiente.getByRole('button', { name: `${bloqueado} (2 tareas)` })).toBeVisible()
+  await expect(pendiente.getByRole('button', { name: /^Sin subestado/ })).toHaveCount(0)
+
+  // A otra columna, sobre un grupo: cambian el estado y el subestado.
+  await pendiente
+    .getByRole('button', { name: `${marca} uno`, exact: true })
+    .dragTo(enCurso.getByRole('button', { name: 'Sin subestado (1 tarea)' }))
+  await expect(enCurso.getByRole('button', { name: 'Sin subestado (2 tareas)' })).toBeVisible()
+  await expect(pendiente.getByRole('button', { name: `${bloqueado} (1 tarea)` })).toBeVisible()
+
+  // Y se guarda en la API.
+  const tareas = (await (await request.get('/api/v1/tareas')).json()) as {
+    nombre: string
+    subestado: string | null
+    estado: { nombre: string } | null
+  }[]
+  const nuestras = tareas.filter((t) => t.nombre.startsWith(marca))
+  expect(nuestras.map((t) => [t.nombre, t.estado?.nombre, t.subestado]).sort()).toEqual([
+    [`${marca} dos`, 'Pendiente', bloqueado],
+    [`${marca} tres`, 'En curso', null],
+    [`${marca} uno`, 'En curso', null],
+  ])
+  await sinViolaciones(page)
+})

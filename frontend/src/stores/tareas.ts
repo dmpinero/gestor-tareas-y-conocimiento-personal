@@ -115,6 +115,25 @@ export const useTiendaTareas = defineStore('tareas', () => {
     }
   }
 
+  // Cambia solo el subestado de la tarea (`null` lo quita), desde el tablero.
+  // Como `cambiarEstadoTarea`: se reemplaza con la respuesta y, si falla, guarda
+  // el mensaje en `error`, la tarea se queda como estaba y devuelve `false`.
+  async function cambiarSubestadoTarea(
+    idTarea: number,
+    subestado: string | null,
+  ): Promise<boolean> {
+    error.value = null
+    try {
+      reemplazarTarea(
+        await clienteApi.parchear<Tarea>(`/tareas/${idTarea}/subestado`, { subestado }),
+      )
+      return true
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+  }
+
   // Borra la tarea (con sus subtareas y comentarios). Como las acciones de
   // subtareas, si la API falla guarda el mensaje en `error`, la lista se queda
   // como estaba y devuelve `false`.
@@ -221,6 +240,7 @@ export const useTiendaTareas = defineStore('tareas', () => {
     actualizar,
     alternarCompletada,
     cambiarEstadoTarea,
+    cambiarSubestadoTarea,
     eliminarTarea,
     fijarComentariosSubtarea,
     crearSubtarea,

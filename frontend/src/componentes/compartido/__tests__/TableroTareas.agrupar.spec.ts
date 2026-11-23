@@ -167,6 +167,53 @@ function crearDataTransfer(): object {
   return { effectAllowed: '', dropEffect: '', setData: vi.fn<() => void>() }
 }
 
+// Responde a los PATCH de estado y subestado con la tarea cambiada, como la API.
+function simularRespuestas(): void {
+  vi.mocked(clienteApi.parchear).mockImplementation(async (ruta: unknown, cuerpo: unknown) => {
+    const id = Number(String(ruta).split('/')[2])
+    const actual = useTiendaTareas().tareas.find((t) => t.id === id)!
+    const datos = cuerpo as { estado_id?: number; subestado?: string | null }
+    if (datos.estado_id !== undefined) {
+      const estado = GRUPO.estados.find((e) => e.id === datos.estado_id)!
+      return {
+        ...JSON.parse(JSON.stringify(actual)),
+        estado: { id: estado.id, nombre: estado.nombre },
+      }
+    }
+    return { ...JSON.parse(JSON.stringify(actual)), subestado: datos.subestado ?? null }
+  })
+}
+
+async function arrastrar(tarjeta: Element, destino: Element): Promise<void> {
+  const dataTransfer = crearDataTransfer()
+  lanzarEventoArrastre(tarjeta, 'dragstart', dataTransfer)
+  lanzarEventoArrastre(destino, 'dragover', dataTransfer)
+  await flushPromises()
+  lanzarEventoArrastre(destino, 'drop', dataTransfer)
+  lanzarEventoArrastre(tarjeta, 'dragend', dataTransfer)
+  await flushPromises()
+}
+
+function anuncio(): string {
+  return document.body.querySelector('[data-anuncio-tablero]')?.textContent?.trim() ?? ''
+}
+
+// Grupos marcados como destino, como "<columna>: <grupo>" (una vez por grupo).
+function gruposMarcados(): string[] {
+  const marcados = document.body.querySelectorAll<HTMLElement>('[data-destino-subestado]')
+  return [
+    ...new Set(
+      [...marcados].map((m) => {
+        const nombreColumna = m
+          .closest('section')!
+          .getAttribute('aria-label')!
+          .replace('Estado ', '')
+        return `${nombreColumna}: ${m.getAttribute('data-destino-subestado')}`
+      }),
+    ),
+  ]
+}
+
 function limpiarAlmacen(): void {
   for (const clave of [CLAVE_AGRUPAR, CLAVE_PLEGADOS, CLAVE_MODO_ORDEN, CLAVE_ORDEN]) {
     localStorage.removeItem(clave)
@@ -343,27 +390,126 @@ describe('TableroTareas: agrupar por subestado', () => {
     expect(contador('Hecho')).toBe('2')
   })
 
-  it('soltar una tarjeta sobre un grupo de otra columna solo cambia su estado', async () => {
+  it('soltar una tarjeta sobre un grupo de otra columna cambia su estado y su subestado', async () => {
     await montar()
     botonAgrupar().click()
     await flushPromises()
-    vi.mocked(clienteApi.parchear).mockResolvedValue({ ...structuredClone(INFORME), estado: HECHO })
+    simularRespuestas()
     const tarjeta = bloque('Pendiente', 'En espera')!.querySelector('[data-tarjeta]')!
     const destino = cabecera('Hecho', 'Bloqueado')
+
+    await arrastrar(tarjeta, destino)
+
+    expect(vi.mocked(clienteApi.parchear).mock.calls).toEqual([
+      ['/tareas/1/estado', { estado_id: 12 }],
+      ['/tareas/1/subestado', { subestado: 'Bloqueado' }],
+    ])
+    expect(nombresGrupos('Hecho')).toEqual(['Bloqueado (2 tareas)'])
+    expect(tarjetasDe(bloque('Hecho', 'Bloqueado')!)).toEqual(['Informe', 'Despliegue'])
+    expect(nombresGrupos('Pendiente')).toEqual(['Bloqueado (2 tareas)', 'Sin subestado (1 tarea)'])
+    expect(anuncio()).toBe('Informe movida a Hecho, Bloqueado')
+  })
+
+  it('soltar una tarjeta sobre otro grupo de su columna solo cambia su subestado', async () => {
+    await montar()
+    botonAgrupar().click()
+    await flushPromises()
+    simularRespuestas()
+    const tarjeta = bloque('Pendiente', 'En espera')!.querySelector('[data-tarjeta]')!
+    // Sobre una tarjeta del grupo de destino, no solo sobre su cabecera.
+    const destino = bloque('Pendiente', 'Bloqueado')!.querySelector('[data-tarjeta]')!
+
+    await arrastrar(tarjeta, destino)
+
+    expect(vi.mocked(clienteApi.parchear).mock.calls).toEqual([
+      ['/tareas/1/subestado', { subestado: 'Bloqueado' }],
+    ])
+    expect(nombresGrupos('Pendiente')).toEqual(['Bloqueado (3 tareas)', 'Sin subestado (1 tarea)'])
+    expect(anuncio()).toBe('Informe movida a Bloqueado')
+  })
+
+  it('soltarla en "Sin subestado" le quita el subestado', async () => {
+    await montar()
+    botonAgrupar().click()
+    await flushPromises()
+    simularRespuestas()
+    const tarjeta = bloque('Pendiente', 'Bloqueado')!.querySelector('[data-tarjeta]')!
+
+    await arrastrar(tarjeta, cabecera('Pendiente', 'Sin subestado'))
+
+    expect(vi.mocked(clienteApi.parchear).mock.calls).toEqual([
+      ['/tareas/2/subestado', { subestado: null }],
+    ])
+    expect(tarjetasDe(bloque('Pendiente', 'Sin subestado')!)).toEqual(['Artículo', 'Llamada'])
+    expect(anuncio()).toBe('Artículo movida a Sin subestado')
+  })
+
+  it('soltarla en su mismo grupo, o en su columna fuera de los grupos, no cambia nada', async () => {
+    await montar()
+    botonAgrupar().click()
+    await flushPromises()
+    simularRespuestas()
+    const tarjeta = bloque('Pendiente', 'Bloqueado')!.querySelector('[data-tarjeta]')!
+
+    await arrastrar(tarjeta, cabecera('Pendiente', 'Bloqueado'))
+    await arrastrar(tarjeta, columna('Pendiente').querySelector('h3')!)
+
+    expect(clienteApi.parchear).not.toHaveBeenCalled()
+    expect(nombresGrupos('Pendiente')).toEqual([
+      'Bloqueado (2 tareas)',
+      'En espera (1 tarea)',
+      'Sin subestado (1 tarea)',
+    ])
+  })
+
+  it('soltarla en otra columna fuera de sus grupos solo cambia su estado', async () => {
+    await montar()
+    botonAgrupar().click()
+    await flushPromises()
+    simularRespuestas()
+    const tarjeta = bloque('Pendiente', 'En espera')!.querySelector('[data-tarjeta]')!
+
+    await arrastrar(tarjeta, columna('Hecho').querySelector('h3')!)
+
+    expect(vi.mocked(clienteApi.parchear).mock.calls).toEqual([
+      ['/tareas/1/estado', { estado_id: 12 }],
+    ])
+    expect(nombresGrupos('Hecho')).toEqual(['Bloqueado (1 tarea)', 'En espera (1 tarea)'])
+  })
+
+  it('marca el grupo sobre el que se arrastra, y solo ese', async () => {
+    await montar()
+    botonAgrupar().click()
+    await flushPromises()
+    const tarjeta = bloque('Pendiente', 'En espera')!.querySelector('[data-tarjeta]')!
     const dataTransfer = crearDataTransfer()
 
     lanzarEventoArrastre(tarjeta, 'dragstart', dataTransfer)
-    lanzarEventoArrastre(destino, 'dragover', dataTransfer)
+    lanzarEventoArrastre(cabecera('Hecho', 'Bloqueado'), 'dragover', dataTransfer)
     await flushPromises()
-    expect(columna('Hecho').getAttribute('data-destino')).toBe('true')
-    lanzarEventoArrastre(destino, 'drop', dataTransfer)
+    expect(gruposMarcados()).toEqual(['Hecho: Bloqueado'])
+
+    lanzarEventoArrastre(columna('Hecho').querySelector('h3')!, 'dragover', dataTransfer)
+    await flushPromises()
+    expect(gruposMarcados()).toEqual([])
+
     lanzarEventoArrastre(tarjeta, 'dragend', dataTransfer)
     await flushPromises()
+    expect(gruposMarcados()).toEqual([])
+  })
 
-    expect(clienteApi.parchear).toHaveBeenCalledTimes(1)
-    expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/estado', { estado_id: 12 })
-    expect(nombresGrupos('Hecho')).toEqual(['Bloqueado (1 tarea)', 'En espera (1 tarea)'])
-    expect(nombresGrupos('Pendiente')).toEqual(['Bloqueado (2 tareas)', 'Sin subestado (1 tarea)'])
+  it('si falla el cambio de subestado, la tarjeta sigue en su grupo y se muestra el error', async () => {
+    await montar()
+    botonAgrupar().click()
+    await flushPromises()
+    vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('Fallo de red'))
+    const tarjeta = bloque('Pendiente', 'En espera')!.querySelector('[data-tarjeta]')!
+
+    await arrastrar(tarjeta, cabecera('Pendiente', 'Bloqueado'))
+
+    expect(useTiendaTareas().error).toBe('Fallo de red')
+    expect(tarjetasDe(bloque('Pendiente', 'En espera')!)).toEqual(['Informe'])
+    expect(anuncio()).toBe('')
   })
 
   it('en orden manual, "Subir" y "Bajar" mueven la tarjeta dentro de su grupo', async () => {

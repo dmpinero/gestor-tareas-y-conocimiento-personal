@@ -267,3 +267,77 @@ def test_una_edicion_sin_el_campo_se_comporta_como_antes(cliente: TestClient) ->
 
     assert respuesta.status_code == 200
     assert respuesta.json() == {**tarea, "etiquetas": [], "prioridad": 2, "subestado": None}
+
+
+# --- Cambiar solo el subestado (PATCH /tareas/{id}/subestado) ---
+
+
+def _cambiar_subestado(cliente: TestClient, id_tarea: int, cuerpo: object):
+    return cliente.patch(f"{_TAREAS}/{id_tarea}/subestado", json=cuerpo)
+
+
+def test_cambiar_el_subestado_solo_cambia_el_subestado(cliente: TestClient) -> None:
+    tarea = _crear_tarea(
+        cliente, subestado="Bloqueado", prioridad=2, asignados=["Ana"], descripcion="<p>Cajas</p>"
+    )
+
+    respuesta = _cambiar_subestado(cliente, tarea["id"], {"subestado": "En pausa"})
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json() == {**tarea, "subestado": "En pausa"}
+    assert _tarea(cliente, tarea["id"]) == {**tarea, "subestado": "En pausa"}
+
+
+def test_cambiar_a_un_subestado_nuevo_lo_da_de_alta_y_a_uno_existente_usa_su_grafia(
+    cliente: TestClient,
+) -> None:
+    _crear_subestado(cliente, "Bloqueado")
+    tarea = _crear_tarea(cliente)
+
+    nuevo = _cambiar_subestado(cliente, tarea["id"], {"subestado": "  En pausa "})
+    assert nuevo.json()["subestado"] == "En pausa"
+    assert _nombres(cliente) == ["Bloqueado", "En pausa"]
+
+    existente = _cambiar_subestado(cliente, tarea["id"], {"subestado": "BLOQUEADO"})
+    assert existente.json()["subestado"] == "Bloqueado"
+    assert _nombres(cliente) == ["Bloqueado", "En pausa"]
+
+
+def test_cambiar_el_subestado_a_null_lo_quita_sin_borrarlo_del_catalogo(
+    cliente: TestClient,
+) -> None:
+    tarea = _crear_tarea(cliente, subestado="Bloqueado")
+
+    respuesta = _cambiar_subestado(cliente, tarea["id"], {"subestado": None})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["subestado"] is None
+    assert _tarea(cliente, tarea["id"])["subestado"] is None
+    assert _nombres(cliente) == ["Bloqueado"]
+
+
+def test_cambiar_el_subestado_de_una_tarea_que_no_existe_responde_404(
+    cliente: TestClient,
+) -> None:
+    respuesta = _cambiar_subestado(cliente, 999999, {"subestado": "Bloqueado"})
+
+    assert respuesta.status_code == 404
+    assert respuesta.json() == {"detalle": "No existe la tarea con id 999999"}
+    # No se da de alta en el catálogo un subestado para una tarea que no existe.
+    assert _nombres(cliente) == []
+
+
+@pytest.mark.parametrize(
+    "cuerpo",
+    [{}, {"subestado": ""}, {"subestado": "   "}, {"subestado": "a" * 51}, {"subestado": 5}],
+)
+def test_cambiar_el_subestado_con_un_cuerpo_invalido_responde_422_sin_cambiar_nada(
+    cliente: TestClient, cuerpo: dict
+) -> None:
+    tarea = _crear_tarea(cliente, subestado="Bloqueado")
+
+    respuesta = _cambiar_subestado(cliente, tarea["id"], cuerpo)
+
+    assert respuesta.status_code == 422
+    assert _tarea(cliente, tarea["id"]) == tarea
+    assert _nombres(cliente) == ["Bloqueado"]

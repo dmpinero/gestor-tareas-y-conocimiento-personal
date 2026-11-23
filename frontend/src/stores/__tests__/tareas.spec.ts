@@ -614,6 +614,45 @@ describe('useTiendaTareas', () => {
     })
   })
 
+  describe('cambiarSubestadoTarea', () => {
+    it('envía PATCH /tareas/{id}/subestado, reemplaza la tarea y devuelve true', async () => {
+      simularObtener([tareaEjemplo])
+      const cambiada = { ...tareaEjemplo, subestado: 'Bloqueado' }
+      vi.mocked(clienteApi.parchear).mockResolvedValue(cambiada)
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+
+      expect(await tienda.cambiarSubestadoTarea(1, 'Bloqueado')).toBe(true)
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/subestado', {
+        subestado: 'Bloqueado',
+      })
+      expect(tienda.tareas).toEqual([cambiada])
+      expect(tienda.error).toBeNull()
+    })
+
+    it('con null deja la tarea sin subestado', async () => {
+      simularObtener([{ ...tareaEjemplo, subestado: 'Bloqueado' }])
+      vi.mocked(clienteApi.parchear).mockResolvedValue({ ...tareaEjemplo, subestado: null })
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+
+      expect(await tienda.cambiarSubestadoTarea(1, null)).toBe(true)
+      expect(clienteApi.parchear).toHaveBeenCalledWith('/tareas/1/subestado', { subestado: null })
+      expect(tienda.tareas[0]!.subestado).toBeNull()
+    })
+
+    it('si la API falla guarda el error, devuelve false y deja la tarea como estaba', async () => {
+      simularObtener([tareaEjemplo])
+      vi.mocked(clienteApi.parchear).mockRejectedValue(new Error('No existe la tarea con id 1'))
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+
+      expect(await tienda.cambiarSubestadoTarea(1, 'Bloqueado')).toBe(false)
+      expect(tienda.error).toBe('No existe la tarea con id 1')
+      expect(tienda.tareas).toEqual([tareaEjemplo])
+    })
+  })
+
   it('crear devuelve la tarea creada', async () => {
     simularObtener([])
     vi.mocked(clienteApi.crear).mockResolvedValue(tareaEjemplo)
