@@ -77,7 +77,7 @@ async function simularApi(page: Page): Promise<Simulacion> {
   return simulacion
 }
 
-test('el enlace del alta AXAS MS3, dentro del grupo "Oportunidades", abre su página', async ({
+test('el enlace del alta AXAS MS3, dentro de la sección "Oportunidades", abre su página', async ({
   page,
 }) => {
   await simularApi(page)
@@ -86,7 +86,7 @@ test('el enlace del alta AXAS MS3, dentro del grupo "Oportunidades", abre su pá
 
   await page.getByRole('link', { name: 'AXAS Ejemplo' }).click()
 
-  await expect(page).toHaveURL(/\/tareas\/oportunidades\/axas-ms3$/)
+  await expect(page).toHaveURL(/\/oportunidades\/axas-ms3$/)
   await expect(page.getByRole('link', { name: 'AXAS Ejemplo' })).toHaveAttribute(
     'aria-current',
     'page',
@@ -99,7 +99,7 @@ test('crea un código de servicio desde el combobox y lanza el alta con el nombr
   page,
 }) => {
   const simulacion = await simularApi(page)
-  await page.goto('/tareas/oportunidades/axas-ms3')
+  await page.goto('/oportunidades/axas-ms3')
 
   const combobox = page.getByRole('combobox', { name: 'Código de servicio' })
   await combobox.fill('AXAS0025')
@@ -132,11 +132,11 @@ const MODOS = [
 ] as const
 
 for (const { modo, preparar } of MODOS) {
-  test(`/tareas/oportunidades/axas-ms3 con el combobox abierto y errores no tiene violaciones de accesibilidad en modo ${modo} (WCAG 2.1 AA)`, async ({
+  test(`/oportunidades/axas-ms3 con el combobox abierto y errores no tiene violaciones de accesibilidad en modo ${modo} (WCAG 2.1 AA)`, async ({
     page,
   }) => {
     await simularApi(page)
-    await page.goto('/tareas/oportunidades/axas-ms3')
+    await page.goto('/oportunidades/axas-ms3')
     await preparar(page)
     await page.getByRole('button', { name: 'Crear oportunidad' }).click()
     await expect(page.getByText('La descripción es obligatoria.')).toBeVisible()

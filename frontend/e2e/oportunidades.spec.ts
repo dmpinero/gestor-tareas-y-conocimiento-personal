@@ -82,7 +82,7 @@ async function auditarPagina(page: Page) {
     .analyze()
 }
 
-test('el enlace del alta, dentro del grupo "Oportunidades" de Tareas, abre la página', async ({
+test('el enlace del alta, dentro de la sección "Oportunidades" del menú, abre la página', async ({
   page,
 }) => {
   await simularApi(page)
@@ -91,7 +91,7 @@ test('el enlace del alta, dentro del grupo "Oportunidades" de Tareas, abre la p�
 
   await page.getByRole('link', { name: 'Oportunidades Ejemplo' }).click()
 
-  await expect(page).toHaveURL(/\/tareas\/oportunidades$/)
+  await expect(page).toHaveURL(/\/oportunidades\/anes$/)
   await expect(page.getByRole('link', { name: 'Oportunidades Ejemplo' })).toHaveAttribute(
     'aria-current',
     'page',
@@ -102,7 +102,7 @@ test('el enlace del alta, dentro del grupo "Oportunidades" de Tareas, abre la p�
 
 test('la pregunta final se responde desde la página', async ({ page }) => {
   const respuestas = await simularApi(page, EJECUCION_CON_PREGUNTA)
-  await page.goto('/tareas/oportunidades')
+  await page.goto('/oportunidades/anes')
 
   await expect(page.getByRole('heading', { name: '¿Guardar la oportunidad?' })).toBeFocused()
   await page.getByRole('button', { name: 'No guardar', exact: true }).click()
@@ -117,11 +117,11 @@ const MODOS = [
 ] as const
 
 for (const { modo, preparar } of MODOS) {
-  test(`/tareas/oportunidades con un error de validación no tiene violaciones de accesibilidad en modo ${modo} (WCAG 2.1 AA)`, async ({
+  test(`/oportunidades/anes con un error de validación no tiene violaciones de accesibilidad en modo ${modo} (WCAG 2.1 AA)`, async ({
     page,
   }) => {
     await simularApi(page)
-    await page.goto('/tareas/oportunidades')
+    await page.goto('/oportunidades/anes')
     await preparar(page)
     await page.getByLabel('Código del proyecto').fill('PRJ-1')
     await page.getByLabel('Código del proyecto').blur()
@@ -134,11 +134,11 @@ for (const { modo, preparar } of MODOS) {
     expect(resultado.violations).toEqual([])
   })
 
-  test(`/tareas/oportunidades con una pregunta pendiente no tiene violaciones de accesibilidad en modo ${modo} (WCAG 2.1 AA)`, async ({
+  test(`/oportunidades/anes con una pregunta pendiente no tiene violaciones de accesibilidad en modo ${modo} (WCAG 2.1 AA)`, async ({
     page,
   }) => {
     await simularApi(page, EJECUCION_CON_PREGUNTA)
-    await page.goto('/tareas/oportunidades')
+    await page.goto('/oportunidades/anes')
     await preparar(page)
     await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toBeVisible()
 

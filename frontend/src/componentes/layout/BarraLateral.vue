@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookOpen, BriefcaseBusiness, House, ListTodo, Settings2 } from '@lucide/vue'
+import { BookOpen, BriefcaseBusiness, FilePlus2, House, ListTodo, Settings2 } from '@lucide/vue'
 import { computed, type Component } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
@@ -28,14 +28,11 @@ interface ElementoNavegacion {
   hijos?: SubElementoNavegacion[]
 }
 
-/** Un subapartado es un enlace o un grupo sin página propia con sus enlaces. */
-type SubElementoNavegacion =
-  | { a: string; etiqueta: string; icono: Component; color: string }
-  | { etiqueta: string; icono: Component; color: string; enlaces: EnlaceGrupo[] }
-
-interface EnlaceGrupo {
+interface SubElementoNavegacion {
   a: string
   etiqueta: string
+  icono: Component
+  color: string
 }
 
 interface GrupoNavegacion {
@@ -52,20 +49,24 @@ const grupos = computed<GrupoNavegacion[]>(() => [
     titulo: 'General',
     elementos: [
       { a: '/', etiqueta: 'Inicio', icono: House, color: 'text-blue-500' },
+      { a: '/tareas', etiqueta: 'Mi trabajo', icono: ListTodo, color: 'text-rose-500' },
       {
-        a: '/tareas',
-        etiqueta: 'Tareas',
-        icono: ListTodo,
-        color: 'text-rose-500',
+        a: '/oportunidades',
+        etiqueta: 'Oportunidades',
+        icono: BriefcaseBusiness,
+        color: 'text-amber-500',
         hijos: [
           {
-            etiqueta: 'Oportunidades',
-            icono: BriefcaseBusiness,
+            a: '/oportunidades/anes',
+            etiqueta: nombreMenuAlta.value,
+            icono: FilePlus2,
             color: 'text-amber-500',
-            enlaces: [
-              { a: '/tareas/oportunidades', etiqueta: nombreMenuAlta.value },
-              { a: '/tareas/oportunidades/axas-ms3', etiqueta: nombreMenuAxasMs3.value },
-            ],
+          },
+          {
+            a: '/oportunidades/axas-ms3',
+            etiqueta: nombreMenuAxasMs3.value,
+            icono: FilePlus2,
+            color: 'text-amber-500',
           },
         ],
       },
@@ -83,25 +84,9 @@ function estaActivo(destino: string): boolean {
   return ruta.path === destino || ruta.path.startsWith(`${destino}/`)
 }
 
-/** Enlace de un grupo activo, salvo que lo esté otro del grupo que cuelga de su ruta
- * (en /tareas/oportunidades/axas-ms3 solo se marca el alta AXAS MS3, no la de ANES). */
-function enlaceActivo(destino: string, hermanos: { a: string }[]): boolean {
-  return (
-    estaActivo(destino) &&
-    !hermanos.some((otro) => otro.a.startsWith(`${destino}/`) && estaActivo(otro.a))
-  )
-}
-
-function destinos(hijo: SubElementoNavegacion): string[] {
-  return 'enlaces' in hijo ? hijo.enlaces.map((enlace) => enlace.a) : [hijo.a]
-}
-
 /** Página actual: la sección activa, salvo que lo esté uno de sus subapartados. */
 function esPaginaActual(elemento: ElementoNavegacion): boolean {
-  return (
-    estaActivo(elemento.a) &&
-    !elemento.hijos?.some((hijo) => destinos(hijo).some((destino) => estaActivo(destino)))
-  )
+  return estaActivo(elemento.a) && !elemento.hijos?.some((hijo) => estaActivo(hijo.a))
 }
 </script>
 
@@ -131,34 +116,7 @@ function esPaginaActual(elemento: ElementoNavegacion): boolean {
               </SidebarMenuButton>
               <SidebarMenuSub v-if="elemento.hijos?.length">
                 <SidebarMenuSubItem v-for="hijo in elemento.hijos" :key="hijo.etiqueta">
-                  <!-- Grupo sin página propia: un rótulo con sus enlaces debajo. -->
-                  <template v-if="'enlaces' in hijo">
-                    <span
-                      :data-grupo-menu="hijo.etiqueta"
-                      class="text-sidebar-foreground flex h-7 items-center gap-2 px-2 text-sm [&>svg]:size-4 [&>svg]:shrink-0"
-                    >
-                      <component :is="hijo.icono" :class="hijo.color" aria-hidden="true" />
-                      <span>{{ hijo.etiqueta }}</span>
-                    </span>
-                    <SidebarMenuSub>
-                      <SidebarMenuSubItem v-for="enlace in hijo.enlaces" :key="enlace.a">
-                        <SidebarMenuSubButton
-                          as-child
-                          :is-active="enlaceActivo(enlace.a, hijo.enlaces)"
-                        >
-                          <RouterLink
-                            :to="enlace.a"
-                            :aria-current="
-                              enlaceActivo(enlace.a, hijo.enlaces) ? 'page' : undefined
-                            "
-                          >
-                            <span>{{ enlace.etiqueta }}</span>
-                          </RouterLink>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    </SidebarMenuSub>
-                  </template>
-                  <SidebarMenuSubButton v-else as-child :is-active="estaActivo(hijo.a)">
+                  <SidebarMenuSubButton as-child :is-active="estaActivo(hijo.a)">
                     <RouterLink
                       :to="hijo.a"
                       :aria-current="estaActivo(hijo.a) ? 'page' : undefined"

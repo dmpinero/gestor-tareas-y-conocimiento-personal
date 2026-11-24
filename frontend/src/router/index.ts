@@ -22,17 +22,22 @@ const router = createRouter({
       name: 'tareas',
       component: VistaTareas,
     },
+    // Oportunidades es una sección propia del menú (antes colgaba de Tareas:
+    // las rutas antiguas redirigen a las nuevas).
+    { path: '/oportunidades', redirect: '/oportunidades/anes' },
     {
-      path: '/tareas/oportunidades',
+      path: '/oportunidades/anes',
       name: 'oportunidades',
       component: VistaOportunidades,
     },
     {
-      path: '/tareas/oportunidades/axas-ms3',
+      path: '/oportunidades/axas-ms3',
       name: 'oportunidades-axas-ms3',
       component: VistaOportunidades,
       props: { variante: 'axas-ms3' },
     },
+    { path: '/tareas/oportunidades', redirect: '/oportunidades/anes' },
+    { path: '/tareas/oportunidades/axas-ms3', redirect: '/oportunidades/axas-ms3' },
     {
       path: '/conocimiento',
       name: 'conocimiento',

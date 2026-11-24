@@ -5,7 +5,8 @@ test('el panel de navegación colapsa y expande, y resalta la sección activa', 
   await page.goto('/')
   await page.screenshot({ path: 'e2e/capturas/layout-01-inicio.png' })
 
-  await expect(page.getByRole('link', { name: 'Tareas' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Mi trabajo' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Oportunidades', exact: true })).toBeVisible()
 
   await page.goto('/conocimiento')
   await expect(page.getByRole('link', { name: 'Conocimiento' })).toHaveAttribute(
@@ -34,7 +35,9 @@ test('el panel de navegación colapsa y expande, y resalta la sección activa', 
   await expect(page.getByRole('link', { name: 'Conocimiento' })).toContainText('Conocimiento')
 })
 
-for (const { ruta, etiqueta } of SECCIONES) {
+for (const seccion of SECCIONES) {
+  const { ruta, etiqueta } = seccion
+  const titulo = 'titulo' in seccion ? seccion.titulo : etiqueta
   test(`el enlace "${etiqueta}" navega a ${ruta} y queda marcado como página actual`, async ({
     page,
   }) => {
@@ -44,7 +47,7 @@ for (const { ruta, etiqueta } of SECCIONES) {
 
     await expect(page).toHaveURL(new RegExp(`${ruta === '/' ? '/' : ruta}$`))
     await expect(page.getByRole('link', { name: etiqueta })).toHaveAttribute('aria-current', 'page')
-    await expect(page.getByRole('heading', { level: 2, name: etiqueta })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 2, name: titulo })).toBeVisible()
   })
 }
 

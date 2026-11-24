@@ -158,7 +158,7 @@ que no se puede abrir desde otros equipos de la red.
 
 ### Alta de oportunidades
 
-La página **Tareas → Oportunidades** (`/tareas/oportunidades`) da de alta una
+La primera entrada de la sección **Oportunidades** del menú (`/oportunidades/anes`) da de alta una
 oportunidad en Digital Desktop: rellenas los campos variables (código PRJ,
 descripción, duración, importe y coste), revisas el resumen y pulsas
 «Crear oportunidad». El servicio `automatizador` abre una ventana de Chromium,
@@ -184,8 +184,8 @@ Requisitos:
   así que los cambios no necesitan reiniciar nada. Si falta o no es válido,
   la página explica el motivo y no deja lanzar el alta. Nunca la copies dentro
   del repositorio (`config/*.json` está ignorado salvo el ejemplo). El campo
-  opcional `nombre_menu` da nombre a la entrada del alta dentro del grupo
-  **Tareas → Oportunidades** del menú (y al título de la página); si falta,
+  opcional `nombre_menu` da nombre a la entrada del alta dentro de la sección
+  **Oportunidades** del menú (y al título de la página); si falta,
   se usa «Alta de oportunidades».
 - **WSLg** (Windows 11 con WSL 2): la ventana del navegador se muestra en
   Windows a través de la pantalla de WSL (`DISPLAY=:0` y `/tmp/.X11-unix`
@@ -199,8 +199,8 @@ Requisitos:
 
 #### Alta AXAS MS3
 
-La segunda entrada del grupo, **Tareas → Oportunidades → Oportunidades AXAS MS3**
-(`/tareas/oportunidades/axas-ms3`), usa el mismo seguimiento con estas
+La segunda entrada de la sección, **Oportunidades → Oportunidades AXAS MS3**
+(`/oportunidades/axas-ms3`), usa el mismo seguimiento con estas
 diferencias:
 
 - En lugar del PRJ se elige un **código de servicio** (p. ej. `AXAS0024`) en un
