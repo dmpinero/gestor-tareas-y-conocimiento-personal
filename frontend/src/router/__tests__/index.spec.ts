@@ -7,6 +7,7 @@ describe('router', () => {
     ['/tareas', 'tareas'],
     ['/conocimiento', 'conocimiento'],
     ['/ajustes', 'ajustes'],
+    ['/foco/historial', 'historial-foco'],
   ])('resuelve %s a la ruta con nombre "%s"', (ruta, nombre) => {
     expect(router.resolve(ruta).name).toBe(nombre)
   })

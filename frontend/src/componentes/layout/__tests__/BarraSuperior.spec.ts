@@ -34,31 +34,47 @@ async function montar(foco: unknown) {
   })
   const wrapper = mount(BarraSuperior, { global: { plugins: [createPinia(), router] } })
   await flushPromises()
-  return wrapper
+  return { wrapper, router }
+}
+
+const FOCO = {
+  tarea_id: 1,
+  tarea_nombre: 'Migración portal',
+  subtarea_id: null,
+  subtarea_nombre: null,
+  desde: new Date().toISOString(),
 }
 
 describe('BarraSuperior', () => {
-  it('muestra el botón de ayuda justo antes del conmutador de tema', async () => {
-    const wrapper = await montar(null)
+  it('sin foco muestra el historial de foco, la ayuda y el conmutador de tema', async () => {
+    const { wrapper } = await montar(null)
 
     const botones = wrapper.findAll('button')
-    expect(botones).toHaveLength(2)
-    expect(botones[0]?.attributes('aria-label')).toBe('Ayuda: historial de cambios')
-    expect(botones[1]?.attributes('role')).toBe('switch')
+    expect(botones).toHaveLength(3)
+    expect(botones[0]?.attributes('aria-label')).toBe('Historial de foco')
+    expect(botones[1]?.attributes('aria-label')).toBe('Ayuda: historial de cambios')
+    expect(botones[2]?.attributes('role')).toBe('switch')
   })
 
-  it('con una tarea en foco muestra su píldora antes de la ayuda', async () => {
-    const wrapper = await montar({
-      tarea_id: 1,
-      tarea_nombre: 'Migración portal',
-      subtarea_id: null,
-      subtarea_nombre: null,
-      desde: new Date().toISOString(),
-    })
+  it.each([
+    ['sin foco', null],
+    ['con foco', FOCO],
+  ])('el botón del reloj lleva al historial de foco (%s)', async (_caso, foco) => {
+    const { wrapper, router } = await montar(foco)
+
+    await wrapper.get('button[aria-label="Historial de foco"]').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe('/foco/historial')
+  })
+
+  it('con una tarea en foco muestra su píldora y después el reloj, antes de la ayuda', async () => {
+    const { wrapper } = await montar(FOCO)
 
     expect(wrapper.get('[data-indicador-foco]').text()).toContain('Trabajando en: Migración portal')
     const botones = wrapper.findAll('button')
-    expect(botones).toHaveLength(4)
-    expect(botones[2]?.attributes('aria-label')).toBe('Ayuda: historial de cambios')
+    expect(botones).toHaveLength(5)
+    expect(botones[2]?.attributes('aria-label')).toBe('Historial de foco')
+    expect(botones[3]?.attributes('aria-label')).toBe('Ayuda: historial de cambios')
   })
 })

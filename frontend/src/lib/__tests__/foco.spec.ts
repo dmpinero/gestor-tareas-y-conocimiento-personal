@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatearTiempoFoco, textoFoco } from '@/lib/foco'
+import {
+  desplazarDia,
+  fechaLocal,
+  formatearDuracionFoco,
+  formatearTiempoFoco,
+  horaLocal,
+  limitesDiaLocal,
+  normalizarFechaLocal,
+  textoEntradaHistorial,
+  textoFoco,
+} from '@/lib/foco'
 
 const DESDE = '2026-11-24T10:00:00'
 
@@ -57,5 +67,55 @@ describe('textoFoco', () => {
         desde: DESDE,
       }),
     ).toBe('Migración portal › Probar login')
+  })
+})
+
+describe('formatearDuracionFoco', () => {
+  it('usa los mismos tramos que el tiempo de la píldora', () => {
+    expect(formatearDuracionFoco(59_000)).toBe('< 1 min')
+    expect(formatearDuracionFoco(5 * 60_000)).toBe('5 min')
+    expect(formatearDuracionFoco(90 * 60_000)).toBe('1 h 30 min')
+    expect(formatearDuracionFoco(120 * 60_000)).toBe('2 h')
+  })
+})
+
+describe('días locales', () => {
+  it('fechaLocal da YYYY-MM-DD en hora local', () => {
+    expect(fechaLocal(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05')
+  })
+
+  it('desplazarDia cruza meses y años', () => {
+    expect(desplazarDia('2026-12-31', 1)).toBe('2027-01-01')
+    expect(desplazarDia('2026-03-01', -1)).toBe('2026-02-28')
+  })
+
+  it('limitesDiaLocal va de la medianoche local a la siguiente, en UTC', () => {
+    expect(limitesDiaLocal('2026-11-24')).toEqual({
+      desde: new Date(2026, 10, 24).toISOString(),
+      hasta: new Date(2026, 10, 25).toISOString(),
+    })
+  })
+
+  it('normalizarFechaLocal acepta solo fechas reales', () => {
+    expect(normalizarFechaLocal('2026-11-24')).toBe('2026-11-24')
+    expect(normalizarFechaLocal('2026-02-30')).toBeNull()
+    expect(normalizarFechaLocal('ayer')).toBeNull()
+    expect(normalizarFechaLocal(undefined)).toBeNull()
+  })
+
+  it('horaLocal da HH:MM en hora local', () => {
+    expect(horaLocal(new Date(2026, 10, 24, 9, 5).toISOString())).toBe('09:05')
+  })
+})
+
+describe('textoEntradaHistorial', () => {
+  const base = { tarea_id: 1, tarea_nombre: 'Portal', subtarea_id: null, subtarea_nombre: null }
+
+  it('sin subtarea muestra la tarea', () => {
+    expect(textoEntradaHistorial(base)).toBe('Portal')
+  })
+
+  it('con subtarea, aunque se borrara, muestra Tarea › Subtarea', () => {
+    expect(textoEntradaHistorial({ ...base, subtarea_nombre: 'Login' })).toBe('Portal › Login')
   })
 })
