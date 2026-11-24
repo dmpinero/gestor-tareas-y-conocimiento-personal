@@ -70,3 +70,32 @@ test('pone en foco una tarea y luego una subtarea desde el tablero y la píldora
   await expect(pildora).toBeHidden()
   await expect(page.locator('[data-subtarea][data-en-foco="true"]')).toHaveCount(0)
 })
+
+test('en un móvil la barra superior no desborda la página, con foco o sin él', async ({
+  page,
+  request,
+  grupoE2e,
+}) => {
+  const creada = await request.post('/api/v1/tareas', {
+    data: {
+      nombre: `Foco${Date.now()} con un nombre bastante largo para la píldora de la barra`,
+      descripcion: 'Foco',
+      fecha_creacion: '2026-01-01T09:00:00',
+      grupo_estados_id: grupoE2e,
+    },
+  })
+  const { id } = (await creada.json()) as { id: number }
+  await page.setViewportSize({ width: 390, height: 844 })
+  const desborda = () =>
+    page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+
+  await request.delete('/api/v1/foco')
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Historial de foco' })).toBeVisible()
+  expect(await desborda()).toBe(false)
+
+  await request.put('/api/v1/foco', { data: { tarea_id: id } })
+  await page.reload()
+  await expect(page.locator('[data-indicador-foco]')).toBeVisible()
+  expect(await desborda()).toBe(false)
+})
