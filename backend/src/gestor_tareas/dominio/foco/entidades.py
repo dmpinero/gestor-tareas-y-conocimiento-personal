@@ -19,3 +19,26 @@ class Foco:
     subtarea_id: int | None
     subtarea_nombre: str | None
     desde: datetime
+
+
+@dataclass(frozen=True)
+class PeriodoDeFoco:
+    """Una entrada del historial del foco: el tiempo que una tarea (o una subtarea
+    suya) estuvo en foco, de ``desde`` a ``hasta`` (en UTC, sin fracción de segundo).
+
+    ``hasta`` es ``None`` mientras el periodo sigue en curso; como mucho hay uno en
+    curso, el del foco actual. El periodo se cierra al fijar otro foco, al quitarlo
+    o al borrar la tarea o la subtarea en foco.
+
+    Los nombres son los actuales mientras la tarea o la subtarea existen, y los que
+    tenían al ponerlas en foco si ya se borraron; entonces ``tarea_id`` o
+    ``subtarea_id`` son ``None``.
+    """
+
+    id: int
+    tarea_id: int | None
+    tarea_nombre: str
+    subtarea_id: int | None
+    subtarea_nombre: str | None
+    desde: datetime
+    hasta: datetime | None

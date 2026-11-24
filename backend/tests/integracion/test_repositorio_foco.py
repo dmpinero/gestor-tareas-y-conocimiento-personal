@@ -104,8 +104,8 @@ def test_quitar_borra_la_fila_y_se_puede_repetir(sesion_bd) -> None:
     repositorio = RepositorioFocoSqlAlchemy(sesion_bd)
     repositorio.fijar(tarea.id, None, _DESDE)
 
-    repositorio.quitar()
-    repositorio.quitar()
+    repositorio.quitar(_DESDE)
+    repositorio.quitar(_DESDE)
 
     assert _filas(sesion_bd) == []
     assert repositorio.obtener() is None
@@ -122,3 +122,95 @@ def test_la_base_de_datos_solo_admite_la_fila_con_id_1(sesion_bd) -> None:
         )
     sesion_bd.rollback()
     assert sesion_bd.scalar(select(func.count()).select_from(FocoTrabajoModelo)) == 0
+
+
+def _historial(sesion) -> list[tuple]:
+    sesion.rollback()  # Lectura nueva, sin la instantánea de una transacción anterior.
+    return [
+        tuple(f)
+        for f in sesion.execute(
+            text(
+                "SELECT tarea_id, subtarea_id, tarea_nombre, subtarea_nombre, desde, hasta "
+                "FROM historial_foco ORDER BY id"
+            )
+        ).all()
+    ]
+
+
+_DESPUES = datetime(2026, 11, 24, 11, 0, 0, tzinfo=UTC)
+
+
+def test_fijar_cierra_el_periodo_en_curso_y_abre_otro_en_la_misma_confirmacion(
+    sesion_bd,
+) -> None:
+    tarea = _crear(sesion_bd, "Migración portal", "Copiar")
+    repositorio = RepositorioFocoSqlAlchemy(sesion_bd)
+    repositorio.fijar(tarea.id, None, _DESDE)
+
+    repositorio.fijar(tarea.id, tarea.subtareas[0].id, _DESPUES)
+
+    inicio, fin = datetime(2026, 11, 24, 10, 30, 15), datetime(2026, 11, 24, 11, 0, 0)
+    assert _historial(sesion_bd) == [
+        (tarea.id, None, "Migración portal", None, inicio, fin),
+        (tarea.id, tarea.subtareas[0].id, "Migración portal", "Copiar", fin, None),
+    ]
+
+
+def test_un_fijar_que_falla_no_toca_el_historial(sesion_bd) -> None:
+    tarea = _crear(sesion_bd)
+    repositorio = RepositorioFocoSqlAlchemy(sesion_bd)
+    repositorio.fijar(tarea.id, None, _DESDE)
+    antes = _historial(sesion_bd)
+
+    with pytest.raises(EntidadNoEncontradaError):
+        repositorio.fijar(tarea.id, 999999, _DESPUES)
+
+    assert _historial(sesion_bd) == antes
+
+
+def test_quitar_cierra_el_periodo_en_curso(sesion_bd) -> None:
+    tarea = _crear(sesion_bd)
+    repositorio = RepositorioFocoSqlAlchemy(sesion_bd)
+    repositorio.fijar(tarea.id, None, _DESDE)
+
+    repositorio.quitar(_DESPUES)
+
+    assert [f[-1] for f in _historial(sesion_bd)] == [datetime(2026, 11, 24, 11, 0, 0)]
+
+
+def test_cerrar_el_periodo_de_una_tarea_no_confirma(sesion_bd) -> None:
+    tarea = _crear(sesion_bd)
+    repositorio = RepositorioFocoSqlAlchemy(sesion_bd)
+    repositorio.fijar(tarea.id, None, _DESDE)
+
+    repositorio.cerrar_periodo_de_tarea(tarea.id, _DESPUES)
+    sesion_bd.rollback()
+
+    assert [f[-1] for f in _historial(sesion_bd)] == [None]
+
+
+def test_cerrar_el_periodo_de_otra_tarea_o_subtarea_no_cambia_nada(sesion_bd) -> None:
+    tarea = _crear(sesion_bd, "Migración portal", "Copiar")
+    repositorio = RepositorioFocoSqlAlchemy(sesion_bd)
+    repositorio.fijar(tarea.id, tarea.subtareas[0].id, _DESDE)
+
+    repositorio.cerrar_periodo_de_tarea(tarea.id + 1, _DESPUES)
+    repositorio.cerrar_periodo_de_subtarea(tarea.id, tarea.subtareas[0].id + 1, _DESPUES)
+    repositorio.cerrar_periodo_de_subtarea(tarea.id + 1, tarea.subtareas[0].id, _DESPUES)
+    sesion_bd.commit()
+
+    assert [f[-1] for f in _historial(sesion_bd)] == [None]
+
+
+def test_listar_el_historial_lee_los_instantes_en_utc(sesion_bd) -> None:
+    tarea = _crear(sesion_bd)
+    repositorio = RepositorioFocoSqlAlchemy(sesion_bd)
+    repositorio.fijar(tarea.id, None, _DESDE)
+    repositorio.quitar(_DESPUES)
+
+    (periodo,) = repositorio.listar_historial(None, None)
+
+    assert (periodo.desde, periodo.hasta) == (_DESDE, _DESPUES)
+    assert repositorio.listar_historial(_DESPUES, None) == []
+    assert repositorio.listar_historial(None, _DESDE) == []
+    assert repositorio.listar_historial(_DESDE, _DESPUES) == [periodo]

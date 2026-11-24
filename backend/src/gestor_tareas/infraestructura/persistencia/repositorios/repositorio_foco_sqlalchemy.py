@@ -1,15 +1,16 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, literal, select, update
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
-from gestor_tareas.dominio.foco.entidades import Foco
+from gestor_tareas.dominio.foco.entidades import Foco, PeriodoDeFoco
 from gestor_tareas.dominio.foco.errores import subtarea_no_encontrada, tarea_no_encontrada
 from gestor_tareas.infraestructura.persistencia.modelos import (
     FocoTrabajoModelo,
+    HistorialFocoModelo,
     SubtareaModelo,
     TareaModelo,
 )
@@ -23,13 +24,23 @@ _ID_FOCO = 1
 _CLAVE_AJENA_SIN_FILA = 1452
 
 
+def _en_utc_sin_zona(instante: datetime) -> datetime:
+    """Las columnas guardan el instante en UTC sin zona."""
+    return instante.astimezone(UTC).replace(tzinfo=None)
+
+
+def _con_zona_utc(instante: datetime | None) -> datetime | None:
+    return instante.replace(tzinfo=UTC) if instante is not None else None
+
+
 def _es_clave_ajena_sin_fila(error: IntegrityError) -> bool:
     argumentos = getattr(error.orig, "args", ())
     return bool(argumentos) and argumentos[0] == _CLAVE_AJENA_SIN_FILA
 
 
 class RepositorioFocoSqlAlchemy:
-    """Adaptador de ``RepositorioFoco`` sobre MySQL: una sola fila con ``id = 1``."""
+    """Adaptador de ``RepositorioFoco`` sobre MySQL: una sola fila con ``id = 1`` y
+    el historial, que cambia en la misma transacción que el foco."""
 
     def __init__(self, sesion: Session) -> None:
         self._sesion = sesion
@@ -63,7 +74,7 @@ class RepositorioFocoSqlAlchemy:
             "tarea_id": id_tarea,
             "subtarea_id": id_subtarea,
             # La columna guarda el instante en UTC sin zona.
-            "desde": desde.astimezone(UTC).replace(tzinfo=None),
+            "desde": _en_utc_sin_zona(desde),
         }
         sentencia = insert(FocoTrabajoModelo).values(id=_ID_FOCO, **valores)
         with traducir_conflictos(self._sesion):
@@ -75,6 +86,10 @@ class RepositorioFocoSqlAlchemy:
                 if not _es_clave_ajena_sin_fila(error):
                     raise
                 raise self._no_encontrada(id_tarea, id_subtarea) from error
+            # El upsert ha bloqueado la fila del foco: quien fije a la vez espera, y
+            # el periodo en curso que cierra es siempre el último.
+            self._cerrar_en_curso(desde)
+            self._abrir_periodo(id_tarea, id_subtarea, desde)
             foco = self.obtener()
             self._sesion.commit()
         assert foco is not None
@@ -87,7 +102,96 @@ class RepositorioFocoSqlAlchemy:
             return tarea_no_encontrada(id_tarea)
         return subtarea_no_encontrada(id_tarea, id_subtarea)
 
-    def quitar(self) -> None:
+    def _cerrar_en_curso(self, hasta: datetime, *condiciones) -> None:
+        self._sesion.execute(
+            update(HistorialFocoModelo)
+            .where(HistorialFocoModelo.hasta.is_(None), *condiciones)
+            .values(hasta=_en_utc_sin_zona(hasta))
+        )
+
+    def _abrir_periodo(self, id_tarea: int, id_subtarea: int | None, desde: datetime) -> None:
+        """Abre el periodo en curso con los nombres actuales (la tarea y la subtarea
+        ya están bloqueadas por la clave ajena del foco)."""
+        nombres = (
+            select(
+                TareaModelo.id,
+                literal(id_subtarea),
+                TareaModelo.nombre,
+                SubtareaModelo.nombre,
+                literal(_en_utc_sin_zona(desde)),
+            )
+            .select_from(TareaModelo)
+            .outerjoin(
+                SubtareaModelo,
+                (SubtareaModelo.id == id_subtarea) & (SubtareaModelo.tarea_id == TareaModelo.id),
+            )
+            .where(TareaModelo.id == id_tarea)
+        )
+        self._sesion.execute(
+            insert(HistorialFocoModelo).from_select(
+                ["tarea_id", "subtarea_id", "tarea_nombre", "subtarea_nombre", "desde"], nombres
+            )
+        )
+
+    def quitar(self, hasta: datetime) -> None:
         with traducir_conflictos(self._sesion):
             self._sesion.execute(delete(FocoTrabajoModelo).where(FocoTrabajoModelo.id == _ID_FOCO))
+            self._cerrar_en_curso(hasta)
             self._sesion.commit()
+
+    def cerrar_periodo_de_tarea(self, id_tarea: int, hasta: datetime) -> None:
+        # Sin confirmar: va en la transacción del borrado de la tarea.
+        with traducir_conflictos(self._sesion):
+            self._cerrar_en_curso(hasta, HistorialFocoModelo.tarea_id == id_tarea)
+
+    def cerrar_periodo_de_subtarea(self, id_tarea: int, id_subtarea: int, hasta: datetime) -> None:
+        # Sin confirmar: va en la transacción del borrado de la subtarea.
+        with traducir_conflictos(self._sesion):
+            self._cerrar_en_curso(
+                hasta,
+                HistorialFocoModelo.tarea_id == id_tarea,
+                HistorialFocoModelo.subtarea_id == id_subtarea,
+            )
+
+    def listar_historial(
+        self, desde: datetime | None, hasta: datetime | None
+    ) -> list[PeriodoDeFoco]:
+        # Nombres actuales mientras existen; si no, los guardados al fijar el foco.
+        consulta = (
+            select(
+                HistorialFocoModelo.id,
+                HistorialFocoModelo.tarea_id,
+                func.coalesce(TareaModelo.nombre, HistorialFocoModelo.tarea_nombre),
+                HistorialFocoModelo.subtarea_id,
+                func.coalesce(SubtareaModelo.nombre, HistorialFocoModelo.subtarea_nombre),
+                HistorialFocoModelo.desde,
+                HistorialFocoModelo.hasta,
+            )
+            .outerjoin(TareaModelo, TareaModelo.id == HistorialFocoModelo.tarea_id)
+            .outerjoin(SubtareaModelo, SubtareaModelo.id == HistorialFocoModelo.subtarea_id)
+            .order_by(HistorialFocoModelo.desde.desc(), HistorialFocoModelo.id.desc())
+        )
+        if desde is not None:
+            consulta = consulta.where(HistorialFocoModelo.desde >= _en_utc_sin_zona(desde))
+        if hasta is not None:
+            consulta = consulta.where(HistorialFocoModelo.desde < _en_utc_sin_zona(hasta))
+        return [
+            PeriodoDeFoco(
+                id=id_periodo,
+                tarea_id=id_tarea,
+                tarea_nombre=nombre_tarea,
+                subtarea_id=id_subtarea,
+                subtarea_nombre=nombre_subtarea,
+                desde=inicio.replace(tzinfo=UTC),
+                hasta=_con_zona_utc(fin),
+            )
+            for (
+                id_periodo,
+                id_tarea,
+                nombre_tarea,
+                id_subtarea,
+                nombre_subtarea,
+                inicio,
+                fin,
+            ) in self._sesion.execute(consulta)
+        ]

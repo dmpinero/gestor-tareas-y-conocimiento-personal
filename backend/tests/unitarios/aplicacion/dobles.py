@@ -10,7 +10,7 @@ from gestor_tareas.dominio.comentario.entidades import (
 )
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
-from gestor_tareas.dominio.foco.entidades import Foco
+from gestor_tareas.dominio.foco.entidades import Foco, PeriodoDeFoco
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
 from gestor_tareas.dominio.tarea.entidades import (
@@ -430,6 +430,8 @@ class RepositorioFocoFalso:
         self._tareas = tareas
         self._fila: tuple[int, int | None, datetime] | None = None
         self.veces_fijado = 0
+        self.historial: list[PeriodoDeFoco] = []
+        self.consultas_historial: list[tuple[datetime | None, datetime | None]] = []
 
     def obtener(self) -> Foco | None:
         if self._fila is None:
@@ -454,7 +456,54 @@ class RepositorioFocoFalso:
         self.veces_fijado += 1
         foco = self.obtener()
         assert foco is not None
+        # Como el real: cierra el periodo en curso y abre otro con los nombres.
+        self._cerrar_en_curso(desde)
+        self.historial.append(
+            PeriodoDeFoco(
+                id=len(self.historial) + 1,
+                tarea_id=foco.tarea_id,
+                tarea_nombre=foco.tarea_nombre,
+                subtarea_id=foco.subtarea_id,
+                subtarea_nombre=foco.subtarea_nombre,
+                desde=desde,
+                hasta=None,
+            )
+        )
         return foco
 
-    def quitar(self) -> None:
+    def quitar(self, hasta: datetime) -> None:
+        if self._fila is not None:
+            self._cerrar_en_curso(hasta)
         self._fila = None
+
+    def cerrar_periodo_de_tarea(self, id_tarea: int, hasta: datetime) -> None:
+        en_curso = self._en_curso()
+        if en_curso is not None and self.historial[en_curso].tarea_id == id_tarea:
+            self._cerrar_en_curso(hasta)
+
+    def cerrar_periodo_de_subtarea(self, id_tarea: int, id_subtarea: int, hasta: datetime) -> None:
+        en_curso = self._en_curso()
+        if en_curso is not None and (
+            self.historial[en_curso].tarea_id,
+            self.historial[en_curso].subtarea_id,
+        ) == (id_tarea, id_subtarea):
+            self._cerrar_en_curso(hasta)
+
+    def listar_historial(
+        self, desde: datetime | None, hasta: datetime | None
+    ) -> list[PeriodoDeFoco]:
+        self.consultas_historial.append((desde, hasta))
+        periodos = [
+            p
+            for p in self.historial
+            if (desde is None or p.desde >= desde) and (hasta is None or p.desde < hasta)
+        ]
+        return sorted(periodos, key=lambda p: (p.desde, p.id), reverse=True)
+
+    def _en_curso(self) -> int | None:
+        return next((i for i, p in enumerate(self.historial) if p.hasta is None), None)
+
+    def _cerrar_en_curso(self, hasta: datetime) -> None:
+        en_curso = self._en_curso()
+        if en_curso is not None:
+            self.historial[en_curso] = replace(self.historial[en_curso], hasta=hasta)

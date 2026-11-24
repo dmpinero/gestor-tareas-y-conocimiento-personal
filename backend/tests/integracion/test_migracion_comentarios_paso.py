@@ -18,7 +18,7 @@ from tests.integracion.tablas import vaciar_tablas
 _RAIZ = Path(__file__).resolve().parents[2]
 _ANTERIOR = "f3b9d7a2c6e4"
 # Revisión más reciente: la de los subestados de las tareas, posterior a esta.
-_ULTIMA = "e6a1c9d3f5b7"
+_ULTIMA = "483e78c30e26"
 _TABLA = "comentarios_paso_workflow"
 
 
