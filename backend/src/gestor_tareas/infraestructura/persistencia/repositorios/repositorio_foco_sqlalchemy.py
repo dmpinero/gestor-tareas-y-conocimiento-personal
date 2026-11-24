@@ -92,7 +92,8 @@ class RepositorioFocoSqlAlchemy:
             self._abrir_periodo(id_tarea, id_subtarea, desde)
             foco = self.obtener()
             self._sesion.commit()
-        assert foco is not None
+        if foco is None:  # La fila se acaba de escribir en la misma transacción.
+            raise RuntimeError("El foco recién fijado no se puede leer")
         return foco
 
     def _no_encontrada(self, id_tarea: int, id_subtarea: int | None) -> EntidadNoEncontradaError:
