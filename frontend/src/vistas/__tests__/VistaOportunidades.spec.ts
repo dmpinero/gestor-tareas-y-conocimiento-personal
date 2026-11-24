@@ -361,10 +361,20 @@ describe('VistaOportunidades — preguntas de la automatización', () => {
 })
 
 describe('router', () => {
-  it('la ruta /tareas/oportunidades muestra VistaOportunidades', () => {
-    const resuelta = router.resolve('/tareas/oportunidades')
+  it('la ruta /oportunidades/anes muestra VistaOportunidades', () => {
+    const resuelta = router.resolve('/oportunidades/anes')
 
     expect(resuelta.name).toBe('oportunidades')
     expect(resuelta.matched[0]?.components?.default).toBe(VistaOportunidades)
+  })
+
+  it.each([
+    ['/oportunidades', '/oportunidades/anes'],
+    ['/tareas/oportunidades', '/oportunidades/anes'],
+    ['/tareas/oportunidades/axas-ms3', '/oportunidades/axas-ms3'],
+  ])('%s redirige a %s', async (antigua, nueva) => {
+    await router.push(antigua)
+
+    expect(router.currentRoute.value.fullPath).toBe(nueva)
   })
 })

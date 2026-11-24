@@ -260,8 +260,8 @@ describe('VistaOportunidades — respuesta tardía al cambiar de variante', () =
 })
 
 describe('router', () => {
-  it('la ruta /tareas/oportunidades/axas-ms3 muestra el alta de AXAS MS3', () => {
-    const ruta = router.resolve('/tareas/oportunidades/axas-ms3')
+  it('la ruta /oportunidades/axas-ms3 muestra el alta de AXAS MS3', () => {
+    const ruta = router.resolve('/oportunidades/axas-ms3')
     expect(ruta.name).toBe('oportunidades-axas-ms3')
     expect(ruta.matched[0]!.components!.default).toBe(VistaOportunidades)
     expect(ruta.matched[0]!.props).toEqual({ default: { variante: 'axas-ms3' } })

@@ -1,9 +1,10 @@
 import { expect, type Page } from '@playwright/test'
 
-/** Rutas de primer nivel de la barra lateral, con la etiqueta de su enlace. */
+/** Rutas de primer nivel de la barra lateral, con la etiqueta de su enlace y el
+ * título de su página (si no es la etiqueta). */
 export const SECCIONES = [
   { ruta: '/', etiqueta: 'Inicio' },
-  { ruta: '/tareas', etiqueta: 'Tareas' },
+  { ruta: '/tareas', etiqueta: 'Mi trabajo', titulo: 'Tareas' },
   { ruta: '/conocimiento', etiqueta: 'Conocimiento' },
   { ruta: '/ajustes', etiqueta: 'Ajustes' },
 ] as const

@@ -27,8 +27,9 @@ function crearRouter(): Router {
     routes: [
       '/',
       '/tareas',
-      '/tareas/oportunidades',
-      '/tareas/oportunidades/axas-ms3',
+      '/oportunidades',
+      '/oportunidades/anes',
+      '/oportunidades/axas-ms3',
       '/conocimiento',
       '/ajustes',
     ].map((path) => ({
@@ -81,9 +82,10 @@ describe('BarraLateral', () => {
 
   it.each([
     ['Inicio', '/'],
-    ['Tareas', '/tareas'],
-    ['Oportunidades Ejemplo', '/tareas/oportunidades'],
-    ['AXAS Ejemplo', '/tareas/oportunidades/axas-ms3'],
+    ['Mi trabajo', '/tareas'],
+    ['Oportunidades', '/oportunidades'],
+    ['Oportunidades Ejemplo', '/oportunidades/anes'],
+    ['AXAS Ejemplo', '/oportunidades/axas-ms3'],
     ['Conocimiento', '/conocimiento'],
     ['Ajustes', '/ajustes'],
   ])('muestra el enlace "%s" que apunta a %s', async (etiqueta, destino) => {
@@ -99,20 +101,22 @@ describe('BarraLateral', () => {
 
     const actuales = wrapper.findAll('a[aria-current="page"]')
     expect(actuales).toHaveLength(1)
-    expect(actuales[0]?.text()).toBe('Tareas')
+    expect(actuales[0]?.text()).toBe('Mi trabajo')
   })
 
-  it('"Oportunidades" es un grupo dentro de "Tareas" y la entrada del alta cuelga de él', async () => {
-    const wrapper = await montarEn('/tareas/oportunidades')
+  it('"Oportunidades" es un elemento del primer nivel, fuera de "Mi trabajo", con las dos altas debajo', async () => {
+    const wrapper = await montarEn('/oportunidades/anes')
 
-    const grupo = wrapper.find('[data-grupo-menu="Oportunidades"]')
-    expect(grupo.exists()).toBe(true)
-    expect(grupo.element.tagName).not.toBe('A')
-    expect(wrapper.findAll('a').some((a) => a.text() === 'Oportunidades')).toBe(false)
-    const tareas = wrapper.findAll('a').find((a) => a.text() === 'Tareas')
-    expect(tareas?.element.closest('li')?.contains(grupo.element)).toBe(true)
-    const alta = wrapper.findAll('a').find((a) => a.text() === 'Oportunidades Ejemplo')
-    expect(grupo.element.closest('li')?.contains(alta!.element)).toBe(true)
+    const enlaces = wrapper.findAll('a')
+    const oportunidades = enlaces.find((a) => a.text() === 'Oportunidades')!
+    const trabajo = enlaces.find((a) => a.text() === 'Mi trabajo')!
+    const itemOportunidades = oportunidades.element.closest('li')!
+    expect(trabajo.element.closest('li')!.contains(oportunidades.element)).toBe(false)
+    expect(itemOportunidades.parentElement).toBe(trabajo.element.closest('li')!.parentElement)
+    for (const alta of ['Oportunidades Ejemplo', 'AXAS Ejemplo']) {
+      const enlace = enlaces.find((a) => a.text() === alta)!
+      expect(itemOportunidades.contains(enlace.element)).toBe(true)
+    }
     const actuales = wrapper.findAll('a[aria-current="page"]')
     expect(actuales.map((a) => a.text())).toEqual(['Oportunidades Ejemplo'])
   })
@@ -122,15 +126,12 @@ describe('BarraLateral', () => {
     const wrapper = await montarEn('/')
 
     const alta = wrapper.findAll('a').find((a) => a.text() === 'Alta de oportunidades')
-    expect(alta?.attributes('href')).toBe('/tareas/oportunidades')
+    expect(alta?.attributes('href')).toBe('/oportunidades/anes')
   })
 
-  it('el alta AXAS MS3 cuelga también del grupo "Oportunidades" y es la única marcada en su ruta', async () => {
-    const wrapper = await montarEn('/tareas/oportunidades/axas-ms3')
+  it('en la ruta del alta AXAS MS3 solo se marca su enlace', async () => {
+    const wrapper = await montarEn('/oportunidades/axas-ms3')
 
-    const grupo = wrapper.find('[data-grupo-menu="Oportunidades"]')
-    const alta = wrapper.findAll('a').find((a) => a.text() === 'AXAS Ejemplo')
-    expect(grupo.element.closest('li')?.contains(alta!.element)).toBe(true)
     const actuales = wrapper.findAll('a[aria-current="page"]')
     expect(actuales.map((a) => a.text())).toEqual(['AXAS Ejemplo'])
   })
@@ -140,6 +141,6 @@ describe('BarraLateral', () => {
     const wrapper = await montarEn('/')
 
     const alta = wrapper.findAll('a').find((a) => a.text() === 'Oportunidades AXAS MS3')
-    expect(alta?.attributes('href')).toBe('/tareas/oportunidades/axas-ms3')
+    expect(alta?.attributes('href')).toBe('/oportunidades/axas-ms3')
   })
 })
