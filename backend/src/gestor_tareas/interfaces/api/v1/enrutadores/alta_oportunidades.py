@@ -17,7 +17,10 @@ from gestor_tareas.aplicacion.oportunidad.servicio import (
     SinEjecucionError,
 )
 from gestor_tareas.configuracion import obtener_configuracion
-from gestor_tareas.dominio.oportunidad.entidades import SolicitudAltaOportunidad
+from gestor_tareas.dominio.oportunidad.entidades import (
+    SolicitudAltaAxasMs3,
+    SolicitudAltaOportunidad,
+)
 from gestor_tareas.dominio.oportunidad.errores import SolicitudAltaOportunidadInvalidaError
 from gestor_tareas.infraestructura.automatizacion.configuracion_json import (
     LectorConfiguracionJson,
@@ -28,13 +31,20 @@ from gestor_tareas.infraestructura.automatizacion.navegador_playwright import (
 from gestor_tareas.interfaces.api.v1.esquemas.alta_oportunidad import (
     EjecucionEsquema,
     RespuestaPreguntaEsquema,
+    ResumenConfiguracionAxasMs3Esquema,
     ResumenConfiguracionEsquema,
+    SolicitudAltaAxasMs3Esquema,
     SolicitudAltaEsquema,
 )
 
 enrutador = APIRouter(prefix="/alta-oportunidades", tags=["Alta de oportunidades"])
 
 _SIN_EJECUCION = {404: {"description": "Todavía no se ha lanzado ningún alta"}}
+_ERRORES_LANZAR: dict[int | str, dict[str, str]] = {
+    409: {"description": "Ya hay un alta en curso"},
+    422: {"description": "Algún campo variable no es válido"},
+    503: {"description": "La configuración local falta o no es válida"},
+}
 
 
 @lru_cache
@@ -66,11 +76,7 @@ def resumen_configuracion(
     "/ejecucion",
     response_model=EjecucionEsquema,
     status_code=status.HTTP_201_CREATED,
-    responses={
-        409: {"description": "Ya hay un alta en curso"},
-        422: {"description": "Algún campo variable no es válido"},
-        503: {"description": "La configuración local falta o no es válida"},
-    },
+    responses=_ERRORES_LANZAR,
 )
 def lanzar(
     cuerpo: SolicitudAltaEsquema,
@@ -81,6 +87,35 @@ def lanzar(
         cuerpo.prj, cuerpo.descripcion, cuerpo.duracion, cuerpo.importe, cuerpo.coste
     )
     return EjecucionEsquema.desde(servicio.iniciar(solicitud))
+
+
+@enrutador.get("/axas-ms3/configuracion", response_model=ResumenConfiguracionAxasMs3Esquema)
+def resumen_configuracion_axas_ms3(
+    servicio: ServicioAltaOportunidades = Depends(obtener_servicio),
+) -> ResumenConfiguracionAxasMs3Esquema:
+    """Valores fijos del bloque AXAS MS3 y fechas calculadas para hoy, o el motivo
+    por el que no se puede lanzar esta variante."""
+    return ResumenConfiguracionAxasMs3Esquema.desde_axas_ms3(
+        servicio.resumen_configuracion_axas_ms3()
+    )
+
+
+@enrutador.post(
+    "/axas-ms3/ejecucion",
+    response_model=EjecucionEsquema,
+    status_code=status.HTTP_201_CREATED,
+    responses=_ERRORES_LANZAR,
+)
+def lanzar_axas_ms3(
+    cuerpo: SolicitudAltaAxasMs3Esquema,
+    servicio: ServicioAltaOportunidades = Depends(obtener_servicio),
+) -> EjecucionEsquema:
+    """Lanza el alta AXAS MS3. Su estado, respuestas y captura se siguen en los
+    mismos endpoints de /ejecucion que ANES (solo hay un alta a la vez)."""
+    solicitud = SolicitudAltaAxasMs3.crear(
+        cuerpo.codigo_servicio, cuerpo.descripcion, cuerpo.duracion, cuerpo.importe, cuerpo.coste
+    )
+    return EjecucionEsquema.desde(servicio.iniciar_axas_ms3(solicitud))
 
 
 @enrutador.get("/ejecucion", response_model=EjecucionEsquema, responses=_SIN_EJECUCION)

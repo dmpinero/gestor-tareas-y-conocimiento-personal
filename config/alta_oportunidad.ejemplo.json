@@ -17,5 +17,28 @@
   "comunidades": [
     { "nombre": "Comunidad A", "porcentaje": "80" },
     { "nombre": "Comunidad B", "porcentaje": "20" }
-  ]
+  ],
+  "axas_ms3": {
+    "nombre_menu": "Oportunidades AXAS MS3",
+    "perfil": "Persona Ms3 Ejemplo",
+    "responsable_busqueda": "Persona Ms3",
+    "cliente_busqueda": "Cliente Ms3",
+    "cliente": "[CMS] Cliente Ms3 Ejemplo S.A.",
+    "grupo": "Grupo Ms3 Ejemplo",
+    "tipo": "Tipo Ms3 Ejemplo",
+    "responsable_operaciones": "Responsable Operaciones Ejemplo",
+    "responsable_tecnico": "Responsable Técnico Ejemplo",
+    "responsable_tecnico_busqueda": "Responsable Técnico",
+    "segmentacion": "Segmentación Ms3 Ejemplo",
+    "area_ms3": "Desarrollo",
+    "fase": "1 - Fase Ms3 Ejemplo",
+    "probabilidad": "50",
+    "dias_fecha_limite": 7,
+    "tipo_servicio": "Servicio Ms3 Ejemplo",
+    "lineas_negocio": [{ "nombre": "Línea Ms3 Ejemplo", "porcentaje": "100" }],
+    "comunidades": [
+      { "nombre": "Comunidad Ms3 A", "porcentaje": "80" },
+      { "nombre": "Comunidad Ms3 B", "porcentaje": "20" }
+    ]
+  }
 }

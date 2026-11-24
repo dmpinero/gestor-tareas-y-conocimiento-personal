@@ -5,6 +5,7 @@ from typing import Protocol
 
 from gestor_tareas.dominio.oportunidad.entidades import (
     ConfiguracionAltaOportunidad,
+    ConfiguracionAxasMs3,
     DatosFormulario,
 )
 
@@ -46,11 +47,24 @@ class NavegadorOportunidades(Protocol):
 
     def iniciar_sesion(self, canal: CanalEjecucion) -> None: ...
 
-    def cambiar_perfil(self, canal: CanalEjecucion) -> None: ...
+    def cambiar_perfil(self, perfil: str, canal: CanalEjecucion) -> None: ...
 
-    def existe_oportunidad(self, prj: str) -> bool: ...
+    def existe_oportunidad(self, cliente: str, cliente_busqueda: str, texto: str) -> bool:
+        """Busca las oportunidades del cliente y dice si alguna fila contiene ``texto``."""
+        ...
 
-    def rellenar(self, datos: DatosFormulario, canal: CanalEjecucion) -> None: ...
+    def rellenar(self, datos: DatosFormulario, canal: CanalEjecucion) -> None:
+        """Rellena el formulario de la variante ANES."""
+        ...
+
+    def rellenar_axas_ms3(
+        self,
+        datos: DatosFormulario,
+        configuracion: ConfiguracionAxasMs3,
+        canal: CanalEjecucion,
+    ) -> None:
+        """Rellena el formulario de la variante AXAS MS3."""
+        ...
 
     def resumen_formulario(self) -> str: ...
 

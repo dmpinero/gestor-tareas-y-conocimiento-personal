@@ -148,6 +148,12 @@ export interface ElementoCatalogo {
   nombre: string
 }
 
+/** Código de servicio del catálogo del alta de oportunidades AXAS MS3 (p. ej.
+ * «AXAS0024»): `GET /codigos-servicio`, `POST /codigos-servicio` y
+ * `PUT`/`DELETE /codigos-servicio/{id}`. El nombre tiene de 2 a 20 caracteres, sin
+ * espacios, y es único sin distinguir mayúsculas (409 si se repite). */
+export type CodigoServicio = ElementoCatalogo
+
 /**
  * Paso de un workflow. `numero` es la posición 1..n que asigna el sistema; un
  * paso nuevo va al final y al reordenar se recalcula.

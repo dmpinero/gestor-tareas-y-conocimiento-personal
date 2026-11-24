@@ -1,4 +1,4 @@
-import type { SolicitudAlta } from '@/api/altaOportunidades'
+import type { SolicitudAlta, SolicitudAltaAxasMs3 } from '@/api/altaOportunidades'
 
 /** Mismo mensaje que el script original y que la API. */
 export const MENSAJE_CODIGO_PRJ = 'El código debe tener el formato PRJ-XXXXX (5 dígitos).'
@@ -30,9 +30,11 @@ function errorCantidad(texto: string, nombre: string): string | undefined {
   return undefined
 }
 
-export function validarCamposAlta(campos: CamposAlta): ErroresAlta {
-  const errores: ErroresAlta = {}
-  if (!PATRON_PRJ.test(campos.prj)) errores.prj = MENSAJE_CODIGO_PRJ
+/** Duración, importe y coste: las mismas reglas en las dos variantes del alta. */
+type CamposComunes = Pick<CamposAlta, 'duracion' | 'importe' | 'coste'>
+
+function validarCamposComunes(campos: CamposComunes): Partial<Record<keyof CamposComunes, string>> {
+  const errores: Partial<Record<keyof CamposComunes, string>> = {}
   const duracion = campos.duracion.trim()
   if (!duracion) errores.duracion = 'La duración es obligatoria.'
   else if (!PATRON_ENTERO.test(duracion) || Number(duracion) < 1)
@@ -42,6 +44,12 @@ export function validarCamposAlta(campos: CamposAlta): ErroresAlta {
   const coste = errorCantidad(campos.coste, 'El coste total previsto')
   if (coste) errores.coste = coste
   return errores
+}
+
+export function validarCamposAlta(campos: CamposAlta): ErroresAlta {
+  const errores: ErroresAlta = {}
+  if (!PATRON_PRJ.test(campos.prj)) errores.prj = MENSAJE_CODIGO_PRJ
+  return { ...errores, ...validarCamposComunes(campos) }
 }
 
 /** Nombre con el que se creará la oportunidad: "<PRJ> <descripción>". */
@@ -55,6 +63,45 @@ export function aSolicitudAlta(campos: CamposAlta): SolicitudAlta {
   return {
     prj: campos.prj,
     descripcion: campos.descripcion.trim() || null,
+    duracion: Number(campos.duracion.trim()),
+    importe: aNumero(campos.importe),
+    coste: aNumero(campos.coste),
+  }
+}
+
+// --- Alta AXAS MS3 -------------------------------------------------------------
+
+/** Campos variables del alta AXAS MS3, tal y como se escriben. */
+export interface CamposAltaAxasMs3 {
+  codigo: string
+  descripcion: string
+  duracion: string
+  importe: string
+  coste: string
+}
+
+export type ErroresAltaAxasMs3 = Partial<Record<keyof CamposAltaAxasMs3, string>>
+
+export const MENSAJE_SIN_CODIGO_SERVICIO = 'Elige o crea un código de servicio.'
+export const MENSAJE_SIN_DESCRIPCION = 'La descripción es obligatoria.'
+
+export function validarCamposAxasMs3(campos: CamposAltaAxasMs3): ErroresAltaAxasMs3 {
+  const errores: ErroresAltaAxasMs3 = {}
+  if (!campos.codigo.trim()) errores.codigo = MENSAJE_SIN_CODIGO_SERVICIO
+  if (!campos.descripcion.trim()) errores.descripcion = MENSAJE_SIN_DESCRIPCION
+  return { ...errores, ...validarCamposComunes(campos) }
+}
+
+/** Nombre de la oportunidad: "AXAS-MS3-EV-" + 2 últimos caracteres del código + "-" + descripción. */
+export function nombrePrevistoAxasMs3(codigo: string, descripcion: string): string {
+  const sufijo = codigo.trim().slice(-2) || 'XX'
+  return `AXAS-MS3-EV-${sufijo}-${descripcion.trim() || 'descripción'}`
+}
+
+export function aSolicitudAltaAxasMs3(campos: CamposAltaAxasMs3): SolicitudAltaAxasMs3 {
+  return {
+    codigo_servicio: campos.codigo.trim(),
+    descripcion: campos.descripcion.trim(),
     duracion: Number(campos.duracion.trim()),
     importe: aNumero(campos.importe),
     coste: aNumero(campos.coste),

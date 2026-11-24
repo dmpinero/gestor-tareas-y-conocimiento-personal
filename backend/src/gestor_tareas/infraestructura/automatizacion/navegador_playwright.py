@@ -18,7 +18,9 @@ from typing import TYPE_CHECKING, Any
 
 from gestor_tareas.aplicacion.oportunidad.puertos import AutomatizacionFallidaError, CanalEjecucion
 from gestor_tareas.dominio.oportunidad.entidades import (
+    Asignacion,
     ConfiguracionAltaOportunidad,
+    ConfiguracionAxasMs3,
     DatosFormulario,
 )
 
@@ -74,7 +76,18 @@ _JS_ESTADO_DIALOGO = """([c,q]) => { const d=[...document.querySelectorAll('.ui-
     const s=d && d.querySelector(`select[id^='${c}windowBody']`), i=d && d.querySelector(`[id^='${q}windowBody']`);
     return {opcion: s ? s.options[s.selectedIndex]?.text.trim() : null, pct: i ? i.value : null}; }"""
 
-_JS_RESUMEN = """() => {
+# Área MS3 (solo existe tras añadir el tipo de servicio MS3): su contenedor "chosen"
+# mide 0 px de ancho, así que si el clic falla se elige en el <select> de debajo.
+_JS_ELEGIR_EN_SELECT = """([p,t]) => { for (const s of document.querySelectorAll(`select[id^='${p}windowBody']`)) {
+    const o=[...s.options].find(x=>x.text.trim()===t); if (!o) continue;
+    s.value=o.value; s.dispatchEvent(new Event('change', {bubbles:true}));
+    if (window.jQuery) jQuery(s).trigger('liszt:updated').trigger('chosen:updated');
+    return true; } return false; }"""
+
+_JS_ETIQUETAS_CHOSEN = """p => [...document.querySelectorAll(`[id^='${p}windowBody'][id$='_chzn'] .chzn-single span`)]
+    .map(e=>e.textContent.trim())"""
+
+_JS_RESUMEN = """ms3 => {
   const v=p=>{const e=[...document.querySelectorAll(`[id^='${p}windowBody']`)].find(x=>x.offsetParent!==null||x.tagName==='SELECT'); if(!e) return '';
     if(e.tagName==='SELECT') return [...e.selectedOptions].map(o=>o.text).join(', '); return e.value;};
   const ck=p=>{const e=document.querySelector(`[id^='${p}windowBody']`); return e&&e.checked?'Sí':'No';};
@@ -85,7 +98,9 @@ _JS_RESUMEN = """() => {
     'Nombre: '+v('iptNombreG'), 'Observaciones: '+v('observacionesG'),
     'Cliente: '+v('comboClienteChosenG'), 'Grupo: '+v('comboEmpresaGrupoAtSistemasG'), 'Tipos: '+v('comboTipoG'),
     'ENS No: '+ck('radioNoEns'), 'RGPD No: '+ck('radioNoRgpd'),
-    'Responsable: '+v('comboComercialG'), 'Segmentación: '+v('comboSegmentacionG'),
+    'Responsable: '+v('comboComercialG'),
+    ...(ms3 ? ['Responsable de Operaciones: '+v('comboRespOperacionesG'), 'Responsable técnico: '+v('comboRespTecnicoG')] : []),
+    'Segmentación: '+v('comboSegmentacionG'), ...(ms3 ? ['Área MS3: '+v('comboAreaMs3')] : []),
     'Fase: '+v('comboFaseG'), 'No genera pipeline: '+ck('noGeneraPipeline'),
     'Fecha límite: '+v('fechaLimiteG'), 'Probabilidad: '+v('probabilidadG'), 'Fecha inicio: '+v('fechaEstimadaG'),
     'Tipos de servicio: '+JSON.stringify(tabla('Tipos de servicio a crear')),
@@ -114,6 +129,7 @@ class NavegadorPlaywright:
         self._playwright: Playwright | None = None
         self._contexto: BrowserContext | None = None
         self._pagina: Page | None = None
+        self._formulario_ms3 = False  # el resumen añade los campos propios de AXAS MS3
 
     # --- Ciclo de vida ------------------------------------------------------------
     def abrir(self) -> None:
@@ -196,10 +212,9 @@ class NavegadorPlaywright:
         )
         canal.informar("Sesión iniciada en Digital Desktop")
 
-    def cambiar_perfil(self, canal: CanalEjecucion) -> None:
+    def cambiar_perfil(self, perfil: str, canal: CanalEjecucion) -> None:
         """Avatar -> panel de usuario -> "Accesos permitidos" -> enlace del perfil."""
         pagina = self._pag()
-        perfil = self._c.perfil
         panel = pagina.locator("#atd-panel-user")
         enlace = panel.locator("a[href*='accederConUsuarioDelegado']", has_text=perfil)
         avatar = pagina.locator("#fotoPerfilUsuario")
@@ -234,27 +249,26 @@ class NavegadorPlaywright:
             )
             canal.informar(f"Perfil confirmado a mano: {perfil}")
 
-    def existe_oportunidad(self, prj: str) -> bool:
-        """Abre Oportunidades, busca por el cliente y mira si aparece el PRJ."""
+    def existe_oportunidad(self, cliente: str, cliente_busqueda: str, texto: str) -> bool:
+        """Abre Oportunidades, busca por el cliente y mira si alguna fila contiene el texto."""
         pagina = self._pag()
         self._clic_texto_en_pantalla("Oportunidades")
         self._vis("buscarwindowBody").wait_for()
-        self._chosen("comboClienteChosenB", self._c.cliente, buscar=self._c.cliente_busqueda)
+        self._chosen("comboClienteChosenB", cliente, buscar=cliente_busqueda)
         self._vis("buscarwindowBody").click()
         pagina.wait_for_timeout(3000)
         filas = pagina.evaluate(_JS_FILAS_VISIBLES)
-        return any(prj in fila for fila in filas)
+        return any(texto in fila for fila in filas)
 
     def rellenar(self, datos: DatosFormulario, canal: CanalEjecucion) -> None:
+        """Variante ANES."""
         pagina = self._pag()
         c = self._c
+        self._formulario_ms3 = False
         self._abrir_formulario(canal)
 
         # 1. Datos de la oportunidad
-        self._escribir("iptNombreG", datos.nombre)
-        self._escribir("observacionesG", datos.nombre)
-        self._vis("radioNoEns").check()
-        self._vis("radioNoRgpd").check()
+        self._nombre_y_casillas(datos)
         self._chosen("comboClienteChosenG", c.cliente, buscar=c.cliente_busqueda)
         self._chosen("comboEmpresaGrupoAtSistemasG", c.grupo)
         self._chosen("comboTipoG", c.tipo)
@@ -267,52 +281,61 @@ class NavegadorPlaywright:
         canal.informar("Responsable")
 
         # 3. Más datos
-        self._abrir_seccion("Más datos")
-        self._chosen("comboSegmentacionG", c.segmentacion)
-        canal.informar("Segmentación")
+        self._segmentacion(c.segmentacion, canal)
 
         # 4. Avance
-        self._abrir_seccion("Avance")
-        self._chosen("comboFaseG", c.fase)
-        casilla = self._vis("noGeneraPipeline")
-        if casilla.is_checked():
-            casilla.uncheck()
-        self._escribir("fechaLimiteG", datos.fecha_limite)
-        self._escribir("probabilidadG", c.probabilidad)
-        self._escribir("fechaEstimadaG", datos.fecha_inicio)
-        canal.informar("Avance")
+        self._avance(datos, c.fase, c.probabilidad, canal)
 
         # 5. Tipos de servicio
-        self._tipo_servicio(datos, canal)
+        self._tipo_servicio(datos, c.tipo_servicio, canal)
 
-        # 6. Líneas de negocio
-        self._abrir_seccion("Líneas de Negocio")
-        for linea in c.lineas_negocio:
-            self._anadir_en_dialogo(
-                "aniadirLineaNegocio",
-                "comboLineaNegG",
-                linea.nombre,
-                "dedicacionLineaNegocio",
-                linea.porcentaje,
-                "aceptarPopupLineasNegocio",
-                canal,
-            )
+        # 6. Líneas de negocio. 7. Fabricantes: nada. 8. Comunidades
+        self._lineas_y_comunidades(c.lineas_negocio, c.comunidades, canal)
 
-        # 7. Fabricantes: nada. 8. Comunidades
-        self._abrir_seccion("Comunidades")
-        for comunidad in c.comunidades:
-            self._anadir_en_dialogo(
-                "aniadirComunidad",
-                "comboComunidadesG",
-                comunidad.nombre,
-                "dedicacionComunidad",
-                comunidad.porcentaje,
-                "aceptarPopupComunidad",
-                canal,
-            )
+    def rellenar_axas_ms3(
+        self,
+        datos: DatosFormulario,
+        configuracion: ConfiguracionAxasMs3,
+        canal: CanalEjecucion,
+    ) -> None:
+        """Variante AXAS MS3: grupo antes que cliente, tres responsables y Área MS3."""
+        pagina = self._pag()
+        m = configuracion
+        self._formulario_ms3 = True
+        self._abrir_formulario(canal)
+
+        # 1. Datos de la oportunidad (el grupo corporativo antes que el cliente)
+        self._nombre_y_casillas(datos)
+        self._chosen("comboEmpresaGrupoAtSistemasG", m.grupo)
+        self._chosen("comboClienteChosenG", m.cliente, buscar=m.cliente_busqueda)
+        self._chosen("comboTipoG", m.tipo)
+        pagina.keyboard.press("Escape")
+        canal.informar("Datos de la oportunidad")
+
+        # 2. Personas de contactos (Responsable y Responsable técnico cargan al escribir)
+        self._abrir_seccion("Personas de contactos")
+        self._chosen("comboComercialG", m.perfil, buscar=m.responsable_busqueda)
+        self._chosen("comboRespOperacionesG", m.responsable_operaciones)
+        self._chosen(
+            "comboRespTecnicoG", m.responsable_tecnico, buscar=m.responsable_tecnico_busqueda
+        )
+        canal.informar("Responsables")
+
+        # 3. Más datos
+        self._segmentacion(m.segmentacion, canal)
+
+        # 4. Avance
+        self._avance(datos, m.fase, m.probabilidad, canal)
+
+        # 5. Tipos de servicio y, ya con el tipo MS3 añadido, el Área MS3
+        self._tipo_servicio(datos, m.tipo_servicio, canal)
+        self._area_ms3(m.area_ms3, canal)
+
+        # 6. Líneas de negocio. 7. Fabricantes: nada. 8. Comunidades
+        self._lineas_y_comunidades(m.lineas_negocio, m.comunidades, canal)
 
     def resumen_formulario(self) -> str:
-        return str(self._pag().evaluate(_JS_RESUMEN))
+        return str(self._pag().evaluate(_JS_RESUMEN, self._formulario_ms3))
 
     def guardar(self) -> bytes:
         pagina = self._pag()
@@ -334,11 +357,95 @@ class NavegadorPlaywright:
         self._vis("iptNombreG").wait_for(timeout=TIMEOUT_MS)
         canal.informar("Formulario de alta abierto")
 
-    def _tipo_servicio(self, datos: DatosFormulario, canal: CanalEjecucion) -> None:
+    def _nombre_y_casillas(self, datos: DatosFormulario) -> None:
+        self._escribir("iptNombreG", datos.nombre)
+        self._escribir("observacionesG", datos.observaciones)
+        self._vis("radioNoEns").check()
+        self._vis("radioNoRgpd").check()
+
+    def _segmentacion(self, segmentacion: str, canal: CanalEjecucion) -> None:
+        self._abrir_seccion("Más datos")
+        self._chosen("comboSegmentacionG", segmentacion)
+        canal.informar("Segmentación")
+
+    def _avance(
+        self, datos: DatosFormulario, fase: str, probabilidad: str, canal: CanalEjecucion
+    ) -> None:
+        self._abrir_seccion("Avance")
+        self._chosen("comboFaseG", fase)
+        casilla = self._vis("noGeneraPipeline")
+        if casilla.is_checked():
+            casilla.uncheck()
+        self._escribir("fechaLimiteG", datos.fecha_limite)
+        self._escribir("probabilidadG", probabilidad)
+        self._escribir("fechaEstimadaG", datos.fecha_inicio)
+        canal.informar("Avance")
+
+    def _lineas_y_comunidades(
+        self,
+        lineas_negocio: tuple[Asignacion, ...],
+        comunidades: tuple[Asignacion, ...],
+        canal: CanalEjecucion,
+    ) -> None:
+        self._abrir_seccion("Líneas de Negocio")
+        for linea in lineas_negocio:
+            self._anadir_en_dialogo(
+                "aniadirLineaNegocio",
+                "comboLineaNegG",
+                linea.nombre,
+                "dedicacionLineaNegocio",
+                linea.porcentaje,
+                "aceptarPopupLineasNegocio",
+                canal,
+            )
+        self._abrir_seccion("Comunidades")
+        for comunidad in comunidades:
+            self._anadir_en_dialogo(
+                "aniadirComunidad",
+                "comboComunidadesG",
+                comunidad.nombre,
+                "dedicacionComunidad",
+                comunidad.porcentaje,
+                "aceptarPopupComunidad",
+                canal,
+            )
+
+    def _area_ms3(self, area: str, canal: CanalEjecucion) -> None:
+        """Más datos -> Área MS3 (sin sufijo "G"; aparece tras añadir el tipo MS3)."""
+        from playwright.sync_api import Error as ErrorPlaywright
+
+        pagina = self._pag()
+        prefijo = "comboAreaMs3"
+        self._abrir_seccion("Más datos")
+        try:
+            pagina.locator(f'select[id^="{prefijo}windowBody"]').first.wait_for(
+                state="attached", timeout=TIMEOUT_MS
+            )
+            # Con ancho 0 el clic normal suele fallar: se prueba rápido y, si no, por JS.
+            contenedor = pagina.locator(f'[id^="{prefijo}windowBody"][id$="_chzn"]').first
+            if contenedor.is_visible():
+                self._chosen(prefijo, area)
+        except ErrorPlaywright:
+            pass
+        if area not in pagina.evaluate(_JS_ETIQUETAS_CHOSEN, prefijo):
+            pagina.evaluate(_JS_ELEGIR_EN_SELECT, [prefijo, area])
+            pagina.wait_for_timeout(400)
+        if area in pagina.evaluate(_JS_ETIQUETAS_CHOSEN, prefijo):
+            canal.informar(f"Área MS3: {area}")
+            return
+        canal.pedir_intervencion(
+            f"No pude elegir «{area}» en Área MS3 (sección «Más datos»). Elígelo tú en el "
+            "navegador y pulsa «Continuar»."
+        )
+        canal.informar(f"Área MS3 elegida a mano: {area}")
+
+    def _tipo_servicio(
+        self, datos: DatosFormulario, tipo_servicio: str, canal: CanalEjecucion
+    ) -> None:
         self._abrir_seccion("Tipos de servicio a crear")
         self._vis("nuevoTipoServicio").click()
         self._vis("duracionTipoServicio").wait_for(timeout=TIMEOUT_MS)
-        self._chosen("comboTipoServicioG", self._c.tipo_servicio)
+        self._chosen("comboTipoServicioG", tipo_servicio)
         self._escribir("duracionTipoServicio", datos.duracion)
         self._escribir("multi_importeG", datos.importe)
         self._escribir("multi_costeG", datos.coste)

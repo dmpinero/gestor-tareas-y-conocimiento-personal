@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   aSolicitudAlta,
+  aSolicitudAltaAxasMs3,
   nombrePrevisto,
+  nombrePrevistoAxasMs3,
   validarCamposAlta,
+  validarCamposAxasMs3,
   type CamposAlta,
+  type CamposAltaAxasMs3,
 } from '../altaOportunidad'
 
 const VALIDOS: CamposAlta = {
@@ -59,6 +63,56 @@ describe('aSolicitudAlta', () => {
       duracion: 2,
       importe: 10000,
       coste: 8500.5,
+    })
+  })
+})
+
+describe('alta AXAS MS3', () => {
+  const VALIDOS: CamposAltaAxasMs3 = {
+    codigo: 'AXAS0024',
+    descripcion: 'Migración portal',
+    duracion: '6',
+    importe: '10000,50',
+    coste: '8000',
+  }
+
+  it('el nombre es AXAS-MS3-EV- con los 2 últimos caracteres del código, un guion y la descripción', () => {
+    expect(nombrePrevistoAxasMs3('AXAS0024', '  Migración portal ')).toBe(
+      'AXAS-MS3-EV-24-Migración portal',
+    )
+    expect(nombrePrevistoAxasMs3('SERV-AB', 'Algo')).toBe('AXAS-MS3-EV-AB-Algo')
+  })
+
+  it('sin código ni descripción el nombre muestra marcadores', () => {
+    expect(nombrePrevistoAxasMs3('', '')).toBe('AXAS-MS3-EV-XX-descripción')
+  })
+
+  it('el código y la descripción son obligatorios; duración, importe y coste como en ANES', () => {
+    expect(validarCamposAxasMs3(VALIDOS)).toEqual({})
+    expect(
+      validarCamposAxasMs3({
+        codigo: '',
+        descripcion: '  ',
+        duracion: '0',
+        importe: '',
+        coste: 'x',
+      }),
+    ).toEqual({
+      codigo: 'Elige o crea un código de servicio.',
+      descripcion: 'La descripción es obligatoria.',
+      duracion: 'La duración debe ser un número entero de meses mayor que cero.',
+      importe: 'El importe total previsto es obligatorio.',
+      coste: 'El coste total previsto debe ser un número mayor o igual que cero.',
+    })
+  })
+
+  it('construye la petición con la descripción recortada y los números', () => {
+    expect(aSolicitudAltaAxasMs3({ ...VALIDOS, descripcion: ' Migración portal ' })).toEqual({
+      codigo_servicio: 'AXAS0024',
+      descripcion: 'Migración portal',
+      duracion: 6,
+      importe: 10000.5,
+      coste: 8000,
     })
   })
 })

@@ -1,12 +1,13 @@
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { obtenerConfiguracionAlta } from '@/api/altaOportunidades'
+import { obtenerConfiguracionAlta, obtenerConfiguracionAxasMs3 } from '@/api/altaOportunidades'
 import { SidebarProvider } from '@/componentes/ui/sidebar'
 import BarraLateral from '../BarraLateral.vue'
 
 vi.mock('@/api/altaOportunidades', () => ({
   obtenerConfiguracionAlta: vi.fn<() => Promise<unknown>>(),
+  obtenerConfiguracionAxasMs3: vi.fn<() => Promise<unknown>>(),
 }))
 
 function definirMatchMedia(): void {
@@ -23,7 +24,14 @@ const vistaVacia = { template: '<div />' }
 function crearRouter(): Router {
   return createRouter({
     history: createMemoryHistory(),
-    routes: ['/', '/tareas', '/tareas/oportunidades', '/conocimiento', '/ajustes'].map((path) => ({
+    routes: [
+      '/',
+      '/tareas',
+      '/tareas/oportunidades',
+      '/tareas/oportunidades/axas-ms3',
+      '/conocimiento',
+      '/ajustes',
+    ].map((path) => ({
       path,
       component: vistaVacia,
     })),
@@ -54,6 +62,13 @@ beforeEach(() => {
     fecha_inicio: '28/02/2026',
     nombre_menu: 'Oportunidades Ejemplo',
   })
+  vi.mocked(obtenerConfiguracionAxasMs3).mockResolvedValue({
+    valores: null,
+    error: null,
+    fecha_limite: null,
+    fecha_inicio: '28/02/2026',
+    nombre_menu: 'AXAS Ejemplo',
+  })
 })
 
 describe('BarraLateral', () => {
@@ -68,6 +83,7 @@ describe('BarraLateral', () => {
     ['Inicio', '/'],
     ['Tareas', '/tareas'],
     ['Oportunidades Ejemplo', '/tareas/oportunidades'],
+    ['AXAS Ejemplo', '/tareas/oportunidades/axas-ms3'],
     ['Conocimiento', '/conocimiento'],
     ['Ajustes', '/ajustes'],
   ])('muestra el enlace "%s" que apunta a %s', async (etiqueta, destino) => {
@@ -107,5 +123,23 @@ describe('BarraLateral', () => {
 
     const alta = wrapper.findAll('a').find((a) => a.text() === 'Alta de oportunidades')
     expect(alta?.attributes('href')).toBe('/tareas/oportunidades')
+  })
+
+  it('el alta AXAS MS3 cuelga también del grupo "Oportunidades" y es la única marcada en su ruta', async () => {
+    const wrapper = await montarEn('/tareas/oportunidades/axas-ms3')
+
+    const grupo = wrapper.find('[data-grupo-menu="Oportunidades"]')
+    const alta = wrapper.findAll('a').find((a) => a.text() === 'AXAS Ejemplo')
+    expect(grupo.element.closest('li')?.contains(alta!.element)).toBe(true)
+    const actuales = wrapper.findAll('a[aria-current="page"]')
+    expect(actuales.map((a) => a.text())).toEqual(['AXAS Ejemplo'])
+  })
+
+  it('si no se puede leer la configuración de AXAS MS3, su entrada usa el nombre predeterminado', async () => {
+    vi.mocked(obtenerConfiguracionAxasMs3).mockRejectedValue(new Error('Bad Gateway'))
+    const wrapper = await montarEn('/')
+
+    const alta = wrapper.findAll('a').find((a) => a.text() === 'Oportunidades AXAS MS3')
+    expect(alta?.attributes('href')).toBe('/tareas/oportunidades/axas-ms3')
   })
 })

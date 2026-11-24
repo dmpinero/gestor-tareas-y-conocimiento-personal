@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, Kanban, ListOrdered, Tags } from '@lucide/vue'
+import { ChevronRight, Hash, Kanban, ListOrdered, Tags } from '@lucide/vue'
 import { RouterLink } from 'vue-router'
 </script>
 
@@ -47,6 +47,21 @@ import { RouterLink } from 'vue-router'
             <span class="block font-medium">Subestados</span>
             <span class="text-muted-foreground block text-sm">
               Subestado opcional de cada tarea, como mucho uno, que se muestra como una píldora.
+            </span>
+          </span>
+          <ChevronRight class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+        </RouterLink>
+      </li>
+      <li>
+        <RouterLink
+          to="/ajustes/codigos-servicio"
+          class="bg-card hover:bg-accent focus-visible:ring-ring/50 flex items-center gap-3 rounded-lg border p-4 shadow-xs outline-none focus-visible:ring-[3px]"
+        >
+          <Hash class="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+          <span class="flex-1">
+            <span class="block font-medium">Códigos de servicio</span>
+            <span class="text-muted-foreground block text-sm">
+              Códigos que se eligen al dar de alta una oportunidad AXAS MS3.
             </span>
           </span>
           <ChevronRight class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
