@@ -37,14 +37,14 @@ Branch: `feat/tarea-en-foco` · Delivery: `single-pr` (one PR per user request, 
 
 ## Tasks
 
-- [ ] T1 (S2–S4, S8) Backend:
+- [x] T1 (S2–S4, S8) Backend:
   - Migration `foco_trabajo` and domain `dominio/foco/`, with use cases for get, set and clear.
   - Repository, router `/foco`, and tests. `vaciar_tablas` gets the new table.
   - Bump `_ULTIMA` in the old migration tests.
   - Route: delegated, writer A, in parallel with T2 (trigger: two independent units with disjoint surfaces, contract fixed in S4).
-  - Risk: item 1 (new migration that only adds a table). Commit 1.
-- [ ] T2 (S1, S3, S5–S7) Frontend: api type, store `useTiendaFoco`, pill in BarraSuperior, highlight in list, board and detail, buttons, and the `?tarea=` query that opens the detail. Unit tests and e2e. Route: delegated, writer B. Commit 2.
-- [ ] T3 README section and the independent verifier (item 1). Pending at publish: back up the database before applying the migration locally.
+  - Risk: item 1 (new migration that only adds a table). Commit 1 `9159cd3` (rev `e6a1c9d3f5b7`; 1533 backend tests green).
+- [x] T2 (S1, S3, S5–S7) Frontend: api type, store `useTiendaFoco`, pill in BarraSuperior, highlight in list, board and detail, buttons, and the `?tarea=` query that opens the detail. Unit tests and e2e. Route: delegated, writer B. Commit 2 `8df567a` (1036 vitest green, vue-tsc/eslint/prettier clean).
+- [x] T3 README section and the independent verifier (item 1). Pending at publish: back up the database before applying the migration locally.
 
 ## Log
 
@@ -56,3 +56,5 @@ Branch: `feat/tarea-en-foco` · Delivery: `single-pr` (one PR per user request, 
   - the "Trabajar en esta" / "Dejar de trabajar" button.
 
   User answer to the open question: "en tareas o subtareas".
+- **L3** Writer deviations accepted: aria-labels include the item name (`Trabajar en esta (X)`) for unique names; deleting the focused item clears focus locally; a card with a focused subtask also moves first. Preview with a copy of the real data at http://localhost:4960 (DB 3320, API 8960).
+- **L4** Independent verifier on `9159cd3`: no blockers, S2/S3/S4/S8 met. Migration keeps the checksums of existing tables through upgrade, downgrade and upgrade; the differential check of existing endpoints against `cafb6b2` is identical. Two of its probes were added as regression tests: a rejected PUT keeps the focus, and resolving the subtask keeps it. The e2e suite on the isolated stack passed 79/79. Commit 3 holds the README and the probes. Pending: user approval on the preview, then publish with a DB backup before the migration.

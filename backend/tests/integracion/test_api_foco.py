@@ -280,6 +280,34 @@ def test_completar_la_tarea_en_foco_no_quita_el_foco(cliente: TestClient) -> Non
     assert respuesta.json() == foco
 
 
+def test_resolver_la_subtarea_en_foco_no_quita_el_foco(cliente: TestClient) -> None:
+    tarea = _crear_tarea(cliente)
+    subtarea = _anadir_subtarea(cliente, tarea["id"], "Paso")
+    foco = cliente.put(_FOCO, json={"tarea_id": tarea["id"], "subtarea_id": subtarea["id"]}).json()
+
+    resuelta = cliente.patch(
+        f"{_TAREAS}/{tarea['id']}/subtareas/{subtarea['id']}/resuelta", json={"resuelta": True}
+    )
+    assert resuelta.status_code == 200
+
+    assert cliente.get(_FOCO).json() == foco
+
+
+@pytest.mark.parametrize(
+    "cuerpo",
+    [{"tarea_id": 999_999}, {"tarea_id": "1"}, {"tarea_id": True}, {}],
+)
+def test_un_fijar_rechazado_no_cambia_el_foco_existente(cliente: TestClient, cuerpo: dict) -> None:
+    tarea = _crear_tarea(cliente)
+    subtarea = _anadir_subtarea(cliente, tarea["id"], "Paso")
+    foco = cliente.put(_FOCO, json={"tarea_id": tarea["id"], "subtarea_id": subtarea["id"]}).json()
+
+    assert cliente.put(_FOCO, json=cuerpo).status_code in (404, 422)
+
+    assert cliente.get(_FOCO).json() == foco
+    assert _filas_de_foco() == 1
+
+
 def test_el_foco_muestra_el_nombre_actual_de_la_tarea(cliente: TestClient) -> None:
     tarea = _crear_tarea(cliente)
     cliente.put(_FOCO, json={"tarea_id": tarea["id"]})
