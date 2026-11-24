@@ -347,6 +347,14 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   tablero. Se guarda en el servidor (tabla `foco_trabajo`, de una sola fila);
   completar la tarea no quita el foco y borrarla sí. API: `GET`/`PUT`/`DELETE
   /api/v1/foco`.
+- Historial de foco: cada periodo de foco (inicio, fin y duración) queda
+  guardado en la tabla `historial_foco`. El reloj de la barra superior abre
+  `/foco/historial`, con dos vistas: **Por día** (día anterior/siguiente,
+  selector de fecha, "Hoy" y el total del día) y **Todo** (lista ordenada del
+  más reciente al más antiguo). Al pulsar una entrada se abre su tarea; el
+  periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
+  con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
+  `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
 - Endpoint de salud `GET /api/v1/salud` y métricas Prometheus en `/metricas`.
 - Comentarios de tareas, subtareas y pasos de los workflows con formato
   (negrita, cursiva, subrayado, tachado, color, resaltado, listas y enlaces)

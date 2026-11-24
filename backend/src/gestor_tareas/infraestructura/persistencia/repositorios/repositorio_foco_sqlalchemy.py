@@ -143,6 +143,7 @@ class RepositorioFocoSqlAlchemy:
         # Sin confirmar: va en la transacción del borrado de la tarea.
         with traducir_conflictos(self._sesion):
             self._cerrar_en_curso(hasta, HistorialFocoModelo.tarea_id == id_tarea)
+            self._guardar_ultimos_nombres(HistorialFocoModelo.tarea_id == id_tarea)
 
     def cerrar_periodo_de_subtarea(self, id_tarea: int, id_subtarea: int, hasta: datetime) -> None:
         # Sin confirmar: va en la transacción del borrado de la subtarea.
@@ -152,6 +153,30 @@ class RepositorioFocoSqlAlchemy:
                 HistorialFocoModelo.tarea_id == id_tarea,
                 HistorialFocoModelo.subtarea_id == id_subtarea,
             )
+            self._guardar_ultimos_nombres(HistorialFocoModelo.subtarea_id == id_subtarea)
+
+    def _guardar_ultimos_nombres(self, *condiciones) -> None:
+        """Copia en los periodos indicados los nombres actuales de su tarea y su
+        subtarea, para que tras borrarlas el historial muestre el último nombre."""
+        nombre_tarea = (
+            select(TareaModelo.nombre)
+            .where(TareaModelo.id == HistorialFocoModelo.tarea_id)
+            .scalar_subquery()
+        )
+        nombre_subtarea = (
+            select(SubtareaModelo.nombre)
+            .where(SubtareaModelo.id == HistorialFocoModelo.subtarea_id)
+            .scalar_subquery()
+        )
+        self._sesion.execute(
+            update(HistorialFocoModelo)
+            .where(*condiciones)
+            .values(
+                tarea_nombre=func.coalesce(nombre_tarea, HistorialFocoModelo.tarea_nombre),
+                subtarea_nombre=func.coalesce(nombre_subtarea, HistorialFocoModelo.subtarea_nombre),
+            )
+            .execution_options(synchronize_session=False)
+        )
 
     def listar_historial(
         self, desde: datetime | None, hasta: datetime | None

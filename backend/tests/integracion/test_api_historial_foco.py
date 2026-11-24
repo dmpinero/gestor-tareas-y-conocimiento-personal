@@ -248,9 +248,9 @@ def test_el_historial_muestra_el_nombre_actual_mientras_existe(cliente: TestClie
 
     cliente.delete(f"{_TAREAS}/{tarea['id']}")
 
-    # Borrada, queda el nombre que tenía al ponerla en foco.
+    # Borrada, queda el último nombre que tuvo.
     (periodo,) = _historial(cliente)
-    assert (periodo["tarea_nombre"], periodo["subtarea_nombre"]) == ("Migración portal", "Paso")
+    assert (periodo["tarea_nombre"], periodo["subtarea_nombre"]) == ("Portal v2", "Paso 2")
 
 
 def test_el_historial_va_del_mas_reciente_al_mas_antiguo(cliente: TestClient) -> None:
@@ -384,3 +384,52 @@ def test_borrar_tareas_y_subtareas_responde_como_antes(cliente: TestClient) -> N
     assert sin_tarea.status_code == 404
     assert sin_tarea.json() == {"detalle": f"No existe la tarea con id {tarea['id']}"}
     assert [p["hasta"] is not None for p in _historial(cliente)] == [True, True]
+
+
+def test_borrar_una_tarea_renombrada_conserva_en_el_historial_su_ultimo_nombre(
+    cliente: TestClient,
+) -> None:
+    tarea = _crear_tarea(cliente, "Nombre viejo")
+    subtarea = _anadir_subtarea(cliente, tarea["id"], "Paso viejo")
+    _fijar(cliente, tarea["id"], subtarea["id"])
+    _fijar(cliente, tarea["id"])
+    cliente.delete(_FOCO)
+    _ejecutar("UPDATE tareas SET nombre = 'Nombre nuevo' WHERE id = :id", id=tarea["id"])
+    _ejecutar("UPDATE subtareas SET nombre = 'Paso nuevo' WHERE id = :id", id=subtarea["id"])
+
+    assert cliente.delete(f"{_TAREAS}/{tarea['id']}").status_code == 204
+
+    periodos = _historial(cliente)
+    assert [(p["tarea_id"], p["tarea_nombre"]) for p in periodos] == [(None, "Nombre nuevo")] * 2
+    assert [(p["subtarea_id"], p["subtarea_nombre"]) for p in periodos] == [
+        (None, None),
+        (None, "Paso nuevo"),
+    ]
+
+
+def test_borrar_una_subtarea_renombrada_conserva_en_el_historial_su_ultimo_nombre(
+    cliente: TestClient,
+) -> None:
+    tarea = _crear_tarea(cliente)
+    subtarea = _anadir_subtarea(cliente, tarea["id"], "Paso viejo")
+    _fijar(cliente, tarea["id"], subtarea["id"])
+    cliente.delete(_FOCO)
+    _ejecutar("UPDATE subtareas SET nombre = 'Paso nuevo' WHERE id = :id", id=subtarea["id"])
+
+    borrado = cliente.delete(f"{_TAREAS}/{tarea['id']}/subtareas/{subtarea['id']}")
+    assert borrado.status_code in (200, 204)
+
+    (periodo,) = _historial(cliente)
+    assert periodo["subtarea_id"] is None
+    assert periodo["subtarea_nombre"] == "Paso nuevo"
+    assert periodo["tarea_id"] == tarea["id"]
+
+
+@pytest.mark.parametrize(
+    "filtros",
+    [{"desde": "0001-01-01T00:00:00+01:00"}, {"hasta": "9999-12-31T23:59:59-01:00"}],
+)
+def test_un_instante_fuera_de_rango_responde_422(cliente: TestClient, filtros: dict) -> None:
+    respuesta = cliente.get(_HISTORIAL, params=filtros)
+
+    assert respuesta.status_code == 422

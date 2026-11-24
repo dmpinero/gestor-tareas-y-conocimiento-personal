@@ -34,7 +34,8 @@ class RepositorioFoco(Protocol):
 
     def cerrar_periodo_de_tarea(self, id_tarea: int, hasta: datetime) -> None:
         """Cierra en ``hasta`` el periodo en curso si es de esa tarea (o de una
-        subtarea suya); si no, no hace nada.
+        subtarea suya); si no, no hace nada. Además guarda en todos los periodos de
+        la tarea sus nombres actuales, para conservarlos al borrarla.
 
         No confirma: va en la transacción de quien borra la tarea (la misma sesión),
         para que el periodo se cierre solo si el borrado se confirma."""
@@ -42,7 +43,8 @@ class RepositorioFoco(Protocol):
 
     def cerrar_periodo_de_subtarea(self, id_tarea: int, id_subtarea: int, hasta: datetime) -> None:
         """Cierra en ``hasta`` el periodo en curso si es de esa subtarea de esa tarea;
-        si no, no hace nada. No confirma, como ``cerrar_periodo_de_tarea``."""
+        si no, no hace nada. Además guarda en los periodos de la subtarea sus nombres
+        actuales. No confirma, como ``cerrar_periodo_de_tarea``."""
         ...
 
     def listar_historial(

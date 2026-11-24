@@ -86,8 +86,12 @@ class ListarHistorialFoco:
         self._repositorio = repositorio
 
     def ejecutar(self, desde: datetime | None, hasta: datetime | None) -> list[PeriodoDeFoco]:
-        desde_utc = desde.astimezone(UTC) if desde is not None else None
-        hasta_utc = hasta.astimezone(UTC) if hasta is not None else None
+        try:
+            desde_utc = desde.astimezone(UTC) if desde is not None else None
+            hasta_utc = hasta.astimezone(UTC) if hasta is not None else None
+        except OverflowError as error:
+            # Un año 1 o 9999 con desfase no cabe al pasarlo a UTC.
+            raise FiltroDeListadoInvalidoError("instante fuera de rango") from error
         if desde_utc is not None and hasta_utc is not None and desde_utc >= hasta_utc:
             raise FiltroDeListadoInvalidoError("desde debe ser anterior a hasta")
         return self._repositorio.listar_historial(desde_utc, hasta_utc)

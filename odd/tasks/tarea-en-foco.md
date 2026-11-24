@@ -35,6 +35,23 @@ Branch: `feat/tarea-en-foco` · Delivery: `single-pr` (one PR per user request, 
   - On the item already in focus, the button becomes "Dejar de trabajar".
 - **S8** Assumption: completing a task does not clear its focus. Only deleting it, or an explicit stop, does.
 
+- **S9** Focus history: "Cuando vaya cambiando el foco quiero tener una opción para ver el historial de cambios de foco, de forma que pueda navegar a esas tareas".
+  - Each focus period is one history entry, holding the task, the subtask (optional), `desde` and `hasta`. The duration is `hasta - desde`.
+  - An entry opens when the focus is set (PUT) and closes, with `hasta = now`, when the focus is replaced, removed, or its task or subtask is deleted.
+  - The current focus appears as an open entry ("en curso", with a live duration).
+  - Deleted tasks keep their entry with the last known name, shown greyed and without a link. This is the accepted proposal.
+  - The current name is shown while the task or subtask still exists. On deletion the entry keeps the last name it had: the snapshot is refreshed in the delete transaction.
+- **S10** Page: "página aparte con todo el historial, navegable por días. También quiero una lista ordenada con todo el historial en esa página aparte"
+  - A separate page (route `/foco/historial`), opened from a clock button next to the top-bar pill. The button is visible even without a focus.
+  - The "Por día" view shows the entries of one local day, with previous and next day, a date picker, "Hoy", and the day's total time.
+  - The "Todo" view is an ordered list of the whole history, newest first (assumption). It shows date, start, end, duration and `Tarea › Subtarea`.
+  - Clicking an entry whose task still exists navigates to `/tareas?tarea=<id>`.
+- **S11** API (contract):
+  - `GET /api/v1/foco/historial` takes optional `desde` and `hasta` (ISO UTC instants; it returns the entries whose `desde` falls in `[desde, hasta)`). It returns `200` with an array, newest first, of `{ "id": int, "tarea_id": int|null, "tarea_nombre": str, "subtarea_id": int|null, "subtarea_nombre": str|null, "desde": ISO, "hasta": ISO|null }`.
+    - `tarea_id`/`subtarea_id` are `null` when the item was deleted.
+    - An invalid `desde`/`hasta`, or `desde >= hasta`, returns `422`.
+  - The existing `/api/v1/foco` responses stay unchanged.
+
 ## Tasks
 
 - [x] T1 (S2–S4, S8) Backend:
@@ -45,6 +62,14 @@ Branch: `feat/tarea-en-foco` · Delivery: `single-pr` (one PR per user request, 
   - Risk: item 1 (new migration that only adds a table). Commit 1 `9159cd3` (rev `e6a1c9d3f5b7`; 1533 backend tests green).
 - [x] T2 (S1, S3, S5–S7) Frontend: api type, store `useTiendaFoco`, pill in BarraSuperior, highlight in list, board and detail, buttons, and the `?tarea=` query that opens the detail. Unit tests and e2e. Route: delegated, writer B. Commit 2 `8df567a` (1036 vitest green, vue-tsc/eslint/prettier clean).
 - [x] T3 README section and the independent verifier (item 1). Pending at publish: back up the database before applying the migration locally.
+
+- [x] T4 (S9, S11) Backend history:
+  - New migration `historial_foco` with FKs `ON DELETE SET NULL` and name snapshots.
+  - Open and close entries in `FijarFoco`/`QuitarFoco`. Deleting the focused task or subtask closes the entry, through the existing delete use cases (shared code, item 3).
+  - Endpoint `GET /foco/historial`.
+  - Route: delegated, writer C, in parallel with T5. Risk: items 1 and 3. Commit 4 `24e0dc8` (rev `483e78c30e26`).
+- [x] T5 (S9, S10) Frontend history page: clock button, the `/foco/historial` route with "Por día" and "Todo", navigation to the task, deleted entries greyed. Unit tests and e2e. Route: delegated, writer D. Commit 5 `41ad180`; mobile overflow fix `e5f37ac`.
+- [x] T6 README update, independent verifier (items 1 and 3), full e2e, refreshed preview.
 
 ## Log
 
@@ -58,3 +83,10 @@ Branch: `feat/tarea-en-foco` · Delivery: `single-pr` (one PR per user request, 
   User answer to the open question: "en tareas o subtareas".
 - **L3** Writer deviations accepted: aria-labels include the item name (`Trabajar en esta (X)`) for unique names; deleting the focused item clears focus locally; a card with a focused subtask also moves first. Preview with a copy of the real data at http://localhost:4960 (DB 3320, API 8960).
 - **L4** Independent verifier on `9159cd3`: no blockers, S2/S3/S4/S8 met. Migration keeps the checksums of existing tables through upgrade, downgrade and upgrade; the differential check of existing endpoints against `cafb6b2` is identical. Two of its probes were added as regression tests: a rejected PUT keeps the focus, and resolving the subtask keeps it. The e2e suite on the isolated stack passed 79/79. Commit 3 holds the README and the probes. Pending: user approval on the preview, then publish with a DB backup before the migration.
+- **L5** (2026-11-24) User: "queda muy bien, pero hay algo que quiero añadir. Cuando vaya cambiando el foco quiero tener una opción para ver el historial de cambios de foco, de forma que pueda navegar a esas tareas". Proposal sent: entries with duration, a clock button, grouping by day, deleted tasks greyed. User: "página aparte con todo el historial, navegable por días. También quiero una lista ordenada con todo el historial en esa página aparte".
+- **L6** Integration of the history work:
+  - The schemathesis contract test got a hook for the `desde >= hasta` rule.
+  - The e2e suite first failed 6 board tests, because the new clock button made the top bar overflow at 390 px. The fix is `shrink-0` on the actions group, plus an e2e regression test. After it, e2e passed 81/81.
+  - The verifier on `24e0dc8` found no blockers.
+  - Advisories applied with RED tests first: deleted items keep their last name (the snapshot is refreshed on delete), and out-of-range filter instants return 422 instead of 500.
+  - Backend: 1593 tests green.
