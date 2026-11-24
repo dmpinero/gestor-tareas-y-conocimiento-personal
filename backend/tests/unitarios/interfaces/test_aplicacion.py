@@ -45,6 +45,7 @@ def test_la_api_expone_salud_tareas_catalogos_workflows_y_grupos_de_estados_bajo
         "/api/v1/subestados/{id_subestado}",
         "/api/v1/codigos-servicio",
         "/api/v1/codigos-servicio/{id_codigo}",
+        "/api/v1/foco",
     }
 
 

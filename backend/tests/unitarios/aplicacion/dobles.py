@@ -10,6 +10,7 @@ from gestor_tareas.dominio.comentario.entidades import (
 )
 from gestor_tareas.dominio.etiqueta.entidades import Etiqueta
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
+from gestor_tareas.dominio.foco.entidades import Foco
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
 from gestor_tareas.dominio.tarea.entidades import (
@@ -419,3 +420,41 @@ class RepositorioEtiquetasFalso(_RepositorioCatalogoFalso[Etiqueta]):
 class RepositorioPersonasFalso(_RepositorioCatalogoFalso[Persona]):
     def __init__(self, *nombres_iniciales: str) -> None:
         super().__init__(Persona, nombres_iniciales)
+
+
+class RepositorioFocoFalso:
+    """Doble de RepositorioFoco en memoria: guarda como mucho un foco y lee los
+    nombres de la tarea y la subtarea del repositorio de tareas, como el real."""
+
+    def __init__(self, tareas: RepositorioTareasFalso) -> None:
+        self._tareas = tareas
+        self._fila: tuple[int, int | None, datetime] | None = None
+        self.veces_fijado = 0
+
+    def obtener(self) -> Foco | None:
+        if self._fila is None:
+            return None
+        id_tarea, id_subtarea, desde = self._fila
+        tarea = self._tareas.obtener_por_id(id_tarea)
+        if tarea is None:
+            return None
+        subtarea = next((s for s in tarea.subtareas if s.id == id_subtarea), None)
+        if id_subtarea is not None and subtarea is None:
+            return None
+        return Foco(
+            tarea_id=id_tarea,
+            tarea_nombre=tarea.nombre,
+            subtarea_id=id_subtarea,
+            subtarea_nombre=subtarea.nombre if subtarea is not None else None,
+            desde=desde,
+        )
+
+    def fijar(self, id_tarea: int, id_subtarea: int | None, desde: datetime) -> Foco:
+        self._fila = (id_tarea, id_subtarea, desde)
+        self.veces_fijado += 1
+        foco = self.obtener()
+        assert foco is not None
+        return foco
+
+    def quitar(self) -> None:
+        self._fila = None

@@ -443,6 +443,30 @@ class TareaModelo(Base):
     )
 
 
+class FocoTrabajoModelo(Base):
+    """Foco de trabajo: la tarea, o la subtarea de esa tarea, con la que se está
+    trabajando ahora. Como mucho una fila, con ``id = 1`` (lo garantiza el CHECK):
+    fijar otro foco la sustituye.
+
+    Borrar la tarea o la subtarea en foco borra la fila (ON DELETE CASCADE);
+    completarlas no. Que la subtarea sea de la tarea lo comprueba la aplicación.
+    """
+
+    __tablename__ = "foco_trabajo"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_foco_trabajo_una_fila"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", name="fk_foco_trabajo_tarea", ondelete="CASCADE"), nullable=False
+    )
+    subtarea_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subtareas.id", name="fk_foco_trabajo_subtarea", ondelete="CASCADE"),
+        nullable=True,
+    )
+    # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
+    desde: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+
+
 __all__ = [
     "Base",
     "ComentarioModelo",
@@ -450,6 +474,7 @@ __all__ = [
     "ComentarioSubtareaModelo",
     "EstadoGrupoModelo",
     "EtiquetaModelo",
+    "FocoTrabajoModelo",
     "GrupoEstadosModelo",
     "OportunidadModelo",
     "PasoWorkflowModelo",
