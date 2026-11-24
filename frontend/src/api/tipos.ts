@@ -243,3 +243,26 @@ export interface GrupoEstados {
   tareas: number
   estados: EstadoGrupo[]
 }
+
+/**
+ * Tarea o subtarea en la que se está trabajando ahora (`/foco`). Solo hay
+ * una a la vez: `PUT /foco` sustituye la anterior sin avisar y devuelve este
+ * mismo objeto; `GET /foco` devuelve `null` si no hay ninguna y
+ * `DELETE /foco` (204) la quita. Borrar la tarea o subtarea en foco también
+ * la quita.
+ */
+export interface Foco {
+  tarea_id: number
+  tarea_nombre: string
+  /** `null` si el foco es la tarea entera. */
+  subtarea_id: number | null
+  subtarea_nombre: string | null
+  /** ISO 8601: instante desde el que se trabaja en ella (se reinicia en cada `PUT`). */
+  desde: string
+}
+
+/** Cuerpo de `PUT /foco`. */
+export interface DatosFoco {
+  tarea_id: number
+  subtarea_id: number | null
+}

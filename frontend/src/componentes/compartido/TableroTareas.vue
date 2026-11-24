@@ -17,7 +17,9 @@ import type { EstadoGrupo, GrupoEstados, Subtarea, Tarea } from '@/api/tipos'
 import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BarraEstados from '@/componentes/compartido/BarraEstados.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
+import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
+import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import { Alerta } from '@/componentes/ui/alerta'
@@ -41,6 +43,7 @@ import {
 import { agruparPorSubestado } from '@/lib/agruparPorSubestado'
 import { isoAFechaLocal } from '@/lib/fechas'
 import { MAX_NOMBRE_SUBTAREA, validarNombreSubtarea } from '@/lib/subtareas'
+import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaTareas } from '@/stores/tareas'
 
 // Tablero de las tareas de un grupo de estados: una columna por estado, en el
@@ -56,6 +59,9 @@ import { useTiendaTareas } from '@/stores/tareas'
 // Con el filtro "Asignado a" activo, `personasResaltadas` son las personas
 // elegidas: sus tareas y subtareas se resaltan, y las tarjetas con subtareas
 // suyas se despliegan.
+// La tarea o subtarea en foco (la tienda del foco) lleva borde violeta e
+// insignia "En foco"; su tarjeta sube a lo alto de la columna y, si el foco es
+// una subtarea, se despliega.
 const props = defineProps<{
   tareas: Tarea[]
   grupos: GrupoEstados[]
@@ -69,6 +75,7 @@ const emit = defineEmits<{
 }>()
 
 const tienda = useTiendaTareas()
+const tiendaFoco = useTiendaFoco()
 
 // Si el grupo recordado ya no existe, se usa el primero.
 const grupoActivo = computed<GrupoEstados | null>(
@@ -161,6 +168,10 @@ function instanteVencimiento(tarea: Tarea): number {
 }
 
 function tareasEn(estado: EstadoGrupo): Tarea[] {
+  return primeroLaDelFoco(ordenarColumna(estado))
+}
+
+function ordenarColumna(estado: EstadoGrupo): Tarea[] {
   const enColumna = tareasDelGrupo.value.filter((tarea) => tarea.estado?.id === estado.id)
   if (modoOrden.value === 'vencimiento') {
     // `sort` es estable: a igual fecha se mantiene el orden en que llegan.
@@ -175,6 +186,14 @@ function tareasEn(estado: EstadoGrupo): Tarea[] {
     return indice === -1 ? Number.POSITIVE_INFINITY : indice
   }
   return enColumna.sort((a, b) => posicion(a) - posicion(b))
+}
+
+// La tarjeta en foco (la tarea o una de sus subtareas) va la primera; las
+// demás conservan su orden.
+function primeroLaDelFoco(tareas: Tarea[]): Tarea[] {
+  const indice = tareas.findIndex((tarea) => tiendaFoco.tareaContieneFoco(tarea.id))
+  if (indice <= 0) return tareas
+  return [tareas[indice]!, ...tareas.slice(0, indice), ...tareas.slice(indice + 1)]
 }
 
 // Coloca la tarea en la posición `indice` de las tarjetas visibles de la
@@ -493,16 +512,34 @@ function subtareaResaltada(subtarea: Subtarea): boolean {
   return estaResaltada([subtarea.asignado])
 }
 
-// Las tarjetas desplegadas por el filtro se pliegan al quitarlo; las que se
-// desplegaron a mano se quedan como estaban. También se pueden plegar a mano.
-const idsConSubtareasResaltadas = computed(
-  () =>
-    new Set(
-      props.tareas.filter((tarea) => tarea.subtareas.some(subtareaResaltada)).map((t) => t.id),
-    ),
-)
+// --- Tarea en foco -------------------------------------------------------------
+// Violeta, para no confundirse con el ámbar del filtro de personas.
+const CLASES_FOCO =
+  'border-violet-500 bg-violet-50 ring-2 ring-violet-500 dark:border-violet-400 dark:bg-violet-950 dark:ring-violet-400'
+
+function clasesTarjeta(tarea: Tarea): string {
+  if (tiendaFoco.esTareaEnFoco(tarea.id)) return CLASES_FOCO
+  return tareaResaltada(tarea) ? CLASES_RESALTADA : 'bg-card'
+}
+
+function clasesSubtarea(subtarea: Subtarea): string {
+  if (tiendaFoco.esSubtareaEnFoco(subtarea.id)) return CLASES_FOCO
+  return subtareaResaltada(subtarea) ? CLASES_RESALTADA : 'bg-card'
+}
+
+// Las tarjetas desplegadas por el filtro o por tener la subtarea en foco se
+// pliegan cuando dejan de estarlo; las que se desplegaron a mano se quedan como
+// estaban. También se pueden plegar a mano.
+const idsDesplegadasSolas = computed(() => {
+  const ids = new Set(
+    props.tareas.filter((tarea) => tarea.subtareas.some(subtareaResaltada)).map((t) => t.id),
+  )
+  const foco = tiendaFoco.foco
+  if (foco && foco.subtarea_id !== null) ids.add(foco.tarea_id)
+  return ids
+})
 watch(
-  idsConSubtareasResaltadas,
+  idsDesplegadasSolas,
   (actuales, anteriores) => {
     for (const id of anteriores ?? []) {
       if (!actuales.has(id)) idsDesplegadas.value.delete(id)
@@ -927,9 +964,10 @@ function terminarArrastre(): void {
                       data-tarjeta
                       draggable="true"
                       :data-resaltada="tareaResaltada(tarea) ? '' : undefined"
+                      :data-en-foco="tiendaFoco.esTareaEnFoco(tarea.id) ? 'true' : undefined"
                       :class="[
                         'text-card-foreground relative flex flex-col gap-2 rounded-lg border p-3 shadow-xs',
-                        tareaResaltada(tarea) ? CLASES_RESALTADA : 'bg-card',
+                        clasesTarjeta(tarea),
                         idArrastrada === tarea.id && 'opacity-50',
                       ]"
                       @dragstart="alEmpezarArrastre($event, tarea)"
@@ -948,6 +986,7 @@ function terminarArrastre(): void {
                             ' (Asignada a la persona filtrada)'
                           }}</span>
                         </button>
+                        <InsigniaFoco v-if="tiendaFoco.esTareaEnFoco(tarea.id)" class="mt-0.5" />
                         <AvisoVencimiento
                           class="mt-0.5"
                           :vencimiento="tarea.fecha_vencimiento"
@@ -1049,6 +1088,7 @@ function terminarArrastre(): void {
                           {{ tarea.subtareas.length }}
                           <ListTree aria-hidden="true" />
                         </Button>
+                        <BotonFoco :tarea-id="tarea.id" :nombre="tarea.nombre" compacto />
 
                         <Popover
                           :open="idMenuAbierto === tarea.id"
@@ -1161,9 +1201,12 @@ function terminarArrastre(): void {
                           <div
                             data-subtarea
                             :data-resaltada="subtareaResaltada(subtarea) ? '' : undefined"
+                            :data-en-foco="
+                              tiendaFoco.esSubtareaEnFoco(subtarea.id) ? 'true' : undefined
+                            "
                             :class="[
                               'text-card-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5 shadow-xs',
-                              subtareaResaltada(subtarea) ? CLASES_RESALTADA : 'bg-card',
+                              clasesSubtarea(subtarea),
                             ]"
                           >
                             <button
@@ -1189,6 +1232,14 @@ function terminarArrastre(): void {
                             >
                               <AvatarPersona :nombre="subtarea.asignado" />
                             </NombreRelacionado>
+                            <InsigniaFoco v-if="tiendaFoco.esSubtareaEnFoco(subtarea.id)" />
+                            <BotonFoco
+                              :tarea-id="tarea.id"
+                              :subtarea-id="subtarea.id"
+                              :nombre="subtarea.nombre"
+                              compacto
+                              class="-my-1 -mr-1.5"
+                            />
                           </div>
                         </li>
                       </ul>
