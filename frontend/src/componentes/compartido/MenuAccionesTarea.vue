@@ -1,22 +1,38 @@
 <script setup lang="ts">
-import { Ellipsis, Eye, Pencil, Trash } from '@lucide/vue'
-import { ref } from 'vue'
+import { CircleStop, Ellipsis, Eye, Pencil, Target, Trash } from '@lucide/vue'
+import { computed, ref } from 'vue'
 
 import { Button } from '@/componentes/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
+import { useTiendaFoco } from '@/stores/foco'
 
 // Menú "⋯" con las acciones de una fila de la tabla de tareas. Cada acción
 // conserva el nombre accesible que tenía como botón suelto. El disparador
 // siempre recibe el foco; en pantallas anchas con ratón solo se ve al pasar
 // por la fila o al enfocarla (estilos `data-acciones-fila` en main.css).
+// Con `tareaId` ofrece también "Trabajar en esta" / "Dejar de trabajar", que
+// pone o quita la tarea en foco (como el botón del tablero y del detalle).
 const props = defineProps<{
   nombre: string
   idDisparador: string
+  tareaId?: number
 }>()
 
 const emit = defineEmits<{ editar: []; detalle: []; eliminar: [] }>()
 
 const abierto = ref(false)
+const tiendaFoco = useTiendaFoco()
+const enFoco = computed(
+  () => props.tareaId !== undefined && tiendaFoco.esTareaEnFoco(props.tareaId),
+)
+const etiquetaFoco = computed(() => (enFoco.value ? 'Dejar de trabajar' : 'Trabajar en esta'))
+
+function alternarFoco(): void {
+  abierto.value = false
+  if (props.tareaId === undefined) return
+  if (enFoco.value) void tiendaFoco.quitar()
+  else void tiendaFoco.fijar(props.tareaId)
+}
 
 function elegir(accion: 'editar' | 'detalle' | 'eliminar'): void {
   abierto.value = false
@@ -60,6 +76,17 @@ const CLASE_OPCION =
         @click="elegir('detalle')"
       >
         <Eye aria-hidden="true" />Ver detalle
+      </button>
+      <button
+        v-if="props.tareaId !== undefined"
+        type="button"
+        :class="CLASE_OPCION"
+        :aria-label="`${etiquetaFoco} (${props.nombre})`"
+        @click="alternarFoco"
+      >
+        <CircleStop v-if="enFoco" aria-hidden="true" /><Target v-else aria-hidden="true" />{{
+          etiquetaFoco
+        }}
       </button>
       <button
         type="button"

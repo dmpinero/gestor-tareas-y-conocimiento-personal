@@ -6,6 +6,7 @@ import { defineComponent, h } from 'vue'
 
 import { clienteApi } from '@/api/cliente'
 import type { Subtarea, Tarea } from '@/api/tipos'
+import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaTareas } from '@/stores/tareas'
 import EditorComentario from '../EditorComentario.vue'
 import SubtareasTarea from '../SubtareasTarea.vue'
@@ -1080,6 +1081,50 @@ describe('SubtareasTarea', () => {
       const nombre = campo(envoltorio, 'Nuevo nombre de la subtarea Redactar índice')
       expect(nombre.value).toBe('Otro nombre')
       expect(document.activeElement).toBe(nombre)
+    })
+  })
+
+  describe('trabajar en una subtarea', () => {
+    it('"Trabajar en esta" pone la subtarea en foco y la marca "En foco"', async () => {
+      const envoltorio = await montar()
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({
+        tarea_id: 1,
+        tarea_nombre: 'Escribir informe',
+        subtarea_id: 22,
+        subtarea_nombre: 'Enviar borrador',
+        desde: '2026-11-24T10:00:00',
+      })
+      expect(envoltorio.findAll('button[aria-label^="Trabajar en esta ("]')).toHaveLength(3)
+
+      await boton(envoltorio, 'Trabajar en esta (Enviar borrador)').trigger('click')
+      await flushPromises()
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith('/foco', { tarea_id: 1, subtarea_id: 22 })
+      const enFoco = envoltorio.findAll('[data-en-foco="true"]:not([data-boton-foco])')
+      expect(enFoco).toHaveLength(1)
+      expect(enFoco[0]!.text()).toContain('Enviar borrador')
+      expect(enFoco[0]!.find('[data-insignia-foco]').text()).toBe('En foco')
+      expect(envoltorio.findAll('button[aria-label^="Dejar de trabajar"]')).toHaveLength(1)
+      expect(boton(envoltorio, 'Dejar de trabajar (Enviar borrador)').exists()).toBe(true)
+    })
+
+    it('sobre la subtarea en foco "Dejar de trabajar" quita el foco', async () => {
+      const envoltorio = await montar()
+      useTiendaFoco().foco = {
+        tarea_id: 1,
+        tarea_nombre: 'Escribir informe',
+        subtarea_id: 20,
+        subtarea_nombre: 'Redactar índice',
+        desde: '2026-11-24T10:00:00',
+      }
+      vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
+      await flushPromises()
+
+      await boton(envoltorio, 'Dejar de trabajar (Redactar índice)').trigger('click')
+      await flushPromises()
+
+      expect(clienteApi.eliminar).toHaveBeenCalledWith('/foco')
+      expect(envoltorio.find('[data-insignia-foco]').exists()).toBe(false)
     })
   })
 })

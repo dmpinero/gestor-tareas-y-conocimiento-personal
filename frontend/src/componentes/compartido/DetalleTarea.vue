@@ -16,12 +16,15 @@ import {
   pildoraEstado,
 } from '@/lib/coloresTarea'
 import { formatearFechaHora } from '@/lib/fechas'
+import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
+import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import DialogoDescartarCambios from '@/componentes/compartido/DialogoDescartarCambios.vue'
+import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import SubtareasTarea from '@/componentes/compartido/SubtareasTarea.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
@@ -66,6 +69,11 @@ const emit = defineEmits<{
 // Se conserva la última tarea mostrada para que el contenido no desaparezca
 // mientras dura la animación de cierre.
 const tareaMostrada = ref<Tarea | null>(props.tarea)
+const tiendaFoco = useTiendaFoco()
+// La cabecera se marca solo si el foco es la tarea entera.
+const tareaEnFoco = computed(
+  () => tareaMostrada.value !== null && tiendaFoco.esTareaEnFoco(tareaMostrada.value.id),
+)
 watch(
   () => props.tarea,
   (tarea) => {
@@ -217,11 +225,20 @@ function alCambiarApertura(abierta: boolean): void {
       class="bg-lienzo flex h-[90vh] w-[90vw] max-w-none flex-col sm:max-w-none"
     >
       <!-- Banda de cabecera: nombre, campanas y píldoras con el resumen. -->
-      <DialogHeader data-testid="cabecera-detalle" :class="`${CLASE_TARJETA} gap-3`">
+      <DialogHeader
+        data-testid="cabecera-detalle"
+        :data-en-foco="tareaEnFoco ? 'true' : undefined"
+        :class="
+          tareaEnFoco
+            ? `${CLASE_TARJETA} gap-3 border-violet-500 ring-2 ring-violet-500 dark:border-violet-400 dark:ring-violet-400`
+            : `${CLASE_TARJETA} gap-3`
+        "
+      >
         <div class="flex items-start gap-2">
           <DialogTitle class="text-xl [overflow-wrap:anywhere]">{{
             tareaMostrada?.nombre
           }}</DialogTitle>
+          <InsigniaFoco v-if="tareaEnFoco" class="mt-1.5" />
           <AvisoVencimiento
             v-if="tareaMostrada"
             class="mt-1.5"
@@ -431,6 +448,11 @@ function alCambiarApertura(abierta: boolean): void {
           <Trash aria-hidden="true" />
           Eliminar
         </Button>
+        <BotonFoco
+          v-if="!props.editando && tareaMostrada"
+          :tarea-id="tareaMostrada.id"
+          :nombre="tareaMostrada.nombre"
+        />
         <template v-if="!props.editando">
           <Button
             v-if="tareaMostrada?.completada"

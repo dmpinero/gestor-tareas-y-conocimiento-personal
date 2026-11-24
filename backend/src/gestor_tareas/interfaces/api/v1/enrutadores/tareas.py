@@ -21,6 +21,9 @@ from gestor_tareas.dominio.excepciones import (
     AsignacionDeWorkflowInvalidaError,
 )
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_foco_sqlalchemy import (
+    RepositorioFocoSqlAlchemy,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
     RepositorioGruposEstadosSqlAlchemy,
 )
@@ -250,8 +253,11 @@ def cambiar_subestado(
 def eliminar(id_tarea: int, sesion: Session = Depends(obtener_sesion)) -> Response:
     """Borra la tarea con sus datos de tipo, sus subtareas, sus comentarios y los de
     sus subtareas. Las etiquetas y personas del catálogo se conservan. 404 si la
-    tarea no existe."""
-    EliminarTarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea)
+    tarea no existe. Si la tarea (o una subtarea suya) estaba en foco, quita el foco
+    y cierra su periodo del historial."""
+    EliminarTarea(RepositorioTareasSqlAlchemy(sesion), RepositorioFocoSqlAlchemy(sesion)).ejecutar(
+        id_tarea
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -330,6 +336,9 @@ def eliminar_subtarea(
 ) -> TareaSalidaEsquema:
     """Borra la subtarea con sus comentarios y devuelve la tarea con el resto de sus
     datos sin cambios; 404 si la tarea no existe o no tiene una subtarea con ese id
-    (también si la subtarea es de otra tarea)."""
-    tarea = EliminarSubtarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea, id_subtarea)
+    (también si la subtarea es de otra tarea). Si la subtarea estaba en foco, quita el
+    foco y cierra su periodo del historial."""
+    tarea = EliminarSubtarea(
+        RepositorioTareasSqlAlchemy(sesion), RepositorioFocoSqlAlchemy(sesion)
+    ).ejecutar(id_tarea, id_subtarea)
     return _a_esquema(tarea)

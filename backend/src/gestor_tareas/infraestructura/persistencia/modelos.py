@@ -11,11 +11,14 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Computed,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     LargeBinary,
+    SmallInteger,
     String,
     Table,
     Text,
@@ -443,6 +446,64 @@ class TareaModelo(Base):
     )
 
 
+class FocoTrabajoModelo(Base):
+    """Foco de trabajo: la tarea, o la subtarea de esa tarea, con la que se está
+    trabajando ahora. Como mucho una fila, con ``id = 1`` (lo garantiza el CHECK):
+    fijar otro foco la sustituye.
+
+    Borrar la tarea o la subtarea en foco borra la fila (ON DELETE CASCADE);
+    completarlas no. Que la subtarea sea de la tarea lo comprueba la aplicación.
+    """
+
+    __tablename__ = "foco_trabajo"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_foco_trabajo_una_fila"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", name="fk_foco_trabajo_tarea", ondelete="CASCADE"), nullable=False
+    )
+    subtarea_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subtareas.id", name="fk_foco_trabajo_subtarea", ondelete="CASCADE"),
+        nullable=True,
+    )
+    # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
+    desde: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+
+
+class HistorialFocoModelo(Base):
+    """Historial del foco: un periodo por cada vez que se fijó el foco, con los
+    nombres de la tarea y la subtarea de ese momento.
+
+    ``hasta`` es NULL en el periodo en curso, el del foco actual; la columna generada
+    ``en_curso`` (1 o NULL) con índice único impide que haya más de uno. Borrar la
+    tarea o la subtarea deja su id a NULL (ON DELETE SET NULL) y conserva el periodo.
+    """
+
+    __tablename__ = "historial_foco"
+    __table_args__ = (
+        UniqueConstraint("en_curso", name="uq_historial_foco_en_curso"),
+        Index("ix_historial_foco_desde", "desde"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tarea_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tareas.id", name="fk_historial_foco_tarea", ondelete="SET NULL"),
+        nullable=True,
+    )
+    subtarea_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subtareas.id", name="fk_historial_foco_subtarea", ondelete="SET NULL"),
+        nullable=True,
+    )
+    tarea_nombre: Mapped[str] = mapped_column(String(200), nullable=False)
+    subtarea_nombre: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # DATETIME sin zona horaria con el instante en UTC (la columna no guarda la zona).
+    desde: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    hasta: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    en_curso: Mapped[int | None] = mapped_column(
+        SmallInteger, Computed("IF(hasta IS NULL, 1, NULL)", persisted=True), nullable=True
+    )
+
+
 __all__ = [
     "Base",
     "ComentarioModelo",
@@ -450,7 +511,9 @@ __all__ = [
     "ComentarioSubtareaModelo",
     "EstadoGrupoModelo",
     "EtiquetaModelo",
+    "FocoTrabajoModelo",
     "GrupoEstadosModelo",
+    "HistorialFocoModelo",
     "OportunidadModelo",
     "PasoWorkflowModelo",
     "PersonaModelo",

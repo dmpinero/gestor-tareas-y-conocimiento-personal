@@ -50,6 +50,22 @@ def _respetar_orden_de_las_fechas(case: schemathesis.Case) -> None:
         cuerpo["fecha_vencimiento"] = cuerpo["fecha_creacion"]
 
 
+def _respetar_el_orden_del_rango_del_historial(case: schemathesis.Case) -> None:
+    """Que `desde` sea anterior a `hasta` en `GET /foco/historial` (422 si no) no se
+    puede expresar en JSON Schema: si el rango generado está al revés o vacío, se
+    quita `hasta` y el resto de la consulta se sigue probando."""
+    if case.path != "/api/v1/foco/historial" or not isinstance(case.query, dict):
+        return
+    try:
+        desde = datetime.fromisoformat(str(case.query["desde"]))
+        hasta = datetime.fromisoformat(str(case.query["hasta"]))
+        invertido = desde >= hasta
+    except (KeyError, ValueError, TypeError):
+        return
+    if invertido:
+        del case.query["hasta"]
+
+
 def _ids_de_los_pasos_actuales(id_workflow: object) -> list[int] | None:
     sesion = FabricaSesiones()
     try:
@@ -212,6 +228,7 @@ def _subir_una_imagen_de_verdad(case: schemathesis.Case) -> None:
 def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     """Genera peticiones a partir del OpenAPI y valida que las respuestas cumplen el esquema."""
     _respetar_orden_de_las_fechas(case)
+    _respetar_el_orden_del_rango_del_historial(case)
     _reordenar_los_pasos_que_existen(case)
     _asignar_grupos_que_existen(case)
     _asignar_workflows_que_existen(case)

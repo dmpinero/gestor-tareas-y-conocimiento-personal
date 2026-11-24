@@ -9,6 +9,7 @@ import type {
   ElementoCatalogo,
   Tarea,
 } from '@/api/tipos'
+import { useTiendaFoco } from '@/stores/foco'
 
 export const useTiendaTareas = defineStore('tareas', () => {
   const tareas = ref<Tarea[]>([])
@@ -146,6 +147,8 @@ export const useTiendaTareas = defineStore('tareas', () => {
       return false
     }
     tareas.value = tareas.value.filter((tarea) => tarea.id !== id)
+    // El servidor quita el foco si era esta tarea o una de sus subtareas.
+    useTiendaFoco().olvidarTarea(id)
     return true
   }
 
@@ -220,6 +223,7 @@ export const useTiendaTareas = defineStore('tareas', () => {
       reemplazarTarea(
         await clienteApi.eliminar<Tarea>(`/tareas/${idTarea}/subtareas/${idSubtarea}`),
       )
+      useTiendaFoco().olvidarSubtarea(idSubtarea)
       return true
     } catch (motivo) {
       error.value = (motivo as Error).message

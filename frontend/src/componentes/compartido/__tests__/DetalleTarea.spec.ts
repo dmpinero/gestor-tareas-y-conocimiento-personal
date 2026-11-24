@@ -7,6 +7,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { clienteApi } from '@/api/cliente'
 import type { Tarea } from '@/api/tipos'
 import { colorEtiqueta } from '@/lib/coloresTarea'
+import { useTiendaFoco } from '@/stores/foco'
 import DetalleTarea from '../DetalleTarea.vue'
 import EditorComentario from '../EditorComentario.vue'
 
@@ -857,6 +858,51 @@ describe('DetalleTarea', () => {
 
       expect(confirmacionDescarte()).not.toBeNull()
       expect(envoltorio.emitted('cerrar')).toBeUndefined()
+    })
+  })
+
+  describe('trabajar en la tarea', () => {
+    it('"Trabajar en esta" del pie pone la tarea en foco y marca la cabecera "En foco"', async () => {
+      vi.mocked(clienteApi.actualizar).mockResolvedValueOnce({
+        tarea_id: 2,
+        tarea_nombre: 'Leer artículo',
+        subtarea_id: null,
+        subtarea_nombre: null,
+        desde: '2026-11-24T10:00:00',
+      })
+      await montar(TAREA_SIN_TIPO)
+      const cabecera = modal().querySelector('[data-testid="cabecera-detalle"]')!
+      expect(cabecera.querySelector('[data-insignia-foco]')).toBeNull()
+
+      const botonFoco = [...modal().querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Trabajar en esta',
+      )!
+      botonFoco.click()
+      await flushPromises()
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith('/foco', {
+        tarea_id: 2,
+        subtarea_id: null,
+      })
+      expect(cabecera.getAttribute('data-en-foco')).toBe('true')
+      expect(cabecera.querySelector('[data-insignia-foco]')?.textContent?.trim()).toBe('En foco')
+      expect(botonFoco.textContent?.trim()).toBe('Dejar de trabajar')
+    })
+
+    it('con una subtarea en foco la cabecera no se marca', async () => {
+      await montar(TAREA_SIN_TIPO)
+      useTiendaFoco().foco = {
+        tarea_id: 2,
+        tarea_nombre: 'Leer artículo',
+        subtarea_id: 5,
+        subtarea_nombre: 'X',
+        desde: '2026-11-24T10:00:00',
+      }
+      await flushPromises()
+
+      const cabecera = modal().querySelector('[data-testid="cabecera-detalle"]')!
+      expect(cabecera.getAttribute('data-en-foco')).toBeNull()
+      expect(cabecera.querySelector('[data-insignia-foco]')).toBeNull()
     })
   })
 })

@@ -8,6 +8,7 @@ import VistaGruposEstados from '@/vistas/VistaGruposEstados.vue'
 import VistaWorkflows from '@/vistas/VistaWorkflows.vue'
 import VistaOportunidades from '@/vistas/VistaOportunidades.vue'
 import VistaSubestados from '@/vistas/VistaSubestados.vue'
+import VistaHistorialFoco from '@/vistas/VistaHistorialFoco.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -38,6 +39,11 @@ const router = createRouter({
     },
     { path: '/tareas/oportunidades', redirect: '/oportunidades/anes' },
     { path: '/tareas/oportunidades/axas-ms3', redirect: '/oportunidades/axas-ms3' },
+    {
+      path: '/foco/historial',
+      name: 'historial-foco',
+      component: VistaHistorialFoco,
+    },
     {
       path: '/conocimiento',
       name: 'conocimiento',

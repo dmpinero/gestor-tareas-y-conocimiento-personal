@@ -4,7 +4,9 @@ import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
 
 import type { DatosEdicionSubtarea, DatosSubtarea, Subtarea, Tarea } from '@/api/tipos'
+import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
+import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import { Button } from '@/componentes/ui/button'
 import { Input } from '@/componentes/ui/input'
@@ -23,6 +25,7 @@ import {
   validarNombreSubtarea,
 } from '@/lib/subtareas'
 import { registrarBorrador } from '@/composables/useConfirmarDescarte'
+import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaTareas } from '@/stores/tareas'
 
 // Subtareas de una tarea: listado, alta en línea, edición en línea (con
@@ -33,6 +36,14 @@ import { useTiendaTareas } from '@/stores/tareas'
 const props = defineProps<{ tarea: Tarea }>()
 
 const tienda = useTiendaTareas()
+const tiendaFoco = useTiendaFoco()
+
+// La subtarea en foco lleva borde violeta e insignia "En foco".
+function claseFoco(subtarea: Subtarea): string {
+  return tiendaFoco.esSubtareaEnFoco(subtarea.id)
+    ? 'outline-2 -outline-offset-2 outline-violet-500 dark:outline-violet-400'
+    : ''
+}
 
 const MAX_PERSONA = 100
 const VACIO = '—'
@@ -370,6 +381,12 @@ registrarBorrador(() => {
         >
       </div>
       <div v-else class="flex items-center justify-end gap-1">
+        <BotonFoco
+          :tarea-id="props.tarea.id"
+          :subtarea-id="subtarea.id"
+          :nombre="subtarea.nombre"
+          compacto
+        />
         <Button
           variant="ghost"
           size="sm"
@@ -556,7 +573,8 @@ registrarBorrador(() => {
         v-for="subtarea in props.tarea.subtareas"
         :key="subtarea.id"
         data-testid="tarjeta-subtarea"
-        class="min-w-0 rounded-md border p-3"
+        :data-en-foco="tiendaFoco.esSubtareaEnFoco(subtarea.id) ? 'true' : undefined"
+        :class="['min-w-0 rounded-md border p-3', claseFoco(subtarea)]"
       >
         <plantillaEdicion.reuse v-if="idEditando === subtarea.id" :subtarea="subtarea" />
         <template v-else>
@@ -568,6 +586,7 @@ registrarBorrador(() => {
               :class="claseResuelta(subtarea)"
               >{{ subtarea.nombre }}</span
             >
+            <InsigniaFoco v-if="tiendaFoco.esSubtareaEnFoco(subtarea.id)" />
           </div>
           <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
             <dt class="text-muted-foreground">Persona asignada</dt>
@@ -605,7 +624,10 @@ registrarBorrador(() => {
       </TableHeader>
       <TableBody class="[&_tr:nth-child(even)]:bg-muted/30">
         <template v-for="subtarea in props.tarea.subtareas" :key="subtarea.id">
-          <TableRow>
+          <TableRow
+            :data-en-foco="tiendaFoco.esSubtareaEnFoco(subtarea.id) ? 'true' : undefined"
+            :class="claseFoco(subtarea)"
+          >
             <TableCell v-if="idEditando === subtarea.id" colspan="4" class="whitespace-normal">
               <plantillaEdicion.reuse :subtarea="subtarea" />
             </TableCell>
@@ -616,6 +638,7 @@ registrarBorrador(() => {
                   <span class="[overflow-wrap:anywhere]" :class="claseResuelta(subtarea)">{{
                     subtarea.nombre
                   }}</span>
+                  <InsigniaFoco v-if="tiendaFoco.esSubtareaEnFoco(subtarea.id)" />
                 </div>
               </TableCell>
               <TableCell class="whitespace-normal">

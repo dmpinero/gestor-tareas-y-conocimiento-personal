@@ -1063,7 +1063,7 @@ describe('VistaTareas', () => {
   })
 
   describe('acciones de la fila', () => {
-    it('cada fila tiene un único menú "⋯" con Editar, Ver detalle y Eliminar, que conservan su nombre accesible', async () => {
+    it('cada fila tiene un único menú "⋯" con Editar, Ver detalle, Trabajar en esta y Eliminar, que conservan su nombre accesible', async () => {
       const envoltorio = await montar()
 
       const menu = envoltorio.get('button[aria-label="Acciones de la tarea Escribir informe"]')
@@ -1089,11 +1089,13 @@ describe('VistaTareas', () => {
       expect(opciones.map((opcion) => opcion.getAttribute('aria-label'))).toEqual([
         'Editar tarea Escribir informe',
         'Ver detalle de la tarea Escribir informe',
+        'Trabajar en esta (Escribir informe)',
         'Eliminar la tarea Escribir informe',
       ])
       expect(opciones.map((opcion) => opcion.textContent?.trim())).toEqual([
         'Editar',
         'Ver detalle',
+        'Trabajar en esta',
         'Eliminar',
       ])
     })

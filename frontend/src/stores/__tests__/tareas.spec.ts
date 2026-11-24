@@ -2,6 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clienteApi } from '@/api/cliente'
+import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaTareas } from '@/stores/tareas'
 
 vi.mock('@/api/cliente', () => ({
@@ -383,6 +384,27 @@ describe('useTiendaTareas', () => {
       expect(tienda.error).toBe('Tarea no encontrada')
       expect(tienda.tareas).toEqual([tareaEjemplo, otra])
     })
+
+    it('al borrar la tarea en foco quita el foco, como hace el servidor', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo, otra])
+      vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
+      const foco = useTiendaFoco()
+      foco.foco = {
+        tarea_id: 1,
+        tarea_nombre: 'Escribir informe',
+        subtarea_id: null,
+        subtarea_nombre: null,
+        desde: '2026-11-24T10:00:00',
+      }
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.eliminarTarea(2)
+      expect(foco.foco).not.toBeNull()
+      await tienda.eliminarTarea(1)
+
+      expect(foco.foco).toBeNull()
+    })
   })
 
   describe('fijarComentariosSubtarea', () => {
@@ -527,6 +549,27 @@ describe('useTiendaTareas', () => {
       expect(clienteApi.eliminar).toHaveBeenCalledWith('/tareas/1/subtareas/20')
       expect(tienda.tareas).toEqual([actualizada, otra])
       expect(tienda.error).toBeNull()
+    })
+
+    it('eliminarSubtarea de la subtarea en foco quita el foco, como hace el servidor', async () => {
+      simularObtener([conSubtareas])
+      vi.mocked(clienteApi.eliminar).mockResolvedValue({ ...conSubtareas, subtareas: [] })
+      const foco = useTiendaFoco()
+      foco.foco = {
+        tarea_id: 1,
+        tarea_nombre: 'Escribir informe',
+        subtarea_id: 20,
+        subtarea_nombre: 'A',
+        desde: '2026-11-24T10:00:00',
+      }
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.eliminarSubtarea(1, 21)
+      expect(foco.foco).not.toBeNull()
+      await tienda.eliminarSubtarea(1, 20)
+
+      expect(foco.foco).toBeNull()
     })
 
     it('eliminarSubtarea con un fallo de la API guarda el error, devuelve false y no altera la lista', async () => {

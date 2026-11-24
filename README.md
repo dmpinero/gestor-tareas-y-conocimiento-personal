@@ -337,6 +337,24 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
 - Barra lateral de navegación con iconos, colapsable: Inicio, Tareas,
   Conocimiento y Ajustes.
 - Modo claro/oscuro con preferencia persistida y sin parpadeo al cargar.
+- Tarea en foco: solo una tarea o subtarea a la vez es la que tienes entre
+  manos. Se marca con "Trabajar en esta" (tablero, detalle, subtareas y menú
+  "⋯" del listado) y se quita con "Dejar de trabajar"; marcar otra sustituye a
+  la anterior. La barra superior muestra en todas las páginas
+  `● Trabajando en: Tarea › Subtarea · 1 h 20 min` (al pulsarla se abre la
+  tarea; ✕ deja de trabajar en ella), y la tarea o subtarea en foco se resalta
+  en violeta con la etiqueta "En foco" y sube al principio de su columna del
+  tablero. Se guarda en el servidor (tabla `foco_trabajo`, de una sola fila);
+  completar la tarea no quita el foco y borrarla sí. API: `GET`/`PUT`/`DELETE
+  /api/v1/foco`.
+- Historial de foco: cada periodo de foco (inicio, fin y duración) queda
+  guardado en la tabla `historial_foco`. El reloj de la barra superior abre
+  `/foco/historial`, con dos vistas: **Por día** (día anterior/siguiente,
+  selector de fecha, "Hoy" y el total del día) y **Todo** (lista ordenada del
+  más reciente al más antiguo). Al pulsar una entrada se abre su tarea; el
+  periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
+  con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
+  `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
 - Endpoint de salud `GET /api/v1/salud` y métricas Prometheus en `/metricas`.
 - Comentarios de tareas, subtareas y pasos de los workflows con formato
   (negrita, cursiva, subrayado, tachado, color, resaltado, listas y enlaces)

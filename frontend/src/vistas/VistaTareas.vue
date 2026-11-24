@@ -12,6 +12,7 @@ import {
 } from '@lucide/vue'
 import { createReusableTemplate } from '@vueuse/core'
 import { computed, nextTick, onMounted, reactive, ref, watch, type Component } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import {
   TIPOS_TAREA,
@@ -28,6 +29,7 @@ import {
 } from '@/lib/agruparPorSubestado'
 import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
 import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
+import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import { useTiendaWorkflows } from '@/stores/workflows'
 import { useTiendaTareas } from '@/stores/tareas'
@@ -51,6 +53,7 @@ import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vu
 import DialogoDescartarCambios from '@/componentes/compartido/DialogoDescartarCambios.vue'
 import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
+import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import MenuAccionesTarea from '@/componentes/compartido/MenuAccionesTarea.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import ModalTareasRelacionadas from '@/componentes/compartido/ModalTareasRelacionadas.vue'
@@ -92,6 +95,9 @@ import {
 const tienda = useTiendaTareas()
 const tiendaGrupos = useTiendaGruposEstados()
 const tiendaWorkflows = useTiendaWorkflows()
+const tiendaFoco = useTiendaFoco()
+const ruta = useRoute()
+const enrutador = useRouter()
 // El alta y la edición se hacen en ventanas modales; las dos comparten el
 // formulario y su estado.
 const modalAltaAbierta = ref(false)
@@ -104,6 +110,23 @@ const idEnEdicion = ref<number | null>(null)
 const idEnDetalle = ref<number | null>(null)
 const tareaEnDetalle = computed<Tarea | null>(
   () => tienda.tareas.find((tarea) => tarea.id === idEnDetalle.value) ?? null,
+)
+
+// `/tareas?tarea=<id>` (p. ej. desde la píldora de la tarea en foco) abre el
+// detalle de esa tarea en cuanto está cargada y quita el parámetro de la URL,
+// para que volver a pulsar la píldora lo abra de nuevo. Un valor que no es un
+// id se ignora.
+watch(
+  [() => ruta.query.tarea, () => tienda.tareas],
+  ([valor]) => {
+    if (typeof valor !== 'string' || !/^\d+$/.test(valor)) return
+    const id = Number(valor)
+    if (!tienda.tareas.some((tarea) => tarea.id === id)) return
+    idEnDetalle.value = id
+    const resto = Object.entries(ruta.query).filter(([clave]) => clave !== 'tarea')
+    void enrutador.replace({ query: Object.fromEntries(resto) })
+  },
+  { immediate: true },
 )
 // La modal de detalle también edita la tarea, con el mismo formulario que la
 // modal de edición más dos campos que esta no tiene: si está completada y el
@@ -675,6 +698,8 @@ const GRUPOS_TABLA: {
 // claro al pasar el ratón, porque la fila entera abre el detalle.
 const FONDO_FILA_ALTERNA = 'bg-muted/40'
 const CLASE_FILA_TAREA = 'cursor-pointer hover:bg-blue-100/60 dark:hover:bg-blue-950/60'
+// La tarea en foco, con el borde violeta de la tarea en foco del tablero.
+const CLASE_FILA_FOCO = 'ring-2 ring-violet-500 ring-inset dark:ring-violet-400'
 function claseFilaTarea(indice: number): string {
   return indice % 2 === 1 ? `${CLASE_FILA_TAREA} ${FONDO_FILA_ALTERNA}` : CLASE_FILA_TAREA
 }
@@ -1157,7 +1182,12 @@ async function guardar(): Promise<void> {
     <plantillaFila.define v-slot="{ tarea, indice, borde }">
       <TableRow
         data-fila-tarea
-        :class="claseFilaTarea(indice)"
+        :data-en-foco="tiendaFoco.esTareaEnFoco(tarea.id) ? 'true' : undefined"
+        :class="
+          tiendaFoco.esTareaEnFoco(tarea.id)
+            ? `${claseFilaTarea(indice)} ${CLASE_FILA_FOCO}`
+            : claseFilaTarea(indice)
+        "
         @click="alPulsarFila($event, tarea.id)"
       >
         <!--
@@ -1174,6 +1204,7 @@ async function guardar(): Promise<void> {
               @update:model-value="tienda.alternarCompletada(tarea.id)"
             />
             <span data-nombre-tarea class="min-w-0 flex-1 break-words">{{ tarea.nombre }}</span>
+            <InsigniaFoco v-if="tiendaFoco.esTareaEnFoco(tarea.id)" class="mt-0.5" />
             <AvisoVencimiento
               class="mt-0.5"
               :vencimiento="tarea.fecha_vencimiento"
@@ -1281,6 +1312,7 @@ async function guardar(): Promise<void> {
           <MenuAccionesTarea
             :nombre="tarea.nombre"
             :id-disparador="idBotonAcciones(tarea.id)"
+            :tarea-id="tarea.id"
             @editar="abrirParaEditar(tarea)"
             @detalle="idEnDetalle = tarea.id"
             @eliminar="pedirEliminar(tarea, true)"
@@ -1627,6 +1659,9 @@ async function guardar(): Promise<void> {
     </Dialog>
 
     <p v-if="tienda.error" class="mt-2 text-sm text-destructive" role="alert">{{ tienda.error }}</p>
+    <p v-if="tiendaFoco.error" class="mt-2 text-sm text-destructive" role="alert">
+      {{ tiendaFoco.error }}
+    </p>
 
     <TableroTareas
       v-if="vista === 'tablero'"
