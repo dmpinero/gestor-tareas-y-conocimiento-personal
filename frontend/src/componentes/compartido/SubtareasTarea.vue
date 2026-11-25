@@ -601,7 +601,13 @@ registrarBorrador(() => {
             </dd>
             <dt class="text-muted-foreground">Prioridad</dt>
             <dd>
-              <span :class="claseResuelta(subtarea)">{{ textoOVacio(subtarea.prioridad) }}</span>
+              <span :class="claseResuelta(subtarea)"
+                ><NombreRelacionado
+                  v-if="subtarea.prioridad !== null"
+                  tipo="prioridad"
+                  :nombre="String(subtarea.prioridad)"
+                /><template v-else>{{ textoOVacio(subtarea.prioridad) }}</template></span
+              >
             </dd>
           </dl>
           <div class="mt-2">
@@ -651,7 +657,13 @@ registrarBorrador(() => {
                 >
               </TableCell>
               <TableCell>
-                <span :class="claseResuelta(subtarea)">{{ textoOVacio(subtarea.prioridad) }}</span>
+                <span :class="claseResuelta(subtarea)"
+                  ><NombreRelacionado
+                    v-if="subtarea.prioridad !== null"
+                    tipo="prioridad"
+                    :nombre="String(subtarea.prioridad)"
+                  /><template v-else>{{ textoOVacio(subtarea.prioridad) }}</template></span
+                >
               </TableCell>
               <TableCell class="text-right">
                 <plantillaAcciones.reuse :subtarea="subtarea" />

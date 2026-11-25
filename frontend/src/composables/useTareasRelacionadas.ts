@@ -1,6 +1,7 @@
 import { inject, provide, ref, type InjectionKey, type Ref } from 'vue'
+import type { TipoRelacion } from '@/lib/tareasRelacionadas'
 
-export type TipoRelacion = 'etiqueta' | 'persona' | 'subestado'
+export type { TipoRelacion }
 
 export interface SeleccionRelacionada {
   tipo: TipoRelacion
@@ -12,8 +13,8 @@ type AbrirRelacionadas = (tipo: TipoRelacion, nombre: string) => void
 const CLAVE_ABRIR: InjectionKey<AbrirRelacionadas> = Symbol('abrirTareasRelacionadas')
 
 /**
- * Lo usa la vista que pinta el modal de tareas relacionadas: guarda la etiqueta
- * o persona elegida y deja a sus descendientes abrir el modal.
+ * Lo usa la vista que pinta el modal de tareas relacionadas: guarda la etiqueta,
+ * persona, estado, etc. elegido y deja a sus descendientes abrir el modal.
  */
 export function useProveedorTareasRelacionadas(): {
   seleccion: Ref<SeleccionRelacionada | null>

@@ -93,6 +93,13 @@ test('hiberna una tarea con y sin comentario y la reanuda cuantas veces se quier
   await page.getByLabel('Buscar').fill(nombre)
   const fila = page.locator('[data-fila-tarea]', { hasText: nombre })
   await expect(fila.locator('[data-insignia-hibernada]')).toHaveText('Hibernada')
+  // Pulsar la insignia lista todas las hibernadas, con cuántas son.
+  await fila.getByRole('button', { name: 'Ver tareas: Hibernada' }).click()
+  const modal = page.getByRole('dialog', { name: 'Tareas hibernadas' })
+  await expect(modal.getByRole('heading', { name: /^Tareas \(\d+\)$/ })).toBeVisible()
+  await expect(modal.getByRole('button', { name: `Abrir la tarea ${nombre}` })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(modal).toBeHidden()
   await fila.locator('[data-nombre-tarea]').click()
   await expect(detalle).toBeVisible()
 

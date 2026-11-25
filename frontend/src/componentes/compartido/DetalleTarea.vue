@@ -3,6 +3,7 @@ import { CircleCheck, Pencil, Trash, Undo2 } from '@lucide/vue'
 import { computed, ref, useTemplateRef, watch } from 'vue'
 
 import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
+import { textoCompletado } from '@/lib/tareasRelacionadas'
 import type { TipoRelacion } from '@/composables/useTareasRelacionadas'
 import { proveerBorradores, useConfirmarDescarte } from '@/composables/useConfirmarDescarte'
 import {
@@ -278,29 +279,49 @@ async function alHibernar(conComentario: boolean): Promise<void> {
           class="flex flex-wrap items-center gap-2"
         >
           <li v-if="tareaMostrada.prioridad !== null" class="flex">
-            <span data-testid="pildora-prioridad" :class="clasePildoraPrioridad"
-              >Prioridad {{ tareaMostrada.prioridad }}</span
+            <NombreRelacionado
+              tipo="prioridad"
+              :nombre="String(tareaMostrada.prioridad)"
+              class="rounded-full"
+              ><span data-testid="pildora-prioridad" :class="clasePildoraPrioridad"
+                >Prioridad {{ tareaMostrada.prioridad }}</span
+              ></NombreRelacionado
             >
           </li>
           <li class="flex">
-            <span
-              data-testid="pildora-completado"
-              :class="`${CLASE_PILDORA} ${tareaMostrada.completada ? PILDORA_COMPLETADA : PILDORA_PENDIENTE}`"
-              >{{ tareaMostrada.completada ? 'Completada' : 'Pendiente' }}</span
+            <NombreRelacionado
+              tipo="completado"
+              :nombre="textoCompletado(tareaMostrada)"
+              class="rounded-full"
+              ><span
+                data-testid="pildora-completado"
+                :class="`${CLASE_PILDORA} ${tareaMostrada.completada ? PILDORA_COMPLETADA : PILDORA_PENDIENTE}`"
+                >{{ textoCompletado(tareaMostrada) }}</span
+              ></NombreRelacionado
             >
           </li>
           <li v-if="tareaMostrada.estado" class="flex">
-            <span
-              data-testid="pildora-estado"
-              :class="clasePildoraEstado"
-              :title="`Estado del grupo ${tareaMostrada.grupo_estados?.nombre ?? ''}`.trim()"
-              >{{ tareaMostrada.estado.nombre }}</span
+            <NombreRelacionado
+              tipo="estado"
+              :nombre="tareaMostrada.estado.nombre"
+              class="rounded-full"
+              ><span
+                data-testid="pildora-estado"
+                :class="clasePildoraEstado"
+                :title="`Estado del grupo ${tareaMostrada.grupo_estados?.nombre ?? ''}`.trim()"
+                >{{ tareaMostrada.estado.nombre }}</span
+              ></NombreRelacionado
             >
           </li>
           <li v-if="tareaMostrada.tipo !== null" class="flex">
-            <span data-testid="pildora-tipo" :class="`${CLASE_PILDORA} ${PILDORA_TIPO}`">{{
-              etiquetaTipoTarea(tareaMostrada.tipo)
-            }}</span>
+            <NombreRelacionado
+              tipo="tipo"
+              :nombre="etiquetaTipoTarea(tareaMostrada.tipo) ?? ''"
+              class="rounded-full"
+              ><span data-testid="pildora-tipo" :class="`${CLASE_PILDORA} ${PILDORA_TIPO}`">{{
+                etiquetaTipoTarea(tareaMostrada.tipo)
+              }}</span></NombreRelacionado
+            >
           </li>
           <!-- Fondo de superficie: los colores de la cuenta atrás mantienen 4,5:1. -->
           <li v-if="tareaMostrada.fecha_vencimiento" class="flex">

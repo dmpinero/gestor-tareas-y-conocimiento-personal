@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Subtarea, Tarea } from '@/api/tipos'
 import type { SeleccionRelacionada } from '@/composables/useTareasRelacionadas'
+import { RELACIONES, textosRelacion } from '@/lib/tareasRelacionadas'
 import {
   Dialog,
   DialogContent,
@@ -20,41 +21,39 @@ const emit = defineEmits<{
   verTarea: [id: number]
 }>()
 
-const esPersona = computed(() => props.seleccion?.tipo === 'persona')
+// Persona y prioridad también se dan en subtareas: tienen su propia sección.
+const relacionSubtareas = computed(() =>
+  props.seleccion === null ? undefined : RELACIONES[props.seleccion.tipo].subtareas,
+)
 
 const tareasRelacionadas = computed<Tarea[]>(() => {
   const seleccion = props.seleccion
   if (seleccion === null) return []
-  return props.tareas.filter((tarea) => {
-    if (seleccion.tipo === 'subestado') return tarea.subestado === seleccion.nombre
-    return (seleccion.tipo === 'etiqueta' ? tarea.etiquetas : tarea.asignados).includes(
-      seleccion.nombre,
-    )
-  })
+  const { coincide } = RELACIONES[seleccion.tipo]
+  return props.tareas.filter((tarea) => coincide(tarea, seleccion.nombre))
 })
 
-// Las subtareas solo tienen persona asignada, no etiquetas ni subestado.
 const subtareasRelacionadas = computed<{ subtarea: Subtarea; tarea: Tarea }[]>(() => {
   const seleccion = props.seleccion
-  if (seleccion === null || seleccion.tipo !== 'persona') return []
+  const relacion = relacionSubtareas.value
+  if (seleccion === null || relacion === undefined) return []
   return props.tareas.flatMap((tarea) =>
     tarea.subtareas
-      .filter((subtarea) => subtarea.asignado === seleccion.nombre)
+      .filter((subtarea) => relacion.coincide(subtarea, seleccion.nombre))
       .map((subtarea) => ({ subtarea, tarea })),
   )
 })
 
 const titulo = computed(() => {
   const seleccion = props.seleccion
-  if (seleccion === null) return ''
-  const tipo = { etiqueta: 'Etiqueta', persona: 'Persona', subestado: 'Subestado' }[seleccion.tipo]
-  return `${tipo}: ${seleccion.nombre}`
+  return seleccion === null ? '' : RELACIONES[seleccion.tipo].titulo(seleccion.nombre)
 })
 
-const descripcion = computed(() => {
-  if (esPersona.value) return 'Tareas y subtareas asignadas a esta persona.'
-  if (props.seleccion?.tipo === 'subestado') return 'Tareas con este subestado.'
-  return 'Tareas que llevan esta etiqueta.'
+const textos = computed(() => {
+  const seleccion = props.seleccion
+  return seleccion === null
+    ? { descripcion: '', vacio: '' }
+    : textosRelacion(seleccion.tipo, seleccion.nombre)
 })
 
 const CLASE_ELEMENTO =
@@ -66,7 +65,7 @@ const CLASE_ELEMENTO =
     <DialogContent class="max-h-[80vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle class="[overflow-wrap:anywhere]">{{ titulo }}</DialogTitle>
-        <DialogDescription>{{ descripcion }}</DialogDescription>
+        <DialogDescription>{{ textos.descripcion }}</DialogDescription>
       </DialogHeader>
 
       <section class="grid gap-2">
@@ -83,16 +82,10 @@ const CLASE_ELEMENTO =
             </button>
           </li>
         </ul>
-        <p v-else class="text-muted-foreground text-sm">
-          {{
-            esPersona
-              ? 'No hay tareas asignadas a esta persona.'
-              : 'No hay tareas con esta etiqueta.'
-          }}
-        </p>
+        <p v-else class="text-muted-foreground text-sm">{{ textos.vacio }}</p>
       </section>
 
-      <section v-if="esPersona" class="grid gap-2">
+      <section v-if="relacionSubtareas" class="grid gap-2">
         <h3 class="text-sm font-semibold">Subtareas ({{ subtareasRelacionadas.length }})</h3>
         <ul v-if="subtareasRelacionadas.length > 0" aria-label="Subtareas" class="grid gap-1">
           <li v-for="{ subtarea, tarea } in subtareasRelacionadas" :key="subtarea.id">
@@ -109,9 +102,7 @@ const CLASE_ELEMENTO =
             </button>
           </li>
         </ul>
-        <p v-else class="text-muted-foreground text-sm">
-          No hay subtareas asignadas a esta persona.
-        </p>
+        <p v-else class="text-muted-foreground text-sm">{{ relacionSubtareas.vacio }}</p>
       </section>
     </DialogContent>
   </Dialog>

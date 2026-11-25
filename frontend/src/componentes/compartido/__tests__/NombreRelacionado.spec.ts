@@ -43,6 +43,31 @@ describe('NombreRelacionado', () => {
     expect(proveedor!.seleccion.value).toEqual({ tipo: 'subestado', nombre: 'Bloqueada' })
   })
 
+  it.each([
+    ['prioridad', '2', 'Ver tareas y subtareas con la prioridad 2'],
+    ['estado', 'En curso', 'Ver tareas en el estado En curso'],
+    ['tipo', 'Oportunidad', 'Ver tareas de tipo Oportunidad'],
+    ['completado', 'Completada', 'Ver tareas: Completada'],
+    ['completado', 'Pendiente', 'Ver tareas: Pendiente'],
+    ['hibernada', 'Hibernada', 'Ver tareas: Hibernada'],
+  ] as const)(
+    '%s %s abre el modal y lo dice en su nombre accesible',
+    async (tipo, nombre, accesible) => {
+      let proveedor: ReturnType<typeof useProveedorTareasRelacionadas> | null = null
+      const vista = defineComponent({
+        setup() {
+          proveedor = useProveedorTareasRelacionadas()
+          return () => h(NombreRelacionado, { tipo, nombre })
+        },
+      })
+      const boton = mount(vista).get('button')
+      expect(boton.attributes('aria-label')).toBe(accesible)
+
+      await boton.trigger('click')
+      expect(proveedor!.seleccion.value).toEqual({ tipo, nombre })
+    },
+  )
+
   it('admite otro contenido (p. ej. un avatar) sin cambiar su nombre accesible', () => {
     const vista = defineComponent({
       setup() {

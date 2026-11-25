@@ -366,6 +366,12 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   veces se quiera. API: `POST /api/v1/tareas/{id}/hibernar` (cuerpo
   `{"comentario": ... | null}`) y `POST /api/v1/tareas/{id}/reanudar`; el
   estado hibernado se devuelve en `hibernada_desde`.
+- Píldoras pulsables: en el listado, el tablero y el detalle, pulsar una
+  etiqueta, una persona, el subestado, la prioridad, el estado del grupo, el
+  tipo, "Completada"/"Pendiente" o la insignia "Hibernada" abre una ventana con
+  todas las tareas que lo comparten y cuántas son. Las personas y la prioridad
+  también listan las subtareas que coinciden. Al pulsar una tarea de la
+  ventana, se abre su detalle.
 - Endpoint de salud `GET /api/v1/salud` y métricas Prometheus en `/metricas`.
 - Comentarios de tareas, subtareas y pasos de los workflows con formato
   (negrita, cursiva, subrayado, tachado, color, resaltado, listas y enlaces)

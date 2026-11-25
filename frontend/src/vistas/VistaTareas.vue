@@ -143,15 +143,14 @@ const extrasDetalle = reactive<{ completada: boolean; estadoId: number | '' }>({
   estadoId: '',
 })
 
-// Texto del tipo en la tabla; en una oportunidad con subtareas (p. ej. los pasos
-// de su workflow), con su avance: resueltas / total
-// ("Oportunidad · 3/7"). Ordenar, filtrar y exportar usan solo el tipo.
-function textoTipoEnTabla(tarea: Tarea): string {
-  const etiqueta = etiquetaTipoTarea(tarea.tipo)
-  if (etiqueta === null) return '—'
-  if (tarea.tipo !== 'oportunidad' || tarea.subtareas.length === 0) return etiqueta
+// Avance que sigue al tipo en la tabla en una oportunidad con subtareas (p. ej.
+// los pasos de su workflow): resueltas / total (" · 3/7", tras "Oportunidad").
+// Va fuera del botón del tipo, que solo nombra el tipo. Ordenar, filtrar y
+// exportar usan solo el tipo.
+function avanceTipoEnTabla(tarea: Tarea): string {
+  if (tarea.tipo !== 'oportunidad' || tarea.subtareas.length === 0) return ''
   const resueltas = tarea.subtareas.filter((subtarea) => subtarea.resuelta).length
-  return `${etiqueta} · ${resueltas}/${tarea.subtareas.length}`
+  return ` · ${resueltas}/${tarea.subtareas.length}`
 }
 
 // Píldora de la prioridad (sin prioridad no hay píldora, sino "—").
@@ -1241,8 +1240,8 @@ async function guardar(): Promise<void> {
             v-if="tarea.prioridad !== null"
             data-testid="pildora-prioridad"
             :class="clasePildoraPrioridad(tarea.prioridad)"
-            >{{ tarea.prioridad }}</span
-          >
+            ><NombreRelacionado tipo="prioridad" :nombre="String(tarea.prioridad)"
+          /></span>
           <template v-else>—</template>
         </TableCell>
         <TableCell v-if="esVisible('descripcion')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{
@@ -1319,17 +1318,16 @@ async function guardar(): Promise<void> {
             v-if="tarea.tipo !== null"
             data-testid="pildora-tipo"
             :class="`${CLASE_PILDORA} ${PILDORA_TIPO}`"
-            >{{ textoTipoEnTabla(tarea) }}</span
+            ><NombreRelacionado tipo="tipo" :nombre="etiquetaTipoTarea(tarea.tipo) ?? ''" />{{
+              avanceTipoEnTabla(tarea)
+            }}</span
           >
           <template v-else>—</template>
         </TableCell>
         <TableCell v-if="esVisible('estado')" :class="claseCelda(tarea)">
-          <span
-            v-if="tarea.estado"
-            data-testid="pildora-estado"
-            :class="clasePildoraEstado(tarea)"
-            >{{ tarea.estado.nombre }}</span
-          >
+          <span v-if="tarea.estado" data-testid="pildora-estado" :class="clasePildoraEstado(tarea)"
+            ><NombreRelacionado tipo="estado" :nombre="tarea.estado.nombre"
+          /></span>
           <template v-else>—</template>
         </TableCell>
         <TableCell class="w-0">
