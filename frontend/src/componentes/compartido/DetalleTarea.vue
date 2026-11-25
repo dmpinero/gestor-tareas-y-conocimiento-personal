@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { CircleCheck, Pencil, Trash, Undo2 } from '@lucide/vue'
-import { computed, ref, watch } from 'vue'
+import { CircleCheck, Pencil, Play, Snowflake, Trash, Undo2 } from '@lucide/vue'
+import { computed, ref, useTemplateRef, watch } from 'vue'
 
 import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
 import type { TipoRelacion } from '@/composables/useTareasRelacionadas'
@@ -16,15 +16,21 @@ import {
   pildoraEstado,
 } from '@/lib/coloresTarea'
 import { formatearFechaHora } from '@/lib/fechas'
+import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
+import { tieneContenidoComentario } from '@/lib/htmlComentario'
 import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
+import { useTiendaTareas } from '@/stores/tareas'
 import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
+import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vue'
 import DialogoDescartarCambios from '@/componentes/compartido/DialogoDescartarCambios.vue'
+import EditorComentario from '@/componentes/compartido/EditorComentario.vue'
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
+import InsigniaHibernada from '@/componentes/compartido/InsigniaHibernada.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import SubtareasTarea from '@/componentes/compartido/SubtareasTarea.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
@@ -48,6 +54,10 @@ import {
 // `edicion` (el formulario, que pone quien la usa) y los comentarios siguen a
 // la vista. Junto a "Editar", un botón destacado marca la tarea como completada
 // (o la desmarca) y emite `alternarCompletada`: el cambio lo hace quien la usa.
+// Antes, "Hibernar" abre un diálogo con un comentario opcional e hiberna la
+// tarea (su reloj se para; el comentario se añade a los de la tarea); si ya
+// está hibernada, "Reanudar" la despierta. Estos dos los hace la propia modal
+// con el almacén de tareas, que reemplaza la tarea en la lista.
 // Las zonas (cabecera, tarjetas de campos, subtareas y comentarios)
 // son superficies que destacan sobre el lienzo de la modal. Si al cerrarla hay
 // cambios sin guardar (`hayCambios`, el formulario de quien la usa, o un
@@ -216,6 +226,53 @@ const { confirmando: confirmandoDescarte } = descarte
 function alCambiarApertura(abierta: boolean): void {
   if (!abierta) descarte.pedirCierre(() => emit('cerrar'))
 }
+
+// --- Hibernar y reanudar ---
+const tiendaTareas = useTiendaTareas()
+const hibernada = computed(() => tareaMostrada.value !== null && estaHibernada(tareaMostrada.value))
+// La cuenta atrás se para tanto al completarla (o pasar a DONE) como al hibernarla.
+const congeladaEn = computed(() =>
+  tareaMostrada.value === null ? null : instanteCongelado(tareaMostrada.value),
+)
+const comentarios = useTemplateRef<{ recargar: () => Promise<void> }>('comentarios')
+
+const hibernando = ref(false)
+const comentarioHibernacion = ref('')
+const procesandoHibernacion = ref(false)
+const errorHibernacion = ref<string | null>(null)
+
+function abrirHibernar(): void {
+  comentarioHibernacion.value = ''
+  errorHibernacion.value = null
+  hibernando.value = true
+}
+
+function alCambiarHibernar(abierto: boolean): void {
+  if (!procesandoHibernacion.value) hibernando.value = abierto
+}
+
+async function confirmarHibernar(): Promise<void> {
+  const tarea = tareaMostrada.value
+  if (tarea === null || procesandoHibernacion.value) return
+  const comentario = tieneContenidoComentario(comentarioHibernacion.value)
+    ? comentarioHibernacion.value
+    : null
+  procesandoHibernacion.value = true
+  errorHibernacion.value = null
+  const hecho = await tiendaTareas.hibernar(tarea.id, comentario)
+  procesandoHibernacion.value = false
+  if (!hecho) {
+    errorHibernacion.value = tiendaTareas.error
+    return
+  }
+  hibernando.value = false
+  // El comentario lo guarda la API: se vuelve a pedir la lista para verlo ya.
+  if (comentario !== null) await comentarios.value?.recargar()
+}
+
+async function reanudar(): Promise<void> {
+  if (tareaMostrada.value !== null) await tiendaTareas.reanudar(tareaMostrada.value.id)
+}
 </script>
 
 <template>
@@ -239,12 +296,13 @@ function alCambiarApertura(abierta: boolean): void {
             tareaMostrada?.nombre
           }}</DialogTitle>
           <InsigniaFoco v-if="tareaEnFoco" class="mt-1.5" />
+          <InsigniaHibernada v-if="hibernada" class="mt-1.5" />
           <AvisoVencimiento
             v-if="tareaMostrada"
             class="mt-1.5"
             :vencimiento="tareaMostrada.fecha_vencimiento"
             :completada="tareaMostrada.completada"
-            :congelada-en="tareaMostrada.congelada_en"
+            :congelada-en="congeladaEn"
           />
         </div>
         <ul
@@ -286,12 +344,13 @@ function alCambiarApertura(abierta: boolean): void {
               <VencimientoCorto
                 :vencimiento="tareaMostrada.fecha_vencimiento"
                 :completada="tareaMostrada.completada"
-                :congelada-en="tareaMostrada.congelada_en"
+                :congelada-en="congeladaEn"
               />
               <span aria-hidden="true">·</span>
               <ContadorVencimiento
                 :vencimiento="tareaMostrada.fecha_vencimiento"
-                :congelada-en="tareaMostrada.congelada_en"
+                :congelada-en="congeladaEn"
+                :hibernada="hibernada"
               />
             </span>
           </li>
@@ -431,7 +490,7 @@ function alCambiarApertura(abierta: boolean): void {
           aria-label="Comentarios de la tarea"
           :class="`${CLASE_TARJETA} flex min-h-0 flex-col`"
         >
-          <ComentariosTarea :ruta="`/tareas/${tareaMostrada.id}/comentarios`" />
+          <ComentariosTarea ref="comentarios" :ruta="`/tareas/${tareaMostrada.id}/comentarios`" />
         </aside>
       </div>
 
@@ -453,6 +512,30 @@ function alCambiarApertura(abierta: boolean): void {
           :tarea-id="tareaMostrada.id"
           :nombre="tareaMostrada.nombre"
         />
+        <template v-if="!props.editando && tareaMostrada">
+          <Button
+            v-if="hibernada"
+            type="button"
+            variant="outline"
+            data-reanudar
+            :aria-label="`Reanudar la tarea ${tareaMostrada.nombre}`"
+            @click="reanudar"
+          >
+            <Play aria-hidden="true" />
+            Reanudar
+          </Button>
+          <Button
+            v-else
+            type="button"
+            variant="outline"
+            data-hibernar
+            :aria-label="`Hibernar la tarea ${tareaMostrada.nombre}`"
+            @click="abrirHibernar"
+          >
+            <Snowflake aria-hidden="true" />
+            Hibernar
+          </Button>
+        </template>
         <template v-if="!props.editando">
           <Button
             v-if="tareaMostrada?.completada"
@@ -493,6 +576,26 @@ function alCambiarApertura(abierta: boolean): void {
       </DialogFooter>
     </DialogContent>
   </Dialog>
+
+  <DialogoConfirmacion
+    :abierto="hibernando"
+    :titulo="`Hibernar la tarea ${tareaMostrada?.nombre ?? ''}`"
+    descripcion="El contador de vencimiento se detiene hasta que la reanudes; al reanudarla, el vencimiento se retrasa el tiempo que haya estado hibernada. Si escribes un comentario, se añadirá a los comentarios de la tarea."
+    texto-confirmar="Hibernar"
+    confirmar-sin-peligro
+    :procesando="procesandoHibernacion"
+    :error="errorHibernacion"
+    @update:abierto="alCambiarHibernar"
+    @confirmar="confirmarHibernar"
+  >
+    <EditorComentario
+      v-model="comentarioHibernacion"
+      etiqueta="Comentario (opcional)"
+      placeholder="Comentario (opcional)"
+      :solo-lectura="procesandoHibernacion"
+      @enviar="confirmarHibernar"
+    />
+  </DialogoConfirmacion>
 
   <DialogoDescartarCambios
     :abierto="confirmandoDescarte"

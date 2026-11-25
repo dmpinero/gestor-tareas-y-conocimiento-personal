@@ -197,4 +197,36 @@ describe('ContadorVencimiento', () => {
       contador.unmount()
     })
   })
+
+  describe('hibernada', () => {
+    it('con `hibernada` el contador detenido lo explica en el title y para lectores de pantalla', () => {
+      vi.setSystemTime(new Date(2026, 10, 25, 9, 0, 0))
+      const contador = mount(ContadorVencimiento, {
+        props: {
+          vencimiento: VENCIMIENTO,
+          congeladaEn: instanteUtc(new Date(2026, 10, 18, 14, 44, 40)),
+          hibernada: true,
+        },
+      })
+
+      const span = contador.get('[data-testid="contador-vencimiento"]')
+      expect(span.attributes('data-congelado')).toBe('true')
+      expect(span.attributes('title')).toBe('Contador detenido: la tarea está hibernada')
+      expect(span.get('[data-testid="contador-texto"]').text()).toBe(
+        'Vence en 2 d 03 h 15 min 20 s',
+      )
+      expect(span.get('.sr-only').text()).toBe('(contador detenido: hibernada)')
+      contador.unmount()
+    })
+
+    it('sin `hibernada` el title de una tarea congelada no cambia', () => {
+      vi.setSystemTime(new Date(2026, 10, 25, 9, 0, 0))
+      const contador = montar(VENCIMIENTO, instanteUtc(new Date(2026, 10, 18, 14, 44, 40)))
+
+      const span = contador.get('[data-testid="contador-vencimiento"]')
+      expect(span.attributes('title')).toBe('Contador detenido: la tarea está completada o en DONE')
+      expect(span.get('.sr-only').text()).toBe('(contador detenido)')
+      contador.unmount()
+    })
+  })
 })

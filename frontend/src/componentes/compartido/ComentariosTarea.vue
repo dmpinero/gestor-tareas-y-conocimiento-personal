@@ -295,6 +295,10 @@ async function confirmarEliminar(id: number): Promise<void> {
 }
 // Al final: la carga inmediata usa el estado de las acciones declarado arriba.
 watch(() => props.ruta, cargar, { immediate: true })
+
+// Vuelve a pedir los comentarios de `ruta`, p. ej. cuando la API añade uno por
+// su cuenta (el de la hibernación de la tarea).
+defineExpose({ recargar: () => cargar(props.ruta) })
 </script>
 
 <template>

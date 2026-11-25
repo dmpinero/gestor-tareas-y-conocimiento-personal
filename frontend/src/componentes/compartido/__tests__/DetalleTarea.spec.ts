@@ -44,6 +44,7 @@ const TAREA_SIN_TIPO: Tarea = {
   estado: null,
   workflow: null,
   congelada_en: null,
+  hibernada_desde: null,
   subestado: null,
 }
 
@@ -68,6 +69,7 @@ const TAREA_OPORTUNIDAD: Tarea = {
   estado: null,
   workflow: null,
   congelada_en: null,
+  hibernada_desde: null,
   subestado: null,
 }
 
@@ -903,6 +905,202 @@ describe('DetalleTarea', () => {
       const cabecera = modal().querySelector('[data-testid="cabecera-detalle"]')!
       expect(cabecera.getAttribute('data-en-foco')).toBeNull()
       expect(cabecera.querySelector('[data-insignia-foco]')).toBeNull()
+    })
+  })
+
+  describe('hibernar y reanudar', () => {
+    // Hibernada el 18/11/2026 a las 10:00:00 (hora local); faltaban 2 d 08 h.
+    const HIBERNADA_DESDE = new Date(2026, 10, 18, 10, 0, 0).toISOString().replace(/\.\d{3}Z$/, 'Z')
+    const HIBERNADA: Tarea = { ...TAREA_OPORTUNIDAD, hibernada_desde: HIBERNADA_DESDE }
+
+    function botonesPie(): HTMLButtonElement[] {
+      return [...modal().querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button')]
+    }
+
+    function botonPie(texto: string): HTMLButtonElement | undefined {
+      return botonesPie().find((boton) => boton.textContent?.trim() === texto)
+    }
+
+    function dialogoHibernar(): HTMLElement | null {
+      return document.body.querySelector<HTMLElement>('[role="alertdialog"]')
+    }
+
+    function botonEn(contenedor: HTMLElement, texto: string): HTMLButtonElement {
+      const encontrado = [...contenedor.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === texto,
+      )
+      if (!encontrado) throw new Error(`No se encontró el botón "${texto}"`)
+      return encontrado
+    }
+
+    async function escribirComentarioHibernacion(envoltorio: VueWrapper, html: string) {
+      const editor = envoltorio
+        .findAllComponents(EditorComentario)
+        .find((componente) => componente.props('etiqueta') === 'Comentario (opcional)')
+      if (!editor) throw new Error('No hay editor del comentario de la hibernación')
+      ;(editor.vm as unknown as { editor: Editor }).editor.commands.setContent(html, {
+        emitUpdate: true,
+      })
+      await flushPromises()
+    }
+
+    it('una tarea sin hibernar tiene "Hibernar" en el pie, antes de "Marcar como completada", y no muestra la insignia', async () => {
+      await montar(TAREA_OPORTUNIDAD)
+
+      const textos = botonesPie().map((boton) => boton.textContent?.trim())
+      expect(textos.indexOf('Hibernar')).toBeGreaterThanOrEqual(0)
+      expect(textos.indexOf('Hibernar')).toBeLessThan(textos.indexOf('Marcar como completada'))
+      expect(textos).not.toContain('Reanudar')
+      expect(botonPie('Hibernar')!.getAttribute('aria-label')).toBe(
+        'Hibernar la tarea Escribir informe',
+      )
+      expect(cabecera().querySelector('[data-insignia-hibernada]')).toBeNull()
+    })
+
+    it('una tarea hibernada muestra la insignia "Hibernada", "Reanudar" en lugar de "Hibernar" y el contador detenido', async () => {
+      await montar(HIBERNADA)
+
+      expect(cabecera().querySelector('[data-insignia-hibernada]')?.textContent?.trim()).toBe(
+        'Hibernada',
+      )
+      const textos = botonesPie().map((boton) => boton.textContent?.trim())
+      expect(textos).toContain('Reanudar')
+      expect(textos).not.toContain('Hibernar')
+      expect(botonPie('Reanudar')!.getAttribute('aria-label')).toBe(
+        'Reanudar la tarea Escribir informe',
+      )
+
+      const contador = modal().querySelector('[data-testid="contador-vencimiento"]')!
+      expect(contador.getAttribute('data-congelado')).toBe('true')
+      expect(contador.getAttribute('title')).toBe('Contador detenido: la tarea está hibernada')
+      expect(contador.querySelector('[data-testid="contador-texto"]')?.textContent).toBe(
+        'Vence en 2 d 08 h 00 min 00 s',
+      )
+      vi.advanceTimersByTime(3000)
+      await flushPromises()
+      expect(contador.querySelector('[data-testid="contador-texto"]')?.textContent).toBe(
+        'Vence en 2 d 08 h 00 min 00 s',
+      )
+    })
+
+    it('hibernada y a punto de vencer no muestra campanas ni marca de vencida', async () => {
+      // Vence en 1 h: sin hibernar mostraría la campana urgente.
+      vi.setSystemTime(new Date(2026, 10, 20, 17, 0, 0))
+      await montar({
+        ...TAREA_OPORTUNIDAD,
+        hibernada_desde: new Date(2026, 10, 20, 16, 0, 0).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      })
+
+      expect(cabecera().querySelector('[data-aviso-vencimiento]')).toBeNull()
+      expect(
+        modal().querySelector('[data-testid="vencimiento-corto"]')?.getAttribute('data-icono'),
+      ).toBeNull()
+    })
+
+    it('congelada antes de hibernarse, el contador muestra el instante más antiguo', async () => {
+      await montar({
+        ...TAREA_OPORTUNIDAD,
+        completada: true,
+        congelada_en: new Date(2026, 10, 17, 18, 0, 0).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        hibernada_desde: HIBERNADA_DESDE,
+      })
+
+      const contador = modal().querySelector('[data-testid="contador-vencimiento"]')!
+      expect(contador.querySelector('[data-testid="contador-texto"]')?.textContent).toBe(
+        'Vence en 3 d 00 h 00 min 00 s',
+      )
+    })
+
+    it('"Hibernar" abre un diálogo con comentario opcional; al confirmar hiberna con el comentario y recarga los comentarios', async () => {
+      const COMENTARIO = {
+        id: 7,
+        texto: '<p>Esperando al cliente</p>',
+        creado: '2026-11-18T13:44:40Z',
+        editado: null,
+      }
+      vi.mocked(clienteApi.crear).mockResolvedValueOnce(HIBERNADA)
+      const envoltorio = await montar(TAREA_OPORTUNIDAD)
+      expect(clienteApi.obtener).toHaveBeenCalledTimes(1)
+
+      botonPie('Hibernar')!.click()
+      await flushPromises()
+      const dialogo = dialogoHibernar()!
+      expect(dialogo.textContent).toContain('Hibernar la tarea Escribir informe')
+      expect(dialogo.textContent).toContain('El contador de vencimiento se detiene')
+      await escribirComentarioHibernacion(envoltorio, '<p>Esperando al cliente</p>')
+
+      vi.mocked(clienteApi.obtener).mockResolvedValueOnce([COMENTARIO])
+      botonEn(dialogo, 'Hibernar').click()
+      await flushPromises()
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/hibernar', {
+        comentario: '<p>Esperando al cliente</p>',
+      })
+      expect(dialogoHibernar()).toBeNull()
+      expect(clienteApi.obtener).toHaveBeenLastCalledWith('/tareas/1/comentarios')
+      expect(modal().querySelector('[data-testid="columna-comentarios"]')?.textContent).toContain(
+        'Esperando al cliente',
+      )
+      expect(envoltorio.emitted('cerrar')).toBeUndefined()
+    })
+
+    it('sin comentario hiberna con `comentario: null`', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValueOnce(HIBERNADA)
+      await montar(TAREA_OPORTUNIDAD)
+
+      botonPie('Hibernar')!.click()
+      await flushPromises()
+      botonEn(dialogoHibernar()!, 'Hibernar').click()
+      await flushPromises()
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/hibernar', { comentario: null })
+      expect(dialogoHibernar()).toBeNull()
+    })
+
+    it('"Cancelar" cierra el diálogo sin hibernar', async () => {
+      await montar(TAREA_OPORTUNIDAD)
+
+      botonPie('Hibernar')!.click()
+      await flushPromises()
+      botonEn(dialogoHibernar()!, 'Cancelar').click()
+      await flushPromises()
+
+      expect(dialogoHibernar()).toBeNull()
+      expect(clienteApi.crear).not.toHaveBeenCalled()
+    })
+
+    it('si la API rechaza la hibernación, el diálogo sigue abierto con el error', async () => {
+      vi.mocked(clienteApi.crear).mockRejectedValueOnce(new Error('La tarea ya está hibernada'))
+      await montar(TAREA_OPORTUNIDAD)
+
+      botonPie('Hibernar')!.click()
+      await flushPromises()
+      botonEn(dialogoHibernar()!, 'Hibernar').click()
+      await flushPromises()
+
+      const dialogo = dialogoHibernar()!
+      expect(dialogo.querySelector('[role="alert"]')?.textContent).toBe(
+        'La tarea ya está hibernada',
+      )
+    })
+
+    it('"Reanudar" llama a POST /tareas/{id}/reanudar', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValueOnce(TAREA_OPORTUNIDAD)
+      await montar(HIBERNADA)
+
+      botonPie('Reanudar')!.click()
+      await flushPromises()
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/reanudar', null)
+    })
+
+    it('mientras se edita no se muestran "Hibernar" ni "Reanudar"', async () => {
+      await montar(TAREA_OPORTUNIDAD)
+      await contenedor!.setProps({ editando: true })
+      expect(botonPie('Hibernar')).toBeUndefined()
+
+      await contenedor!.setProps({ tarea: HIBERNADA })
+      expect(botonPie('Reanudar')).toBeUndefined()
     })
   })
 })

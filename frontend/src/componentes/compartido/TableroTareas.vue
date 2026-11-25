@@ -20,6 +20,7 @@ import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
+import InsigniaHibernada from '@/componentes/compartido/InsigniaHibernada.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import { Alerta } from '@/componentes/ui/alerta'
@@ -42,6 +43,7 @@ import {
 } from '@/lib/coloresTarea'
 import { agruparPorSubestado } from '@/lib/agruparPorSubestado'
 import { isoAFechaLocal } from '@/lib/fechas'
+import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
 import { MAX_NOMBRE_SUBTAREA, validarNombreSubtarea } from '@/lib/subtareas'
 import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaTareas } from '@/stores/tareas'
@@ -987,11 +989,12 @@ function terminarArrastre(): void {
                           }}</span>
                         </button>
                         <InsigniaFoco v-if="tiendaFoco.esTareaEnFoco(tarea.id)" class="mt-0.5" />
+                        <InsigniaHibernada v-if="estaHibernada(tarea)" class="mt-0.5" />
                         <AvisoVencimiento
                           class="mt-0.5"
                           :vencimiento="tarea.fecha_vencimiento"
                           :completada="tarea.completada"
-                          :congelada-en="tarea.congelada_en"
+                          :congelada-en="instanteCongelado(tarea)"
                         />
                       </div>
 
@@ -1022,12 +1025,13 @@ function terminarArrastre(): void {
                           <VencimientoCorto
                             :vencimiento="tarea.fecha_vencimiento"
                             :completada="tarea.completada"
-                            :congelada-en="tarea.congelada_en"
+                            :congelada-en="instanteCongelado(tarea)"
                             class="text-foreground"
                           />
                           <ContadorVencimiento
                             :vencimiento="tarea.fecha_vencimiento"
-                            :congelada-en="tarea.congelada_en"
+                            :congelada-en="instanteCongelado(tarea)"
+                            :hibernada="estaHibernada(tarea)"
                           />
                         </span>
                       </div>
