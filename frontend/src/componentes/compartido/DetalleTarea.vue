@@ -105,6 +105,8 @@ interface Campo {
   relacionados?: { tipo: TipoRelacion; nombres: string[] }
   // Nombre de catálogo que se muestra como píldora de color (el subestado).
   pildora?: string
+  // Debajo del valor, la cuenta atrás hasta el vencimiento (como en la tarjeta).
+  cuentaAtras?: boolean
 }
 
 interface Tarjeta {
@@ -129,6 +131,7 @@ const tarjetasCampos = computed<Tarjeta[]>(() => {
         {
           termino: 'Fecha de vencimiento',
           valor: tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : VACIO,
+          cuentaAtras: tarea.fecha_vencimiento !== null,
         },
         { termino: 'Prioridad', valor: textoOVacio(tarea.prioridad) },
         { termino: 'Estado', valor: tarea.completada ? 'Completada' : 'Pendiente' },
@@ -416,6 +419,17 @@ async function alHibernar(conComentario: boolean): Promise<void> {
                     :class="campo.multilinea ? 'whitespace-pre-wrap' : ''"
                     v-text="campo.valor"
                   />
+                  <!-- Segunda descripción del mismo término: la cuenta atrás. -->
+                  <dd
+                    v-if="campo.cuentaAtras && tareaMostrada.fecha_vencimiento"
+                    class="text-sm sm:col-start-2"
+                  >
+                    <ContadorVencimiento
+                      :vencimiento="tareaMostrada.fecha_vencimiento"
+                      :congelada-en="congeladaEn"
+                      :hibernada="hibernada"
+                    />
+                  </dd>
                 </div>
               </dl>
             </section>

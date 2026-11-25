@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import type { APIRequestContext } from '@playwright/test'
+import type { APIRequestContext, Locator } from '@playwright/test'
 import { test, expect, NOMBRE_GRUPO_E2E, type Page } from './base'
 import { activarModoOscuro } from './utilidades'
 
@@ -31,11 +31,25 @@ async function crearTarea(
   return ((await creada.json()) as { id: number }).id
 }
 
+// El detalle tiene dos cuentas atrás (cabecera y campo "Fecha de vencimiento"),
+// que siempre muestran lo mismo: se devuelve su texto común.
 async function textoContador(page: Page, nombre: string): Promise<string> {
-  return page
+  const textos = await page
     .getByRole('dialog', { name: nombre })
     .locator('[data-testid="contador-texto"]')
-    .innerText()
+    .allInnerTexts()
+  expect(textos).toHaveLength(2)
+  expect(new Set(textos).size).toBe(1)
+  return textos[0]!
+}
+
+// Ambas cuentas atrás del detalle están (o no) detenidas.
+async function esperarDetenido(contador: Locator, detenido: boolean): Promise<void> {
+  await expect(contador).toHaveCount(2)
+  for (const indice of [0, 1]) {
+    if (detenido) await expect(contador.nth(indice)).toHaveAttribute('data-congelado', 'true')
+    else await expect(contador.nth(indice)).not.toHaveAttribute('data-congelado', 'true')
+  }
 }
 
 test('hiberna una tarea con y sin comentario y la reanuda cuantas veces se quiera', async ({
@@ -50,7 +64,7 @@ test('hiberna una tarea con y sin comentario y la reanuda cuantas veces se quier
   const detalle = page.getByRole('dialog', { name: nombre })
   await expect(detalle).toBeVisible()
   const contador = detalle.locator('[data-testid="contador-vencimiento"]')
-  await expect(contador).not.toHaveAttribute('data-congelado', 'true')
+  await esperarDetenido(contador, false)
   await expect(detalle.locator('[data-insignia-hibernada]')).toHaveCount(0)
 
   // Primera hibernación, con comentario.
@@ -64,7 +78,7 @@ test('hiberna una tarea con y sin comentario y la reanuda cuantas veces se quier
   await expect(dialogo).toBeHidden()
 
   await expect(detalle.locator('[data-insignia-hibernada]')).toHaveText('Hibernada')
-  await expect(contador).toHaveAttribute('data-congelado', 'true')
+  await esperarDetenido(contador, true)
   const historial = detalle.getByRole('list', { name: 'Historial de comentarios' })
   await expect(historial).toContainText('Esperando respuesta del cliente')
   // Detenido: el texto no cambia aunque pasen los segundos.
@@ -85,7 +99,7 @@ test('hiberna una tarea con y sin comentario y la reanuda cuantas veces se quier
   // Reanudar: desaparece la insignia y el contador vuelve a contar.
   await detalle.getByRole('button', { name: `Reanudar la tarea ${nombre}` }).click()
   await expect(detalle.locator('[data-insignia-hibernada]')).toHaveCount(0)
-  await expect(contador).not.toHaveAttribute('data-congelado', 'true')
+  await esperarDetenido(contador, false)
   const enMarcha = await textoContador(page, nombre)
   await expect.poll(() => textoContador(page, nombre)).not.toBe(enMarcha)
   await expect(fila.locator('[data-insignia-hibernada]')).toHaveCount(0)
@@ -96,14 +110,14 @@ test('hiberna una tarea con y sin comentario y la reanuda cuantas veces se quier
   await dialogo.getByRole('button', { name: 'Hibernar', exact: true }).click()
   await expect(dialogo).toBeHidden()
   await expect(detalle.locator('[data-insignia-hibernada]')).toHaveText('Hibernada')
-  await expect(contador).toHaveAttribute('data-congelado', 'true')
+  await esperarDetenido(contador, true)
   // Un solo comentario (el de la primera hibernación): los comentarios son los
   // `li` anidados en el de su día.
   await expect(historial.locator('li li')).toHaveCount(1)
 
   await detalle.getByRole('button', { name: `Reanudar la tarea ${nombre}` }).click()
   await expect(detalle.locator('[data-insignia-hibernada]')).toHaveCount(0)
-  await expect(contador).not.toHaveAttribute('data-congelado', 'true')
+  await esperarDetenido(contador, false)
 })
 
 const MODOS = [
