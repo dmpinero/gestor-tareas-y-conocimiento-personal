@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CircleCheck, Pencil, Play, Snowflake, Trash, Undo2 } from '@lucide/vue'
+import { CircleCheck, Pencil, Trash, Undo2 } from '@lucide/vue'
 import { computed, ref, useTemplateRef, watch } from 'vue'
 
 import { etiquetaTipoTarea, type Tarea } from '@/api/tipos'
@@ -17,18 +17,15 @@ import {
 } from '@/lib/coloresTarea'
 import { formatearFechaHora } from '@/lib/fechas'
 import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
-import { tieneContenidoComentario } from '@/lib/htmlComentario'
 import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
-import { useTiendaTareas } from '@/stores/tareas'
 import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
+import BotonHibernar from '@/componentes/compartido/BotonHibernar.vue'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
-import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vue'
 import DialogoDescartarCambios from '@/componentes/compartido/DialogoDescartarCambios.vue'
-import EditorComentario from '@/componentes/compartido/EditorComentario.vue'
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import InsigniaHibernada from '@/componentes/compartido/InsigniaHibernada.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
@@ -228,7 +225,6 @@ function alCambiarApertura(abierta: boolean): void {
 }
 
 // --- Hibernar y reanudar ---
-const tiendaTareas = useTiendaTareas()
 const hibernada = computed(() => tareaMostrada.value !== null && estaHibernada(tareaMostrada.value))
 // La cuenta atrás se para tanto al completarla (o pasar a DONE) como al hibernarla.
 const congeladaEn = computed(() =>
@@ -236,42 +232,10 @@ const congeladaEn = computed(() =>
 )
 const comentarios = useTemplateRef<{ recargar: () => Promise<void> }>('comentarios')
 
-const hibernando = ref(false)
-const comentarioHibernacion = ref('')
-const procesandoHibernacion = ref(false)
-const errorHibernacion = ref<string | null>(null)
-
-function abrirHibernar(): void {
-  comentarioHibernacion.value = ''
-  errorHibernacion.value = null
-  hibernando.value = true
-}
-
-function alCambiarHibernar(abierto: boolean): void {
-  if (!procesandoHibernacion.value) hibernando.value = abierto
-}
-
-async function confirmarHibernar(): Promise<void> {
-  const tarea = tareaMostrada.value
-  if (tarea === null || procesandoHibernacion.value) return
-  const comentario = tieneContenidoComentario(comentarioHibernacion.value)
-    ? comentarioHibernacion.value
-    : null
-  procesandoHibernacion.value = true
-  errorHibernacion.value = null
-  const hecho = await tiendaTareas.hibernar(tarea.id, comentario)
-  procesandoHibernacion.value = false
-  if (!hecho) {
-    errorHibernacion.value = tiendaTareas.error
-    return
-  }
-  hibernando.value = false
-  // El comentario lo guarda la API: se vuelve a pedir la lista para verlo ya.
-  if (comentario !== null) await comentarios.value?.recargar()
-}
-
-async function reanudar(): Promise<void> {
-  if (tareaMostrada.value !== null) await tiendaTareas.reanudar(tareaMostrada.value.id)
+// El comentario de la hibernación lo guarda la API: se vuelve a pedir la
+// lista para verlo ya.
+async function alHibernar(conComentario: boolean): Promise<void> {
+  if (conComentario) await comentarios.value?.recargar()
 }
 </script>
 
@@ -512,30 +476,11 @@ async function reanudar(): Promise<void> {
           :tarea-id="tareaMostrada.id"
           :nombre="tareaMostrada.nombre"
         />
-        <template v-if="!props.editando && tareaMostrada">
-          <Button
-            v-if="hibernada"
-            type="button"
-            variant="outline"
-            data-reanudar
-            :aria-label="`Reanudar la tarea ${tareaMostrada.nombre}`"
-            @click="reanudar"
-          >
-            <Play aria-hidden="true" />
-            Reanudar
-          </Button>
-          <Button
-            v-else
-            type="button"
-            variant="outline"
-            data-hibernar
-            :aria-label="`Hibernar la tarea ${tareaMostrada.nombre}`"
-            @click="abrirHibernar"
-          >
-            <Snowflake aria-hidden="true" />
-            Hibernar
-          </Button>
-        </template>
+        <BotonHibernar
+          v-if="!props.editando && tareaMostrada"
+          :tarea="tareaMostrada"
+          @hibernada="alHibernar"
+        />
         <template v-if="!props.editando">
           <Button
             v-if="tareaMostrada?.completada"
@@ -576,26 +521,6 @@ async function reanudar(): Promise<void> {
       </DialogFooter>
     </DialogContent>
   </Dialog>
-
-  <DialogoConfirmacion
-    :abierto="hibernando"
-    :titulo="`Hibernar la tarea ${tareaMostrada?.nombre ?? ''}`"
-    descripcion="El contador de vencimiento se detiene hasta que la reanudes; al reanudarla, el vencimiento se retrasa el tiempo que haya estado hibernada. Si escribes un comentario, se añadirá a los comentarios de la tarea."
-    texto-confirmar="Hibernar"
-    confirmar-sin-peligro
-    :procesando="procesandoHibernacion"
-    :error="errorHibernacion"
-    @update:abierto="alCambiarHibernar"
-    @confirmar="confirmarHibernar"
-  >
-    <EditorComentario
-      v-model="comentarioHibernacion"
-      etiqueta="Comentario (opcional)"
-      placeholder="Comentario (opcional)"
-      :solo-lectura="procesandoHibernacion"
-      @enviar="confirmarHibernar"
-    />
-  </DialogoConfirmacion>
 
   <DialogoDescartarCambios
     :abierto="confirmandoDescarte"

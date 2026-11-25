@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CircleStop, Ellipsis, Eye, Pencil, Target, Trash } from '@lucide/vue'
+import { CircleStop, Ellipsis, Eye, Pencil, Play, Snowflake, Target, Trash } from '@lucide/vue'
 import { computed, ref } from 'vue'
 
 import { Button } from '@/componentes/ui/button'
@@ -12,13 +12,22 @@ import { useTiendaFoco } from '@/stores/foco'
 // por la fila o al enfocarla (estilos `data-acciones-fila` en main.css).
 // Con `tareaId` ofrece también "Trabajar en esta" / "Dejar de trabajar", que
 // pone o quita la tarea en foco (como el botón del tablero y del detalle).
+// Con `hibernada` definido ofrece también "Hibernar" (emite `hibernar`, para
+// que la vista abra el diálogo del comentario) o, si ya lo está, "Reanudar".
 const props = defineProps<{
   nombre: string
   idDisparador: string
   tareaId?: number
+  hibernada?: boolean
 }>()
 
-const emit = defineEmits<{ editar: []; detalle: []; eliminar: [] }>()
+const emit = defineEmits<{
+  editar: []
+  detalle: []
+  eliminar: []
+  hibernar: []
+  reanudar: []
+}>()
 
 const abierto = ref(false)
 const tiendaFoco = useTiendaFoco()
@@ -39,6 +48,12 @@ function elegir(accion: 'editar' | 'detalle' | 'eliminar'): void {
   if (accion === 'editar') emit('editar')
   else if (accion === 'detalle') emit('detalle')
   else emit('eliminar')
+}
+
+function alternarHibernacion(): void {
+  abierto.value = false
+  if (props.hibernada) emit('reanudar')
+  else emit('hibernar')
 }
 
 const CLASE_OPCION =
@@ -86,6 +101,17 @@ const CLASE_OPCION =
       >
         <CircleStop v-if="enFoco" aria-hidden="true" /><Target v-else aria-hidden="true" />{{
           etiquetaFoco
+        }}
+      </button>
+      <button
+        v-if="props.hibernada !== undefined"
+        type="button"
+        :class="CLASE_OPCION"
+        :aria-label="`${props.hibernada ? 'Reanudar' : 'Hibernar'} la tarea ${props.nombre}`"
+        @click="alternarHibernacion"
+      >
+        <Play v-if="props.hibernada" aria-hidden="true" /><Snowflake v-else aria-hidden="true" />{{
+          props.hibernada ? 'Reanudar' : 'Hibernar'
         }}
       </button>
       <button

@@ -51,6 +51,7 @@ import CabeceraOrdenable from '@/componentes/compartido/CabeceraOrdenable.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import DetalleTarea from '@/componentes/compartido/DetalleTarea.vue'
 import DialogoConfirmacion from '@/componentes/compartido/DialogoConfirmacion.vue'
+import DialogoHibernar from '@/componentes/compartido/DialogoHibernar.vue'
 import DialogoDescartarCambios from '@/componentes/compartido/DialogoDescartarCambios.vue'
 import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
@@ -110,6 +111,8 @@ const idEnEdicion = ref<number | null>(null)
 // Id de la tarea abierta en la modal de detalle, o `null` si está cerrada. Se
 // lee de la tienda para que la modal refleje los cambios (p. ej. una subtarea resuelta).
 const idEnDetalle = ref<number | null>(null)
+// Tarea que se está hibernando desde el menú "⋯" de su fila (diálogo abierto).
+const tareaAHibernar = ref<Tarea | null>(null)
 const tareaEnDetalle = computed<Tarea | null>(
   () => tienda.tareas.find((tarea) => tarea.id === idEnDetalle.value) ?? null,
 )
@@ -1319,7 +1322,10 @@ async function guardar(): Promise<void> {
             :tarea-id="tarea.id"
             @editar="abrirParaEditar(tarea)"
             @detalle="idEnDetalle = tarea.id"
+            :hibernada="estaHibernada(tarea)"
             @eliminar="pedirEliminar(tarea, true)"
+            @hibernar="tareaAHibernar = tarea"
+            @reanudar="tienda.reanudar(tarea.id)"
           />
         </TableCell>
       </TableRow>
@@ -1880,6 +1886,8 @@ async function guardar(): Promise<void> {
       @cerrar="tareasRelacionadas.cerrar"
       @ver-tarea="abrirDesdeRelacionadas"
     />
+
+    <DialogoHibernar :tarea="tareaAHibernar" @cerrar="tareaAHibernar = null" />
 
     <DialogoConfirmacion
       :abierto="tareaAEliminar !== null"

@@ -355,7 +355,8 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
   con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
   `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
-- Hibernar una tarea: el botón "Hibernar" del detalle detiene su cuenta atrás
+- Hibernar una tarea: el botón "Hibernar" (en el detalle, en la tarjeta del
+  tablero y en el menú "⋯" del listado) detiene su cuenta atrás
   hasta el vencimiento y pide un comentario opcional, que se guarda como un
   comentario más de la tarea. La tarea muestra la insignia "Hibernada" en el
   listado, el tablero y el detalle, y no avisa de vencimiento mientras duerme.

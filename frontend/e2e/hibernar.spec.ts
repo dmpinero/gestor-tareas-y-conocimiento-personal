@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import type { APIRequestContext } from '@playwright/test'
-import { test, expect, type Page } from './base'
+import { test, expect, NOMBRE_GRUPO_E2E, type Page } from './base'
 import { activarModoOscuro } from './utilidades'
 
 // Fecha y hora local sin zona ("YYYY-MM-DDTHH:MM:SS"), como las recibe la API.
@@ -157,3 +157,41 @@ for (const { modo, preparar, claseHtml } of MODOS) {
     ).toBe(false)
   })
 }
+
+test('hiberna y reanuda una tarea desde el tablero y desde el menú "⋯" del listado', async ({
+  page,
+  request,
+  grupoE2e,
+}) => {
+  const nombre = `HibernarAtajos ${Date.now()}`
+  const id = await crearTarea(request, nombre, grupoE2e)
+
+  // Listado: el menú "⋯" de la fila abre el diálogo de hibernar.
+  await page.goto('/tareas')
+  await page.getByLabel('Buscar').fill(nombre)
+  const fila = page.locator('[data-fila-tarea]', { hasText: nombre })
+  await fila.getByRole('button', { name: `Acciones de la tarea ${nombre}` }).click()
+  await page.getByRole('button', { name: `Hibernar la tarea ${nombre}` }).click()
+  const dialogo = page.getByRole('alertdialog', { name: `Hibernar la tarea ${nombre}` })
+  await dialogo.getByRole('button', { name: 'Hibernar', exact: true }).click()
+  await expect(dialogo).toBeHidden()
+  await expect(fila.locator('[data-insignia-hibernada]')).toBeVisible()
+  const tras = await request.get('/api/v1/tareas')
+  const guardada = ((await tras.json()) as { id: number; hibernada_desde: string | null }[]).find(
+    (t) => t.id === id,
+  )
+  expect(guardada?.hibernada_desde).not.toBeNull()
+
+  // Tablero: "Reanudar" la despierta sin diálogo, y "Hibernar" vuelve a abrirlo.
+  await page.getByRole('button', { name: 'Ver como tablero' }).click()
+  await page.getByRole('combobox', { name: 'Grupo del tablero' }).selectOption({
+    label: NOMBRE_GRUPO_E2E,
+  })
+  const tarjeta = page.locator('[data-tarjeta]', { hasText: nombre })
+  await expect(tarjeta.locator('[data-insignia-hibernada]')).toBeVisible()
+  await tarjeta.getByRole('button', { name: `Reanudar la tarea ${nombre}` }).click()
+  await expect(tarjeta.locator('[data-insignia-hibernada]')).toHaveCount(0)
+  await tarjeta.getByRole('button', { name: `Hibernar la tarea ${nombre}` }).click()
+  await dialogo.getByRole('button', { name: 'Hibernar', exact: true }).click()
+  await expect(tarjeta.locator('[data-insignia-hibernada]')).toBeVisible()
+})

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
+import { clienteApi } from '@/api/cliente'
 import type { GrupoEstados, Tarea } from '@/api/tipos'
 import { useTiendaTareas } from '@/stores/tareas'
 import TableroTareas from '../TableroTareas.vue'
@@ -139,5 +140,43 @@ describe('TableroTareas: tareas hibernadas', () => {
     expect(contador.querySelector('[data-testid="contador-texto"]')?.textContent).toBe(
       'Vence en 00 h 59 min 59 s',
     )
+  })
+
+  it('"Hibernar" en la tarjeta abre el diálogo e hiberna la tarea con su comentario opcional', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValueOnce({
+      ...NORMAL,
+      hibernada_desde: instanteUtc(new Date(2026, 10, 20, 17, 0, 0)),
+    })
+    await montar()
+
+    const boton = tarjeta('Normal').querySelector<HTMLButtonElement>(
+      'button[aria-label="Hibernar la tarea Normal"]',
+    )!
+    boton.click()
+    await flushPromises()
+    const dialogo = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!
+    expect(dialogo.textContent).toContain('Hibernar la tarea Normal')
+    ;[...dialogo.querySelectorAll<HTMLButtonElement>('button')]
+      .find((b) => b.textContent?.trim() === 'Hibernar')!
+      .click()
+    await flushPromises()
+
+    expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/2/hibernar', { comentario: null })
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(tarjeta('Normal').querySelector('[data-insignia-hibernada]')).not.toBeNull()
+  })
+
+  it('"Reanudar" en la tarjeta de una tarea hibernada la reanuda sin diálogo', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValueOnce({ ...HIBERNADA, hibernada_desde: null })
+    await montar()
+
+    tarjeta('Hibernada')
+      .querySelector<HTMLButtonElement>('button[aria-label="Reanudar la tarea Hibernada"]')!
+      .click()
+    await flushPromises()
+
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/reanudar', null)
+    expect(tarjeta('Hibernada').querySelector('[data-insignia-hibernada]')).toBeNull()
   })
 })
