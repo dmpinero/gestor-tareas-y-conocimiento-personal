@@ -1898,6 +1898,7 @@ async function guardar(): Promise<void> {
     <ModalTareasRelacionadas
       :seleccion="tareasRelacionadas.seleccion.value"
       :tareas="tienda.tareas"
+      :grupos="tiendaGrupos.grupos"
       @cerrar="tareasRelacionadas.cerrar"
       @ver-tarea="abrirDesdeRelacionadas"
     />

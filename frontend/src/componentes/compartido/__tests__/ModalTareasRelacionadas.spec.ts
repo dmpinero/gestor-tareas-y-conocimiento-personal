@@ -77,11 +77,11 @@ function dialogo(): HTMLElement {
 }
 
 function textosDe(lista: string): string[] {
-  const ul = dialogo().querySelector(`ul[aria-label="${lista}"]`)
-  if (!ul) throw new Error(`No se encontró la lista ${lista}`)
-  return [...ul.querySelectorAll('li')].map((li) => {
-    const partes = [...li.querySelectorAll('button > span')].map((span) => span.textContent?.trim())
-    return partes.length > 0 ? partes.join(' ') : (li.textContent?.trim() ?? '')
+  const tabla = dialogo().querySelector(`[data-tabla="${lista}"]`)
+  if (!tabla) throw new Error(`No se encontró la tabla ${lista}`)
+  return [...tabla.querySelectorAll('tbody tr')].map((fila) => {
+    const celdas = [...fila.querySelectorAll('td')].map((td) => td.textContent?.trim() ?? '')
+    return lista === 'Subtareas' ? `${celdas[0]} Tarea: ${celdas[1]}` : celdas[0]!
   })
 }
 
@@ -102,7 +102,7 @@ describe('ModalTareasRelacionadas', () => {
     await flushPromises()
     expect(dialogo().querySelector('h2')?.textContent).toContain('Etiqueta: Urgente')
     expect(textosDe('Tareas')).toEqual(['Preparar demo', 'Llamar a cliente'])
-    expect(dialogo().querySelector('ul[aria-label="Subtareas"]')).toBeNull()
+    expect(dialogo().querySelector('[data-tabla="Subtareas"]')).toBeNull()
     envoltorio.unmount()
   })
 
@@ -112,7 +112,7 @@ describe('ModalTareasRelacionadas', () => {
     expect(dialogo().querySelector('h2')?.textContent).toContain('Subestado: Bloqueada')
     expect(dialogo().textContent).toContain('Tareas con este subestado.')
     expect(textosDe('Tareas')).toEqual(['Preparar demo', 'Llamar a cliente'])
-    expect(dialogo().querySelector('ul[aria-label="Subtareas"]')).toBeNull()
+    expect(dialogo().querySelector('[data-tabla="Subtareas"]')).toBeNull()
     envoltorio.unmount()
   })
 
@@ -172,9 +172,9 @@ describe('ModalTareasRelacionadas', () => {
       await flushPromises()
       expect(dialogo().querySelector('h2')?.textContent).toContain(titulo)
       expect(dialogo().textContent).toContain(descripcion)
-      expect(dialogo().querySelector('h3')?.textContent).toBe(`Tareas (${tareas.length})`)
+      expect(dialogo().querySelector('h3')?.textContent?.trim()).toBe(`Tareas (${tareas.length})`)
       expect(textosDe('Tareas')).toEqual(tareas)
-      expect(dialogo().querySelector('ul[aria-label="Subtareas"]')).toBeNull()
+      expect(dialogo().querySelector('[data-tabla="Subtareas"]')).toBeNull()
       envoltorio.unmount()
     },
   )
@@ -211,7 +211,7 @@ describe('ModalTareasRelacionadas', () => {
   it('avisa si no hay tareas hibernadas', async () => {
     const envoltorio = montar({ tipo: 'hibernada', nombre: 'Hibernada' }, [TAREAS[1]!])
     await flushPromises()
-    expect(dialogo().querySelector('h3')?.textContent).toBe('Tareas (0)')
+    expect(dialogo().querySelector('h3')?.textContent?.trim()).toBe('Tareas (0)')
     expect(dialogo().textContent).toContain('No hay tareas hibernadas.')
     envoltorio.unmount()
   })

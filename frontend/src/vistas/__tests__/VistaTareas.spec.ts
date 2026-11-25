@@ -3306,7 +3306,7 @@ describe('VistaTareas', () => {
         const modal = [...document.body.querySelectorAll('[role="dialog"]')].find(
           (d) => d.querySelector('h2')?.textContent?.trim() === 'Persona: Ana',
         )
-        expect(modal?.querySelector('ul[aria-label="Tareas"]')?.textContent).toContain(
+        expect(modal?.querySelector('[data-tabla="Tareas"]')?.textContent).toContain(
           'Escribir informe',
         )
         expect(
@@ -4646,7 +4646,7 @@ describe('VistaTareas', () => {
     }
 
     function textosLista(dialogo: HTMLElement, lista: string): string[] {
-      return [...dialogo.querySelectorAll(`ul[aria-label="${lista}"] li button`)].map(
+      return [...dialogo.querySelectorAll(`[data-tabla="${lista}"] tbody button`)].map(
         (b) => b.getAttribute('aria-label') ?? '',
       )
     }
@@ -4661,7 +4661,7 @@ describe('VistaTareas', () => {
 
       const modal = dialogoTitulado('Etiqueta: Urgente')
       expect(textosLista(modal, 'Tareas')).toEqual(['Abrir la tarea Escribir informe'])
-      expect(modal.querySelector('ul[aria-label="Subtareas"]')).toBeNull()
+      expect(modal.querySelector('[data-tabla="Subtareas"]')).toBeNull()
     })
 
     it('pulsar una persona de la tabla lista sus tareas y las subtareas que tiene asignadas', async () => {

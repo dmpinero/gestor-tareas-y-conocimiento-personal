@@ -355,7 +355,7 @@ describe('VistaTareas: pulsar un subestado abre sus tareas, como las etiquetas',
       (d) => d.querySelector('h2')?.textContent?.trim() === 'Subestado: Bloqueado',
     )
     if (!dialogo) throw new Error('No se abrió el modal del subestado')
-    return [...dialogo.querySelectorAll('ul[aria-label="Tareas"] li')].map(
+    return [...dialogo.querySelectorAll('[data-tabla="Tareas"] tbody button')].map(
       (li) => li.textContent?.trim() ?? '',
     )
   }

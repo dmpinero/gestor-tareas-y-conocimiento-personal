@@ -146,7 +146,7 @@ function dialogoTitulado(titulo: string): HTMLElement {
 }
 
 function tareasDe(dialogo: HTMLElement): string[] {
-  return [...dialogo.querySelectorAll('ul[aria-label="Tareas"] li button')].map(
+  return [...dialogo.querySelectorAll('[data-tabla="Tareas"] tbody button')].map(
     (b) => b.textContent?.trim() ?? '',
   )
 }
@@ -202,7 +202,7 @@ describe('VistaTareas: píldoras pulsables', () => {
       await pulsar(filaDe('Preparar demo'), boton)
 
       const modal = dialogoTitulado(titulo)
-      expect(modal.querySelector('h3')?.textContent).toBe(`Tareas (${tareas.length})`)
+      expect(modal.querySelector('h3')?.textContent?.trim()).toBe(`Tareas (${tareas.length})`)
       expect(tareasDe(modal)).toEqual(tareas)
       expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1)
     },
@@ -247,7 +247,7 @@ describe('VistaTareas: píldoras pulsables', () => {
     const modal = dialogoTitulado('Prioridad: 2')
     expect(tareasDe(modal)).toEqual(['Preparar demo', 'Revisar contrato'])
     expect(
-      [...modal.querySelectorAll('ul[aria-label="Subtareas"] li button')].map((b) =>
+      [...modal.querySelectorAll('[data-tabla="Subtareas"] tbody button')].map((b) =>
         b.getAttribute('aria-label'),
       ),
     ).toEqual(['Abrir la tarea Revisar contrato (subtarea Leer anexo)'])
