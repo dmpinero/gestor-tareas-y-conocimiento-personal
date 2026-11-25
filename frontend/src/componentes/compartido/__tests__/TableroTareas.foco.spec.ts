@@ -66,12 +66,16 @@ const TAREAS = [PROPIA, CON_SUBTAREA, AJENA]
 let envoltorio: VueWrapper | null = null
 const personas = ref<string[]>([])
 
-async function montar(personasResaltadas: string[], foco: Foco | null = null): Promise<VueWrapper> {
+async function montar(
+  personasResaltadas: string[],
+  foco: Foco | null = null,
+  tareas: Tarea[] = TAREAS,
+): Promise<VueWrapper> {
   const pinia = createPinia()
   setActivePinia(pinia)
   useTiendaFoco().foco = foco
   const tienda = useTiendaTareas()
-  tienda.tareas = JSON.parse(JSON.stringify(TAREAS)) as Tarea[]
+  tienda.tareas = JSON.parse(JSON.stringify(tareas)) as Tarea[]
   personas.value = personasResaltadas
   const router = createRouter({
     history: createMemoryHistory(),
@@ -248,5 +252,45 @@ describe('TableroTareas: tarea en foco', () => {
     expect(document.body.querySelector('[data-subtarea]')!.getAttribute('data-en-foco')).toBe(
       'true',
     )
+  })
+
+  describe('agrupado por subestado', () => {
+    const CON_SUBESTADOS: Tarea[] = [
+      { ...PROPIA, subestado: 'Bloqueado' },
+      { ...CON_SUBTAREA, subestado: 'Bloqueado' },
+      { ...AJENA, subestado: 'Esperando' },
+    ]
+
+    function bloques(): string[] {
+      return [...document.body.querySelectorAll('[data-bloque-subestado]')].map(
+        (b) => b.getAttribute('data-bloque-subestado') ?? '',
+      )
+    }
+
+    it('el bloque con la tarjeta en foco va el primero de la columna', async () => {
+      localStorage.setItem('gestor-tareas:agrupar-subestado-tablero', 'true')
+      await montar([], foco(3), CON_SUBESTADOS)
+
+      expect(nombresTarjetas()).toEqual(['Ajena', 'Propia de José', 'Con subtarea de José'])
+      expect(bloques()[0]).toContain('Esperando')
+    })
+
+    it('con el foco en una subtarea, también sube el bloque de su tarjeta', async () => {
+      localStorage.setItem('gestor-tareas:agrupar-subestado-tablero', 'true')
+      await montar([], foco(2, 21), [
+        { ...PROPIA, subestado: 'Esperando' },
+        { ...CON_SUBTAREA, subestado: 'Zeta' },
+        { ...AJENA, subestado: 'Bloqueado' },
+      ])
+
+      expect(nombresTarjetas()[0]).toBe('Con subtarea de José')
+    })
+
+    it('sin foco los bloques siguen en orden alfabético', async () => {
+      localStorage.setItem('gestor-tareas:agrupar-subestado-tablero', 'true')
+      await montar([], null, CON_SUBESTADOS)
+
+      expect(nombresTarjetas()).toEqual(['Propia de José', 'Con subtarea de José', 'Ajena'])
+    })
   })
 })

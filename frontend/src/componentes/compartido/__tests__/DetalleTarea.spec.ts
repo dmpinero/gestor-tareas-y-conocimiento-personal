@@ -375,8 +375,8 @@ describe('DetalleTarea', () => {
   it('en la cabecera, junto al vencimiento, muestra la cuenta atrás, que avanza cada segundo', async () => {
     await montar(TAREA_OPORTUNIDAD)
 
-    // Una sola cuenta atrás: la de la cabecera.
-    expect(modal().querySelectorAll('[data-testid="contador-vencimiento"]')).toHaveLength(1)
+    // Dos cuentas atrás: la de la cabecera y la del campo "Fecha de vencimiento".
+    expect(modal().querySelectorAll('[data-testid="contador-vencimiento"]')).toHaveLength(2)
     const contador = pildora('pildora-vencimiento')!.querySelector(
       '[data-testid="contador-vencimiento"]',
     )
@@ -905,6 +905,58 @@ describe('DetalleTarea', () => {
       const cabecera = modal().querySelector('[data-testid="cabecera-detalle"]')!
       expect(cabecera.getAttribute('data-en-foco')).toBeNull()
       expect(cabecera.querySelector('[data-insignia-foco]')).toBeNull()
+    })
+  })
+
+  describe('cuenta atrás bajo la fecha de vencimiento', () => {
+    function contadorDelCampo(): Element | null {
+      const fila = [...modal().querySelectorAll('[data-testid="campos-tarea"] dl > div')].find(
+        (f) => f.querySelector('dt')?.textContent?.trim() === 'Fecha de vencimiento',
+      )
+      if (!fila) throw new Error('No hay campo "Fecha de vencimiento"')
+      return fila.querySelector('dd [data-testid="contador-vencimiento"]')
+    }
+
+    function textoDe(contador: Element | null): string | null | undefined {
+      return contador?.querySelector('[data-testid="contador-texto"]')?.textContent
+    }
+
+    it('muestra "Vence en …" debajo de la fecha y avanza cada segundo', async () => {
+      await montar(TAREA_OPORTUNIDAD)
+
+      const contador = contadorDelCampo()
+      expect(contador?.getAttribute('data-congelado')).toBeNull()
+      expect(textoDe(contador)).toBe('Vence en 2 d 03 h 15 min 20 s')
+      vi.advanceTimersByTime(1000)
+      await flushPromises()
+      expect(textoDe(contadorDelCampo())).toBe('Vence en 2 d 03 h 15 min 19 s')
+    })
+
+    it('en una tarea hibernada el contador queda detenido en el instante de la hibernación', async () => {
+      const desde = new Date(2026, 10, 18, 10, 0, 0).toISOString().replace(/\.\d{3}Z$/, 'Z')
+      await montar({ ...TAREA_OPORTUNIDAD, hibernada_desde: desde })
+
+      const contador = contadorDelCampo()
+      expect(contador?.getAttribute('data-congelado')).toBe('true')
+      expect(textoDe(contador)).toBe('Vence en 2 d 08 h 00 min 00 s')
+      vi.advanceTimersByTime(2000)
+      await flushPromises()
+      expect(textoDe(contadorDelCampo())).toBe('Vence en 2 d 08 h 00 min 00 s')
+    })
+
+    it('en una tarea completada el contador queda detenido como en la tarjeta', async () => {
+      const congelada = new Date(2026, 10, 18, 12, 0, 0).toISOString().replace(/\.\d{3}Z$/, 'Z')
+      await montar({ ...TAREA_OPORTUNIDAD, completada: true, congelada_en: congelada })
+
+      const contador = contadorDelCampo()
+      expect(contador?.getAttribute('data-congelado')).toBe('true')
+      expect(textoDe(contador)).toBe('Vence en 2 d 06 h 00 min 00 s')
+    })
+
+    it('sin fecha de vencimiento no hay contador', async () => {
+      await montar(TAREA_SIN_TIPO)
+
+      expect(contadorDelCampo()).toBeNull()
     })
   })
 

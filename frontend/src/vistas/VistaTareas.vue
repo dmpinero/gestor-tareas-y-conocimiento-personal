@@ -24,6 +24,7 @@ import {
 } from '@/api/tipos'
 import {
   CLAVE_SIN_SUBESTADO,
+  adelantarGrupoDe,
   agruparPorSubestado,
   type GrupoSubestado,
 } from '@/lib/agruparPorSubestado'
@@ -738,10 +739,22 @@ function alternarGrupo(id: IdGrupoTabla): void {
     : GRUPOS_TABLA.map((grupo) => grupo.id).filter((g) => g === id || estaPlegado(g))
 }
 
+// La fila en foco (la tarea o la de su subtarea en foco) va la primera de su
+// grupo con cualquier orden, como su tarjeta en el tablero; las demás siguen el
+// orden elegido. La exportación conserva el orden de la columna.
+const filasConFocoPrimero = computed(() => {
+  const filas = filasOrdenadas.value
+  const indice = filas.findIndex((tarea) => tiendaFoco.tareaContieneFoco(tarea.id))
+  if (indice <= 0) return filas
+  return [filas[indice]!, ...filas.slice(0, indice), ...filas.slice(indice + 1)]
+})
+
 const gruposConFilas = computed(() =>
   GRUPOS_TABLA.map((grupo) => ({
     ...grupo,
-    filas: filasOrdenadas.value.filter((tarea) => Boolean(tarea.completada) === grupo.completada),
+    filas: filasConFocoPrimero.value.filter(
+      (tarea) => Boolean(tarea.completada) === grupo.completada,
+    ),
   })),
 )
 
@@ -805,7 +818,11 @@ const seccionesPorGrupo = computed<
 >(() => {
   const secciones = {} as Record<IdGrupoTabla, (GrupoSubestado<Tarea> & { idCuerpo: string })[]>
   for (const grupo of gruposConFilas.value) {
-    secciones[grupo.id] = agruparPorSubestado(grupo.filas).map((seccion, indice) => ({
+    // La sección con la fila en foco va la primera, como la fila en su sección.
+    const ordenadas = adelantarGrupoDe(agruparPorSubestado(grupo.filas), (tarea) =>
+      tiendaFoco.tareaContieneFoco(tarea.id),
+    )
+    secciones[grupo.id] = ordenadas.map((seccion, indice) => ({
       ...seccion,
       idCuerpo: `seccion-${grupo.id}-${indice}`,
     }))

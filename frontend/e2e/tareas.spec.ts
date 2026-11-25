@@ -421,10 +421,11 @@ test('muestra una cuenta atrás hasta el vencimiento que avanza sola, y "Vencida
   await expect(en5).toHaveClass(/text-destructive/)
   await page.screenshot({ path: 'e2e/capturas/tareas-08-cuenta-atras.png' })
 
-  // En el detalle también aparece la cuenta atrás.
+  // En el detalle también aparece la cuenta atrás: en la cabecera y debajo del
+  // campo "Fecha de vencimiento".
   await accionDeFila(page, tareas[0].nombre, 'Ver detalle de la tarea')
   const detalle = page.getByRole('dialog', { name: tareas[0].nombre })
-  await expect(detalle.getByRole('timer')).toHaveText(/^Vence en /)
+  await expect(detalle.getByRole('timer')).toHaveText([/^Vence en /, /^Vence en /])
   await page.keyboard.press('Escape')
   await expect(detalle).toBeHidden()
   // Se audita cuando han terminado todas las animaciones (el fondo de la modal

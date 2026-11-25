@@ -44,3 +44,17 @@ export function agruparPorSubestado<T extends { subestado: string | null }>(
     return compararTexto(a.subestado, b.subestado)
   })
 }
+
+/**
+ * Pone primero el grupo que contiene una tarea que cumple `contiene` (la tarea
+ * en foco), para que quede arriba aunque su subestado no sea el primero por
+ * nombre. Los demás grupos conservan su orden; sin ninguna, no cambia nada.
+ */
+export function adelantarGrupoDe<T>(
+  grupos: GrupoSubestado<T>[],
+  contiene: (tarea: T) => boolean,
+): GrupoSubestado<T>[] {
+  const indice = grupos.findIndex((grupo) => grupo.tareas.some(contiene))
+  if (indice <= 0) return grupos
+  return [grupos[indice]!, ...grupos.slice(0, indice), ...grupos.slice(indice + 1)]
+}
