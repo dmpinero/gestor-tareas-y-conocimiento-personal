@@ -24,6 +24,7 @@ import {
 } from '@/api/tipos'
 import {
   CLAVE_SIN_SUBESTADO,
+  adelantarGrupoDe,
   agruparPorSubestado,
   type GrupoSubestado,
 } from '@/lib/agruparPorSubestado'
@@ -817,7 +818,11 @@ const seccionesPorGrupo = computed<
 >(() => {
   const secciones = {} as Record<IdGrupoTabla, (GrupoSubestado<Tarea> & { idCuerpo: string })[]>
   for (const grupo of gruposConFilas.value) {
-    secciones[grupo.id] = agruparPorSubestado(grupo.filas).map((seccion, indice) => ({
+    // La sección con la fila en foco va la primera, como la fila en su sección.
+    const ordenadas = adelantarGrupoDe(agruparPorSubestado(grupo.filas), (tarea) =>
+      tiendaFoco.tareaContieneFoco(tarea.id),
+    )
+    secciones[grupo.id] = ordenadas.map((seccion, indice) => ({
       ...seccion,
       idCuerpo: `seccion-${grupo.id}-${indice}`,
     }))

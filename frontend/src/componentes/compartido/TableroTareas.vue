@@ -42,7 +42,7 @@ import {
   colorEtiqueta,
   type ColorEstadoTablero,
 } from '@/lib/coloresTarea'
-import { agruparPorSubestado } from '@/lib/agruparPorSubestado'
+import { adelantarGrupoDe, agruparPorSubestado } from '@/lib/agruparPorSubestado'
 import { isoAFechaLocal } from '@/lib/fechas'
 import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
 import { MAX_NOMBRE_SUBTAREA, validarNombreSubtarea } from '@/lib/subtareas'
@@ -299,7 +299,11 @@ interface BloqueColumna {
 // Sin agrupar, la columna es un único bloque con todas sus tarjetas.
 function bloquesDe(estado: EstadoGrupo): BloqueColumna[] {
   const tareas = tareasEn(estado)
-  return agrupar.value ? agruparPorSubestado(tareas) : [{ clave: '', subestado: null, tareas }]
+  if (!agrupar.value) return [{ clave: '', subestado: null, tareas }]
+  // El bloque con la tarjeta en foco va el primero, como la tarjeta en su bloque.
+  return adelantarGrupoDe(agruparPorSubestado(tareas), (tarea) =>
+    tiendaFoco.tareaContieneFoco(tarea.id),
+  )
 }
 
 function clavePlegado(estado: EstadoGrupo, bloque: BloqueColumna): string {

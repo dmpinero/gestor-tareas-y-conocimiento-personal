@@ -238,6 +238,18 @@ describe('VistaTareas: tarea en foco', () => {
       expect(nombres()).toEqual(['Vence en medio', 'Vence antes', 'Vence después', 'Hecha'])
     })
 
+    it('agrupado por subestado, la sección con la tarea en foco va la primera', async () => {
+      localStorage.setItem('gestor-tareas:agrupar-subestado-tareas', 'true')
+      await montar('/tareas', foco(3), [
+        { ...CON_VENCIMIENTO[0]!, subestado: 'Bloqueado' },
+        { ...CON_VENCIMIENTO[1]!, subestado: 'Bloqueado' },
+        { ...CON_VENCIMIENTO[2]!, subestado: 'Esperando' },
+        CON_VENCIMIENTO[3]!,
+      ])
+
+      expect(nombres()).toEqual(['Vence después', 'Vence antes', 'Vence en medio', 'Hecha'])
+    })
+
     it('sin foco el orden es el de siempre', async () => {
       await montar('/tareas', null, CON_VENCIMIENTO)
 
