@@ -179,4 +179,50 @@ describe('VistaTareas: tareas hibernadas', () => {
       fila.querySelector('[data-testid="contador-vencimiento"]')?.getAttribute('data-congelado'),
     ).toBe('true')
   })
+
+  it('el menú "⋯" de la fila ofrece "Hibernar", que abre el diálogo e hiberna la tarea', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValueOnce(
+      tarea(1, 'Normal', { hibernada_desde: instanteUtc(new Date(2026, 10, 20, 17, 0, 0)) }),
+    )
+    await montar()
+
+    filaDe('Normal')
+      .querySelector<HTMLButtonElement>('button[aria-label="Acciones de la tarea Normal"]')!
+      .click()
+    await flushPromises()
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="Hibernar la tarea Normal"]')!
+      .click()
+    await flushPromises()
+    const dialogo = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!
+    expect(dialogo.textContent).toContain('Hibernar la tarea Normal')
+    ;[...dialogo.querySelectorAll<HTMLButtonElement>('button')]
+      .find((b) => b.textContent?.trim() === 'Hibernar')!
+      .click()
+    await flushPromises()
+
+    expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/hibernar', { comentario: null })
+    expect(filaDe('Normal').querySelector('[data-insignia-hibernada]')).not.toBeNull()
+  })
+
+  it('en una tarea hibernada el menú "⋯" ofrece "Reanudar", que la reanuda sin diálogo', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValueOnce(tarea(2, 'Hibernada'))
+    await montar()
+
+    filaDe('Hibernada')
+      .querySelector<HTMLButtonElement>('button[aria-label="Acciones de la tarea Hibernada"]')!
+      .click()
+    await flushPromises()
+    expect(
+      document.body.querySelector('button[aria-label="Hibernar la tarea Hibernada"]'),
+    ).toBeNull()
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="Reanudar la tarea Hibernada"]')!
+      .click()
+    await flushPromises()
+
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/2/reanudar', null)
+    expect(filaDe('Hibernada').querySelector('[data-insignia-hibernada]')).toBeNull()
+  })
 })

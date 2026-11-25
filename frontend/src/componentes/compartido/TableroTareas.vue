@@ -18,6 +18,7 @@ import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BarraEstados from '@/componentes/compartido/BarraEstados.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
+import BotonHibernar from '@/componentes/compartido/BotonHibernar.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import InsigniaHibernada from '@/componentes/compartido/InsigniaHibernada.vue'
@@ -1093,6 +1094,7 @@ function terminarArrastre(): void {
                           <ListTree aria-hidden="true" />
                         </Button>
                         <BotonFoco :tarea-id="tarea.id" :nombre="tarea.nombre" compacto />
+                        <BotonHibernar :tarea="tarea" compacto />
 
                         <Popover
                           :open="idMenuAbierto === tarea.id"
