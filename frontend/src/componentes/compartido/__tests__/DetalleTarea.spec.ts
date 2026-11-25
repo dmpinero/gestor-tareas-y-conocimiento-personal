@@ -1057,6 +1057,20 @@ describe('DetalleTarea', () => {
       expect(dialogoHibernar()).toBeNull()
     })
 
+    it('un comentario solo con espacios hiberna con `comentario: null`', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValueOnce(HIBERNADA)
+      const envoltorio = await montar(TAREA_OPORTUNIDAD)
+
+      botonPie('Hibernar')!.click()
+      await flushPromises()
+      await escribirComentarioHibernacion(envoltorio, '<p>   </p>')
+      botonEn(dialogoHibernar()!, 'Hibernar').click()
+      await flushPromises()
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/hibernar', { comentario: null })
+      expect(dialogoHibernar()).toBeNull()
+    })
+
     it('"Cancelar" cierra el diálogo sin hibernar', async () => {
       await montar(TAREA_OPORTUNIDAD)
 

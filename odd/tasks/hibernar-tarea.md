@@ -25,11 +25,13 @@ Branch: `feat/hibernar-tarea` · Delivery: `single-pr` (one PR per user request,
 
 ## Tasks
 
-- [ ] T1 (S1–S5) Backend: migration adding `tarea.hibernada_desde`, domain and use cases `HibernarTarea`/`ReanudarTarea`, endpoints, schema field, tests. Risk: item 1 (migration on an existing table). Route: delegated, writer A, in parallel with T2 (trigger: two independent units with disjoint surfaces, contract fixed in S5).
-- [ ] T2 (S1–S3) Frontend: api, store actions, "Hibernar" (dialog with optional comment) / "Reanudar" buttons, frozen countdown, "Hibernada" badge, comment list refresh; unit tests and e2e. Route: delegated, writer B.
-- [ ] T3 README, independent verifier (item 1), full e2e, preview.
+- [x] T1 (S1–S5) Backend: migration adding `tarea.hibernada_desde`, domain and use cases `HibernarTarea`/`ReanudarTarea`, endpoints, schema field, tests. Risk: item 1 (migration on an existing table). Route: delegated, writer A, in parallel with T2 (trigger: two independent units with disjoint surfaces, contract fixed in S5). Commit `20b0d33` (rev `b7d3e5f9a1c4`; 1619 backend tests green).
+- [x] T2 (S1–S3) Frontend: api, store actions, "Hibernar" (dialog with optional comment) / "Reanudar" buttons, frozen countdown, "Hibernada" badge, comment list refresh; unit tests and e2e. Route: delegated, writer B. Commit `fa489bc` (1094 vitest green, vue-tsc/eslint/prettier clean).
+- [x] T3 README, independent verifier (item 1), full e2e, preview.
 
 ## Log
 
 - **L1** (2026-11-25) Original request: "quiero tener la posiblidad de hibernar una tarea, por lo que debe dejar de contar el reloj. Al hibernar, se podrá poner un comentario que aparecerá como un comentario normal de la lista de comentarios que se tiene en la parte derecha del detalle. Se podrá hibernar/reanudar cuantas veces se quiera"
 - **L2** Question asked: on resume, what happens to the due date? User answer: "Se corre lo hibernado (Recomendado)" — the due date moves forward by the hibernated time.
+- **L3** Writer deviations accepted: an empty or whitespace-only comment is sent as `null` by the frontend; the backend rejects empty visible text with 422 (existing comment rules). Hibernate/Reanudar live in the detail footer only, not in the board or the list menu.
+- **L4** Integration: e2e on the isolated stack 84/84. Independent verifier on `20b0d33`/`fa489bc`: no blockers, S1–S6 met; migration upgrade/downgrade keeps the checksums of every existing table; the differential check against `f663b23` shows only the additive `hibernada_desde` and the two new endpoints. Advisory applied: a vitest pins that a whitespace-only comment is sent as `null`. Advisory noted: a hibernation spanning a DST change keeps the elapsed time, so the wall-clock due time moves by one hour (due dates are stored as local time). Preview at http://localhost:4960 with a copy of the real data.
