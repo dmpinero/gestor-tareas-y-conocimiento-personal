@@ -344,7 +344,8 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   `● Trabajando en: Tarea › Subtarea · 1 h 20 min` (al pulsarla se abre la
   tarea; ✕ deja de trabajar en ella), y la tarea o subtarea en foco se resalta
   en violeta con la etiqueta "En foco" y sube al principio de su columna del
-  tablero. Se guarda en el servidor (tabla `foco_trabajo`, de una sola fila);
+  tablero y de su grupo del listado, con cualquier orden (aunque venza más
+  tarde). Se guarda en el servidor (tabla `foco_trabajo`, de una sola fila);
   completar la tarea no quita el foco y borrarla sí. API: `GET`/`PUT`/`DELETE
   /api/v1/foco`.
 - Historial de foco: cada periodo de foco (inicio, fin y duración) queda

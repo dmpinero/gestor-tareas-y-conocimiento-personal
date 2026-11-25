@@ -61,9 +61,13 @@ function foco(tareaId: number, subtareaId: number | null = null): Foco {
 let contenedor: VueWrapper | null = null
 let enrutador: Router
 
-async function montar(ruta = '/tareas', focoInicial: Foco | null = null): Promise<VueWrapper> {
+async function montar(
+  ruta = '/tareas',
+  focoInicial: Foco | null = null,
+  tareas: unknown[] = TAREAS,
+): Promise<VueWrapper> {
   vi.mocked(clienteApi.obtener).mockImplementation((r) => {
-    if (r === '/tareas') return Promise.resolve(structuredClone(TAREAS))
+    if (r === '/tareas') return Promise.resolve(structuredClone(tareas))
     return Promise.resolve([])
   })
   const pinia = createPinia()
@@ -192,5 +196,55 @@ describe('VistaTareas: tarea en foco', () => {
     await flushPromises()
 
     expect(envoltorio.text()).toContain('Tarea no encontrada')
+  })
+
+  describe('la fila en foco va la primera de su grupo', () => {
+    const CON_VENCIMIENTO = [
+      { ...tarea(1, 'Vence antes'), fecha_vencimiento: '2026-11-21T10:00:00' },
+      { ...tarea(2, 'Vence en medio'), fecha_vencimiento: '2026-11-25T10:00:00' },
+      { ...tarea(3, 'Vence después'), fecha_vencimiento: '2026-11-30T10:00:00' },
+      { ...tarea(4, 'Hecha'), completada: true },
+    ]
+
+    function nombres(): string[] {
+      return [...document.body.querySelectorAll('[data-fila-tarea] [data-nombre-tarea]')].map(
+        (n) => n.textContent?.trim() ?? '',
+      )
+    }
+
+    async function ordenarPor(columna: string): Promise<void> {
+      contenedor!
+        .findAll('th button')
+        .find((b) => b.text() === columna)!
+        .element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await flushPromises()
+    }
+
+    it('aunque venza después, la tarea en foco sale arriba en cualquier orden', async () => {
+      await montar('/tareas', foco(3), CON_VENCIMIENTO)
+
+      expect(nombres()).toEqual(['Vence después', 'Vence antes', 'Vence en medio', 'Hecha'])
+      await ordenarPor('Fecha de vencimiento')
+      expect(nombres()).toEqual(['Vence después', 'Vence antes', 'Vence en medio', 'Hecha'])
+      await ordenarPor('Fecha de vencimiento')
+      expect(nombres()).toEqual(['Vence después', 'Vence en medio', 'Vence antes', 'Hecha'])
+      await ordenarPor('Nombre')
+      expect(nombres()).toEqual(['Vence después', 'Vence antes', 'Vence en medio', 'Hecha'])
+    })
+
+    it('con el foco en una subtarea, su tarea sale arriba', async () => {
+      await montar('/tareas', foco(2, 20), CON_VENCIMIENTO)
+
+      expect(nombres()).toEqual(['Vence en medio', 'Vence antes', 'Vence después', 'Hecha'])
+    })
+
+    it('sin foco el orden es el de siempre', async () => {
+      await montar('/tareas', null, CON_VENCIMIENTO)
+
+      expect(nombres()).toEqual(['Vence antes', 'Vence en medio', 'Vence después', 'Hecha'])
+      await ordenarPor('Fecha de vencimiento')
+      await ordenarPor('Fecha de vencimiento')
+      expect(nombres()).toEqual(['Vence después', 'Vence en medio', 'Vence antes', 'Hecha'])
+    })
   })
 })
