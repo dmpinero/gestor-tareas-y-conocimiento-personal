@@ -1069,7 +1069,7 @@ function terminarArrastre(): void {
                         </li>
                       </ul>
 
-                      <div class="-mx-1 -mb-1 flex items-center gap-1">
+                      <div class="-mx-1 -mb-1 flex flex-wrap items-center gap-1">
                         <Button
                           type="button"
                           variant="ghost"

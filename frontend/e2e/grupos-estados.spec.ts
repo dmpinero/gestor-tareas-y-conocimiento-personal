@@ -303,6 +303,15 @@ test('el tablero muestra 1 o 2 tarjetas por fila en cada estado según se elija'
   ;[primera, segunda] = await posiciones()
   expect(Math.abs(segunda!.y - primera!.y)).toBeLessThanOrEqual(1) // lado a lado
   expect(segunda!.x).toBeGreaterThan(primera!.x)
+  // Todos los botones de la tarjeta (también "Mover a…") quedan dentro de ella.
+  for (const i of [0, 1]) {
+    const caja = (await tarjetas.nth(i).boundingBox())!
+    for (const boton of await tarjetas.nth(i).getByRole('button').all()) {
+      const b = (await boton.boundingBox())!
+      expect(b.x).toBeGreaterThanOrEqual(caja.x)
+      expect(b.x + b.width).toBeLessThanOrEqual(caja.x + caja.width + 0.5)
+    }
+  }
   await page.screenshot({ path: 'e2e/capturas/grupos-07-tablero-2-por-fila.png' })
   const resultado = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
