@@ -255,6 +255,7 @@ def test_un_alta_sin_el_campo_se_comporta_como_antes(cliente: TestClient) -> Non
         "estado": None,
         "workflow": None,
         "congelada_en": None,
+        "hibernada_desde": None,
     }
 
 

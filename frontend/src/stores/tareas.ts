@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { clienteApi } from '@/api/cliente'
 import type {
   DatosEdicionSubtarea,
+  DatosHibernacion,
   DatosSubtarea,
   DatosTarea,
   ElementoCatalogo,
@@ -98,6 +99,34 @@ export const useTiendaTareas = defineStore('tareas', () => {
   function reemplazarTarea(tarea: Tarea): void {
     const indice = tareas.value.findIndex((t) => t.id === tarea.id)
     if (indice !== -1) tareas.value[indice] = tarea
+  }
+
+  // Hiberna la tarea (para su reloj) con un comentario opcional, que la API
+  // guarda como un comentario más de la tarea. Reanudar la despierta y la API
+  // corre su vencimiento lo que estuvo hibernada. Se reemplaza la tarea con la
+  // respuesta; si falla, guardan el mensaje en `error`, la lista se queda como
+  // estaba y devuelven `false`.
+  async function hibernar(id: number, comentario: string | null): Promise<boolean> {
+    error.value = null
+    try {
+      const cuerpo: DatosHibernacion = { comentario }
+      reemplazarTarea(await clienteApi.crear<Tarea>(`/tareas/${id}/hibernar`, cuerpo))
+      return true
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+  }
+
+  async function reanudar(id: number): Promise<boolean> {
+    error.value = null
+    try {
+      reemplazarTarea(await clienteApi.crear<Tarea>(`/tareas/${id}/reanudar`, null))
+      return true
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
   }
 
   // Mueve la tarea a otro estado de su grupo (desde el tablero). Se reemplaza
@@ -243,6 +272,8 @@ export const useTiendaTareas = defineStore('tareas', () => {
     crear,
     actualizar,
     alternarCompletada,
+    hibernar,
+    reanudar,
     cambiarEstadoTarea,
     cambiarSubestadoTarea,
     eliminarTarea,

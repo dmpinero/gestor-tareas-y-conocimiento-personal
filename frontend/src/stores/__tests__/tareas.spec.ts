@@ -351,6 +351,83 @@ describe('useTiendaTareas', () => {
     })
   })
 
+  describe('hibernar y reanudar', () => {
+    const hibernada = { ...tareaEjemplo, hibernada_desde: '2026-11-25T08:00:00Z' }
+
+    it('hibernar envía el comentario a POST /tareas/{id}/hibernar y reemplaza la tarea', async () => {
+      const otra = { ...tareaEjemplo, id: 2, nombre: 'Otra' }
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo, otra])
+      vi.mocked(clienteApi.crear).mockResolvedValue(hibernada)
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      const resultado = await tienda.hibernar(1, '<p>Esperando al cliente</p>')
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/hibernar', {
+        comentario: '<p>Esperando al cliente</p>',
+      })
+      expect(resultado).toBe(true)
+      expect(tienda.tareas).toEqual([hibernada, otra])
+      expect(tienda.error).toBeNull()
+    })
+
+    it('hibernar sin comentario envía `comentario: null`', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo])
+      vi.mocked(clienteApi.crear).mockResolvedValue(hibernada)
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      await tienda.hibernar(1, null)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/hibernar', { comentario: null })
+    })
+
+    it('si hibernar falla guarda el mensaje, devuelve false y no altera la lista', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([tareaEjemplo])
+      vi.mocked(clienteApi.crear).mockRejectedValue(new Error('La tarea ya está hibernada'))
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      const resultado = await tienda.hibernar(1, null)
+
+      expect(resultado).toBe(false)
+      expect(tienda.error).toBe('La tarea ya está hibernada')
+      expect(tienda.tareas).toEqual([tareaEjemplo])
+    })
+
+    it('reanudar llama a POST /tareas/{id}/reanudar y reemplaza la tarea con la fecha corrida', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([hibernada])
+      const reanudada = {
+        ...tareaEjemplo,
+        fecha_vencimiento: '2026-11-30T10:00:00',
+        hibernada_desde: null,
+      }
+      vi.mocked(clienteApi.crear).mockResolvedValue(reanudada)
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      const resultado = await tienda.reanudar(1)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/tareas/1/reanudar', null)
+      expect(resultado).toBe(true)
+      expect(tienda.tareas).toEqual([reanudada])
+      expect(tienda.error).toBeNull()
+    })
+
+    it('si reanudar falla guarda el mensaje, devuelve false y no altera la lista', async () => {
+      vi.mocked(clienteApi.obtener).mockResolvedValue([hibernada])
+      vi.mocked(clienteApi.crear).mockRejectedValue(new Error('La tarea no está hibernada'))
+
+      const tienda = useTiendaTareas()
+      await tienda.cargar()
+      const resultado = await tienda.reanudar(1)
+
+      expect(resultado).toBe(false)
+      expect(tienda.error).toBe('La tarea no está hibernada')
+      expect(tienda.tareas).toEqual([hibernada])
+    })
+  })
+
   it('ya no ofrece la acción de alternar pasos del workflow', () => {
     expect('alternarPasoTarea' in useTiendaTareas()).toBe(false)
   })

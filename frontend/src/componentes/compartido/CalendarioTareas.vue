@@ -7,6 +7,7 @@ import type { Tarea } from '@/api/tipos'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import { Button } from '@/componentes/ui/button'
 import { dosCifras } from '@/lib/fechas'
+import { instanteCongelado } from '@/lib/hibernacion'
 
 // Calendario mensual de las tareas: cada una va en el día de su vencimiento
 // (fecha local tal cual llega de la API, sin convertir de zona; la hora solo se
@@ -170,7 +171,7 @@ const plantillaTareasDia = createReusableTemplate<{ dia: Dia }>()
           class="mt-0.5"
           :vencimiento="tarea.fecha_vencimiento"
           :completada="tarea.completada"
-          :congelada-en="tarea.congelada_en"
+          :congelada-en="instanteCongelado(tarea)"
         />
       </li>
     </ul>

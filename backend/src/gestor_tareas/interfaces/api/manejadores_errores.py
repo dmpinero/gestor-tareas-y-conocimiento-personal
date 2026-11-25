@@ -16,6 +16,7 @@ from gestor_tareas.dominio.imagen.errores import (
     ImagenDemasiadoGrandeError,
     ImagenNoAdmitidaError,
 )
+from gestor_tareas.dominio.tarea.hibernacion import EstadoDeHibernacionInvalidoError
 
 _METODOS_HTTP = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 
@@ -90,6 +91,12 @@ def registrar_manejadores_de_errores(aplicacion: FastAPI) -> None:
 
     @aplicacion.exception_handler(EntidadConDependenciasError)
     async def _con_dependencias(_: Request, error: EntidadConDependenciasError) -> JSONResponse:
+        return _respuesta(status.HTTP_409_CONFLICT, error)
+
+    @aplicacion.exception_handler(EstadoDeHibernacionInvalidoError)
+    async def _estado_de_hibernacion(
+        _: Request, error: EstadoDeHibernacionInvalidoError
+    ) -> JSONResponse:
         return _respuesta(status.HTTP_409_CONFLICT, error)
 
     @aplicacion.exception_handler(FiltroDeListadoInvalidoError)

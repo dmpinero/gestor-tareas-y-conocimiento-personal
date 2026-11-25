@@ -435,6 +435,12 @@ class TareaModelo(Base):
     # el estado DONE), o NULL si no lo está. DATETIME sin zona horaria con el instante
     # en UTC (la columna no guarda la zona).
     congelada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    # Instante desde el que la tarea está hibernada (su contador de vencimiento no
+    # corre), o NULL si no lo está. DATETIME sin zona horaria con el instante en UTC.
+    # Independiente de `congelada_en`.
+    hibernada_desde: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True
+    )
     # Subestado opcional del catálogo. Borrar el subestado deja la tarea sin él (lo
     # hace la base de datos con ON DELETE SET NULL).
     subestado_id: Mapped[int | None] = mapped_column(

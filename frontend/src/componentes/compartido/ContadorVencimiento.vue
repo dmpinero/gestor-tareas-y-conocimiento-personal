@@ -11,14 +11,25 @@ import { useAhora } from '@/composables/useAhora'
 // Con `congeladaEn` (instante en UTC de la API, "YYYY-MM-DDTHH:MM:SSZ") la tarea
 // está completada o en DONE: el contador queda parado en lo que faltaba (o hacía
 // que venció) en ese instante, sin color de urgencia y con un icono de pausa. Al
-// quitarlo vuelve a contar en vivo desde el vencimiento.
-const props = withDefaults(defineProps<{ vencimiento: string; congeladaEn?: string | null }>(), {
-  congeladaEn: null,
-})
+// quitarlo vuelve a contar en vivo desde el vencimiento. Con `hibernada` el
+// motivo de la parada que se explica es la hibernación (en ese caso
+// `congeladaEn` es el instante devuelto por `instanteCongelado`).
+const props = withDefaults(
+  defineProps<{ vencimiento: string; congeladaEn?: string | null; hibernada?: boolean }>(),
+  { congeladaEn: null, hibernada: false },
+)
 
 const { ahora } = useAhora()
 
 const congelado = computed(() => props.congeladaEn !== null)
+const motivoParada = computed(() =>
+  props.hibernada
+    ? 'Contador detenido: la tarea está hibernada'
+    : 'Contador detenido: la tarea está completada o en DONE',
+)
+const textoParada = computed(() =>
+  props.hibernada ? ' (contador detenido: hibernada)' : ' (contador detenido)',
+)
 
 const cuentaAtras = computed(() =>
   calcularCuentaAtras(
@@ -54,7 +65,7 @@ const color = computed(() =>
     :data-vencida="cuentaAtras.vencida"
     :data-nivel="cuentaAtras.nivel"
     :data-congelado="congelado || undefined"
-    :title="congelado ? 'Contador detenido: la tarea está completada o en DONE' : undefined"
+    :title="congelado ? motivoParada : undefined"
     class="tabular-nums"
     :class="[color, congelado && 'inline-flex items-center gap-1']"
     ><Pause
@@ -64,6 +75,6 @@ const color = computed(() =>
       class="size-3 shrink-0"
       :stroke-width="2.5"
     /><span data-testid="contador-texto">{{ cuentaAtras.texto }}</span
-    ><span v-if="congelado" class="sr-only">{{ ' (contador detenido)' }}</span></span
+    ><span v-if="congelado" class="sr-only">{{ textoParada }}</span></span
   >
 </template>

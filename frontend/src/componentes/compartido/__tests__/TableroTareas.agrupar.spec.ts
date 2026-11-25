@@ -62,6 +62,7 @@ function tarea(
     workflow: null,
     subestado,
     congelada_en: null,
+    hibernada_desde: null,
   }
 }
 

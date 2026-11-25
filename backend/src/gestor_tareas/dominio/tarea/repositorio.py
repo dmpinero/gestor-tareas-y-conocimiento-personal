@@ -61,7 +61,9 @@ class RepositorioTareas(Protocol):
         cambia ``cambiar_completada``. El grupo de estados y el estado sí se
         guardan: ``tarea.estado`` debe ser un estado de ``tarea.grupo_estados``.
         También el workflow (``tarea.workflow``), que debe existir, y
-        ``tarea.congelada_en`` tal cual (ver ``Tarea.ajustar_congelacion``).
+        ``tarea.congelada_en`` tal cual (ver ``Tarea.ajustar_congelacion``). La
+        hibernación no cambia (se ignora ``tarea.hibernada_desde``): solo la cambian
+        ``hibernar`` y ``reanudar``.
 
         Las subtareas que ya tiene no cambian (se ignora ``tarea.subtareas``),
         tampoco al cambiar el tipo de la tarea. ``subtareas_nuevas`` se añaden,
@@ -80,6 +82,26 @@ class RepositorioTareas(Protocol):
         Con él congela, conserva o descongela su contador de vencimiento
         (``Tarea.ajustar_congelacion``), siendo ``ahora`` el instante del cambio. El
         resto de datos de la tarea no cambia.
+        """
+        ...
+
+    def hibernar(self, id_tarea: int, ahora: datetime, comentario: str | None) -> Tarea | None:
+        """Hiberna la tarea desde ``ahora`` (``Tarea.hibernar``) y la devuelve, o
+        ``None`` si no existe.
+
+        Si hay ``comentario`` (HTML ya saneado), lo añade al histórico de la tarea con
+        el instante ``ahora``, en la misma transacción. Lanza
+        ``EstadoDeHibernacionInvalidoError`` si ya estaba hibernada, sin cambiar
+        nada. El resto de datos de la tarea no cambia.
+        """
+        ...
+
+    def reanudar(self, id_tarea: int, ahora: datetime) -> Tarea | None:
+        """Reanuda la tarea en ``ahora`` (``Tarea.reanudar``: corre su vencimiento el
+        tiempo que ha estado hibernada) y la devuelve, o ``None`` si no existe.
+
+        Lanza ``EstadoDeHibernacionInvalidoError`` si no estaba hibernada, sin
+        cambiar nada. El resto de datos de la tarea no cambia.
         """
         ...
 

@@ -48,6 +48,7 @@ function tarea(id: number, nombre: string, asignados: string[], subtareas: Subta
     workflow: null,
     subestado: null,
     congelada_en: null,
+    hibernada_desde: null,
   }
 }
 

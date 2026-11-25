@@ -110,6 +110,19 @@ export interface Tarea {
    * tarea está congelada mientras está completada o en un estado llamado DONE, y
    * el contador muestra lo que faltaba para `fecha_vencimiento` en ese instante. */
   congelada_en: string | null
+  /** Instante en UTC (`YYYY-MM-DDTHH:MM:SSZ`) desde el que la tarea está
+   * hibernada, o `null` si no lo está. Cambia con `POST /tareas/{id}/hibernar` y
+   * `POST /tareas/{id}/reanudar`; mientras dura, el contador de vencimiento está
+   * parado y, al reanudar, `fecha_vencimiento` se retrasa lo que duró. Es
+   * independiente de `congelada_en`. */
+  hibernada_desde: string | null
+}
+
+/** Cuerpo de `POST /tareas/{id}/hibernar`. Con `comentario` (HTML, con las
+ * mismas reglas que los comentarios de la tarea) la API lo añade como un
+ * comentario más de la tarea; `null` hiberna sin comentario. */
+export interface DatosHibernacion {
+  comentario: string | null
 }
 
 /**

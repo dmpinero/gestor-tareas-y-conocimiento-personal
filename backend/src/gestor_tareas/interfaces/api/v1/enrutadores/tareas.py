@@ -13,9 +13,11 @@ from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
 from gestor_tareas.aplicacion.tarea.editar_subtarea import EditarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_subtarea import EliminarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_tarea import EliminarTarea
+from gestor_tareas.aplicacion.tarea.hibernar_tarea import HibernarTarea
 from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
 from gestor_tareas.aplicacion.tarea.marcar_subtarea_resuelta import MarcarSubtareaResuelta
+from gestor_tareas.aplicacion.tarea.reanudar_tarea import ReanudarTarea
 from gestor_tareas.dominio.excepciones import (
     AsignacionDeEstadoInvalidaError,
     AsignacionDeWorkflowInvalidaError,
@@ -51,11 +53,16 @@ from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     TareaActualizarEsquema,
     TareaCompletadaEsquema,
     TareaCrearEsquema,
+    TareaHibernarEsquema,
     TareaSalidaEsquema,
     TareaSubestadoEsquema,
 )
 
 enrutador = APIRouter(prefix="/tareas", tags=["Tareas"])
+
+RESPUESTA_ESTADO_DE_HIBERNACION = {
+    409: {"description": "La tarea ya está hibernada (al hibernar) o no lo está (al reanudar)"}
+}
 
 
 def _a_esquema(tarea: Tarea) -> TareaSalidaEsquema:
@@ -202,6 +209,45 @@ def marcar_completada(
     tarea = MarcarCompletada(RepositorioTareasSqlAlchemy(sesion)).ejecutar(
         id_tarea, datos.completada
     )
+    return _a_esquema(tarea)
+
+
+@enrutador.post(
+    "/{id_tarea:int}/hibernar",
+    response_model=TareaSalidaEsquema,
+    responses={
+        **RESPUESTA_NO_ENCONTRADO,
+        **RESPUESTA_ESTADO_DE_HIBERNACION,
+        **RESPUESTA_CUERPO_MALFORMADO,
+    },
+)
+def hibernar(
+    id_tarea: int,
+    datos: TareaHibernarEsquema | None = None,
+    sesion: Session = Depends(obtener_sesion),
+) -> TareaSalidaEsquema:
+    """Hiberna la tarea: su contador de vencimiento deja de correr desde este instante,
+    que el servidor pone en `hibernada_desde` (UTC), y la devuelve con el resto de sus
+    datos sin cambios. Si el cuerpo trae `comentario`, se añade al histórico de la
+    tarea como un comentario normal, con ese mismo instante y en la misma operación
+    (null, sin indicar o sin cuerpo: ninguno). 404 si el id no existe, 409 si ya está
+    hibernada y 422 si el comentario no cumple las reglas del alta de un comentario."""
+    comentario = datos.comentario if datos is not None else None
+    tarea = HibernarTarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea, comentario)
+    return _a_esquema(tarea)
+
+
+@enrutador.post(
+    "/{id_tarea:int}/reanudar",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_ESTADO_DE_HIBERNACION},
+)
+def reanudar(id_tarea: int, sesion: Session = Depends(obtener_sesion)) -> TareaSalidaEsquema:
+    """Reanuda la tarea hibernada y la devuelve: su `fecha_vencimiento` (si tiene) se
+    corre exactamente el tiempo que ha estado hibernada, así que le queda el mismo
+    tiempo que al hibernarla, y `hibernada_desde` vuelve a null. El resto de sus datos
+    no cambia. 404 si el id no existe y 409 si no está hibernada."""
+    tarea = ReanudarTarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea)
     return _a_esquema(tarea)
 
 

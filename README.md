@@ -355,6 +355,15 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
   con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
   `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
+- Hibernar una tarea: el botón "Hibernar" del detalle detiene su cuenta atrás
+  hasta el vencimiento y pide un comentario opcional, que se guarda como un
+  comentario más de la tarea. La tarea muestra la insignia "Hibernada" en el
+  listado, el tablero y el detalle, y no avisa de vencimiento mientras duerme.
+  "Reanudar" corre la fecha de vencimiento tanto como duró la hibernación, así
+  que conserva el tiempo que quedaba. Se puede hibernar y reanudar cuantas
+  veces se quiera. API: `POST /api/v1/tareas/{id}/hibernar` (cuerpo
+  `{"comentario": ... | null}`) y `POST /api/v1/tareas/{id}/reanudar`; el
+  estado hibernado se devuelve en `hibernada_desde`.
 - Endpoint de salud `GET /api/v1/salud` y métricas Prometheus en `/metricas`.
 - Comentarios de tareas, subtareas y pasos de los workflows con formato
   (negrita, cursiva, subrayado, tachado, color, resaltado, listas y enlaces)

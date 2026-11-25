@@ -15,7 +15,12 @@ from pydantic import (
 
 from gestor_tareas.dominio.tarea.entidades import TipoTarea
 from gestor_tareas.interfaces.api.v1.esquemas.catalogos import NombreSubestado
-from gestor_tareas.interfaces.api.v1.esquemas.comentario import InstanteUtc
+from gestor_tareas.interfaces.api.v1.esquemas.comentario import (
+    LONGITUD_MAXIMA_HTML,
+    LONGITUD_MAXIMA_VISIBLE,
+    InstanteUtc,
+    TextoComentario,
+)
 from gestor_tareas.interfaces.api.v1.esquemas.grupo_estados import (
     EstadoDeTareaEsquema,
     GrupoEstadosDeTareaEsquema,
@@ -311,6 +316,31 @@ class TareaCompletadaEsquema(BaseModel):
     completada: bool = Field(strict=True)
 
 
+class TareaHibernarEsquema(BaseModel):
+    """Cuerpo de la hibernación de una tarea: un comentario opcional."""
+
+    comentario: (
+        Annotated[
+            TextoComentario,
+            Field(
+                min_length=1,
+                max_length=LONGITUD_MAXIMA_HTML,
+                json_schema_extra=PATRON_NO_VACIO,
+            ),
+        ]
+        | None
+    ) = Field(
+        default=None,
+        description="Opcional. Comentario que se añade al histórico de la tarea, como "
+        "uno normal, con el instante de la hibernación; null o sin indicar, no se añade "
+        "ninguno. Sigue las mismas reglas que el texto del alta de un comentario: HTML "
+        "que se guarda saneado, con 1 a "
+        f"{LONGITUD_MAXIMA_VISIBLE} caracteres visibles (salvo que tenga alguna imagen) "
+        f"y como mucho {LONGITUD_MAXIMA_HTML} de HTML saneado (422 si no; también si es "
+        "una cadena vacía o solo con espacios).",
+    )
+
+
 class SubtareaCrearEsquema(BaseModel):
     """Cuerpo del alta de una subtarea. ``asignado`` sigue las mismas reglas que
     cada elemento de ``asignados`` de una tarea."""
@@ -388,4 +418,12 @@ class TareaSalidaEsquema(BaseModel):
         "completada a DONE o al revés y al cambiar el vencimiento, y vuelve a null al "
         "dejar de estar completada y en DONE. El tiempo congelado es la diferencia "
         "entre `fecha_vencimiento` (hora local) y este instante.",
+    )
+    hibernada_desde: InstanteUtc | None = Field(
+        default=None,
+        description="Instante en UTC desde el que la tarea está hibernada (su contador "
+        "de vencimiento no corre), o null si no lo está. Lo pone el servidor al "
+        "hibernarla y vuelve a null al reanudarla, que corre `fecha_vencimiento` el "
+        "tiempo que ha estado hibernada. Es independiente de `congelada_en`: completar, "
+        "dejar pendiente o cambiar de estado la tarea no la reanuda.",
     )
