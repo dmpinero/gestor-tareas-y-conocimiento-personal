@@ -18,7 +18,7 @@ _RAIZ = Path(__file__).resolve().parents[2]
 _REVISION = "c5e1b8f4a2d7"
 _ANTERIOR = "a9c4e1f7b3d2"
 # La última revisión, a la que llega "head".
-_ULTIMA = "483e78c30e26"
+_ULTIMA = "b7d3e5f9a1c4"
 
 
 def _alembic() -> Config:

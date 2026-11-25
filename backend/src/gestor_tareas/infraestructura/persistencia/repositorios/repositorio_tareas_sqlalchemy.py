@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import ColumnElement, delete, select, update
@@ -17,7 +17,9 @@ from gestor_tareas.dominio.tarea.entidades import (
     Tarea,
     TipoTarea,
 )
+from gestor_tareas.dominio.tarea.hibernacion import EstadoDeHibernacionInvalidoError
 from gestor_tareas.infraestructura.persistencia.modelos import (
+    ComentarioModelo,
     EtiquetaModelo,
     OportunidadModelo,
     PersonaModelo,
@@ -115,6 +117,7 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         ),
         congelada_en=_instante_de_columna(modelo.congelada_en),
         subestado=modelo.subestado.nombre if modelo.subestado is not None else None,
+        hibernada_desde=_instante_de_columna(modelo.hibernada_desde),
     )
 
 
@@ -289,6 +292,47 @@ class RepositorioTareasSqlAlchemy:
             modelo.congelada_en = _instante_a_columna(tarea.congelada_en)
             self._sesion.commit()
         return _a_entidad(modelo)
+
+    def hibernar(self, id_tarea: int, ahora: datetime, comentario: str | None) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            modelo = self._tarea_bloqueada(id_tarea)
+            if modelo is None:
+                self._sesion.rollback()
+                return None
+            tarea = self._cambiar_hibernacion(modelo, lambda t: t.hibernar(ahora))
+            if comentario is not None:
+                self._sesion.add(
+                    ComentarioModelo(
+                        tarea_id=id_tarea, texto=comentario, creado=_instante_a_columna(ahora)
+                    )
+                )
+            modelo.hibernada_desde = _instante_a_columna(tarea.hibernada_desde)
+            self._sesion.commit()
+        return _a_entidad(modelo)
+
+    def reanudar(self, id_tarea: int, ahora: datetime) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            modelo = self._tarea_bloqueada(id_tarea)
+            if modelo is None:
+                self._sesion.rollback()
+                return None
+            tarea = self._cambiar_hibernacion(modelo, lambda t: t.reanudar(ahora))
+            modelo.fecha_vencimiento = tarea.fecha_vencimiento
+            modelo.hibernada_desde = _instante_a_columna(tarea.hibernada_desde)
+            self._sesion.commit()
+        return _a_entidad(modelo)
+
+    def _cambiar_hibernacion(self, modelo: TareaModelo, cambio: Callable[[Tarea], None]) -> Tarea:
+        """Aplica el cambio de hibernación a la tarea leída con bloqueo y la devuelve;
+        si no se admite, deshace la transacción (y libera el bloqueo) y lanza el
+        error."""
+        tarea = _a_entidad(modelo)
+        try:
+            cambio(tarea)
+        except EstadoDeHibernacionInvalidoError:
+            self._sesion.rollback()
+            raise
+        return tarea
 
     def cambiar_estado(self, id_tarea: int, estado: ReferenciaEstado, ahora: datetime) -> Tarea:
         with traducir_conflictos(self._sesion):

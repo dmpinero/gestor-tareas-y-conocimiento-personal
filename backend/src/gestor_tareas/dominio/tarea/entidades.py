@@ -3,6 +3,10 @@ from datetime import datetime
 from enum import StrEnum
 
 from gestor_tareas.dominio.tarea.congelacion import instante_de_congelacion
+from gestor_tareas.dominio.tarea.hibernacion import (
+    EstadoDeHibernacionInvalidoError,
+    vencimiento_al_reanudar,
+)
 
 
 class TipoTarea(StrEnum):
@@ -142,6 +146,11 @@ class Tarea:
     su contador de vencimiento está congelado, o ``None`` si no lo está (ver
     ``gestor_tareas.dominio.tarea.congelacion``). Lo mantiene ``ajustar_congelacion``
     tras cada cambio de ``completada`` o de ``estado``.
+
+    ``hibernada_desde`` es el instante (en UTC, sin fracción de segundo) desde el que
+    la tarea está hibernada, o ``None`` si no lo está (ver
+    ``gestor_tareas.dominio.tarea.hibernacion``). Solo lo cambian ``hibernar`` y
+    ``reanudar``; es independiente de ``congelada_en``.
     """
 
     nombre: str
@@ -160,6 +169,7 @@ class Tarea:
     workflow: ReferenciaWorkflow | None = None
     congelada_en: datetime | None = None
     subestado: str | None = None
+    hibernada_desde: datetime | None = None
     id: int | None = None
 
     def ajustar_congelacion(self, ahora: datetime) -> None:
@@ -171,3 +181,21 @@ class Tarea:
             self.estado.nombre if self.estado is not None else None,
             ahora,
         )
+
+    def hibernar(self, ahora: datetime) -> None:
+        """Hiberna la tarea desde ``ahora``. Lanza ``EstadoDeHibernacionInvalidoError``
+        si ya estaba hibernada."""
+        if self.hibernada_desde is not None:
+            raise EstadoDeHibernacionInvalidoError(f"La tarea con id {self.id} ya está hibernada")
+        self.hibernada_desde = ahora
+
+    def reanudar(self, ahora: datetime) -> None:
+        """Reanuda la tarea en ``ahora``: corre su vencimiento el tiempo que ha estado
+        hibernada y deja de estarlo. Lanza ``EstadoDeHibernacionInvalidoError`` si no
+        estaba hibernada."""
+        if self.hibernada_desde is None:
+            raise EstadoDeHibernacionInvalidoError(f"La tarea con id {self.id} no está hibernada")
+        self.fecha_vencimiento = vencimiento_al_reanudar(
+            self.fecha_vencimiento, self.hibernada_desde, ahora
+        )
+        self.hibernada_desde = None

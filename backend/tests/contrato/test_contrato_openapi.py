@@ -214,6 +214,24 @@ def _comentar_con_texto_visible_valido(case: schemathesis.Case) -> None:
         case.body["texto"] = "Comentario del contrato"
 
 
+def _hibernar_con_comentario_valido(case: schemathesis.Case) -> None:
+    """El comentario opcional de `POST /tareas/{id}/hibernar` sigue las mismas reglas
+    del texto visible que el alta de un comentario, que JSON Schema no puede expresar
+    (ver `_comentar_con_texto_visible_valido`): en los casos que el contrato da por
+    válidos, si el comentario generado no las cumple se envía uno que sí."""
+    if not (
+        case.method == "POST"
+        and case.path.endswith("/hibernar")
+        and _es_positivo_con_cuerpo(case)
+        and isinstance(case.body.get("comentario"), str)
+    ):
+        return
+    try:
+        ComentarioCrearEsquema(texto=case.body["comentario"])
+    except ValidationError:
+        case.body["comentario"] = "Comentario del contrato"
+
+
 def _subir_una_imagen_de_verdad(case: schemathesis.Case) -> None:
     """JSON Schema no puede exigir que el archivo sea una imagen PNG, JPEG, GIF o
     WebP por su contenido (si no, 422). En los casos que el contrato da por válidos
@@ -235,6 +253,7 @@ def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     _mover_a_un_estado_del_grupo_de_la_tarea(case)
     _reordenar_los_estados_que_existen(case)
     _comentar_con_texto_visible_valido(case)
+    _hibernar_con_comentario_valido(case)
     _subir_una_imagen_de_verdad(case)
     excluidos = _CHECKS_EXCLUIDOS_POR_RUTA.get(case.path)
     case.call_and_validate(excluded_checks=excluidos or None)
