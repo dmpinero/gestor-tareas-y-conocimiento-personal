@@ -182,6 +182,41 @@ describe('RedTareas', () => {
     expect(nodo('oportunidad:OP7').attributes('aria-label')).toBe('Oportunidad OP7: 2 tareas')
   })
 
+  describe('nombres de las tareas con muchas tareas', () => {
+    // 30 tareas con la misma etiqueta: más de 25, así que sus nombres se ocultan.
+    const MUCHAS = Array.from({ length: 30 }, (_, i) =>
+      tarea(100 + i, `Tarea ${100 + i}`, { etiquetas: ['comun'] }),
+    )
+    const nombreVisible = (id: string) => nodo(id).find('[data-nombre-nodo]').exists()
+
+    it('con 25 tareas o menos se ven todos los nombres', () => {
+      montar()
+      expect(nombreVisible('tarea:1')).toBe(true)
+    })
+
+    it('con más de 25 se ocultan los de las tareas, pero no los de los nodos propios', () => {
+      montar(MUCHAS)
+      expect(nombreVisible('tarea:100')).toBe(false)
+      expect(nombreVisible('etiqueta:comun')).toBe(true)
+      // El nombre accesible sigue completo.
+      expect(nodo('tarea:100').attributes('aria-label')).toContain('Tarea 100')
+    })
+
+    it('al resaltar un nodo se ven los nombres de las tareas resaltadas', async () => {
+      montar(MUCHAS)
+      await nodo('tarea:100').trigger('mouseenter')
+      expect(nombreVisible('tarea:100')).toBe(true)
+      await nodo('tarea:100').trigger('mouseleave')
+      expect(nombreVisible('tarea:100')).toBe(false)
+    })
+
+    it('al acercar con el zoom (×2 o más) se ven todos', async () => {
+      montar(MUCHAS)
+      for (let i = 0; i < 4; i++) await boton('Acercar').trigger('click')
+      expect(nombreVisible('tarea:100')).toBe(true)
+    })
+  })
+
   it('muestra una leyenda', () => {
     montar()
     const leyenda = envoltorio!.find('[data-testid="leyenda-red"]').text()

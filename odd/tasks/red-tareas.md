@@ -24,3 +24,4 @@ Tests: frontend vitest + vue-tsc + eslint/prettier + playwright (e2e en pila ais
 - L2 (2026-11-26) Pregunta tipo de red → "Nodos propios (Recomendado)".
 - L3 Librería: d3-force en lugar de Cytoscape (mucho más ligera, solo calcula posiciones; el dibujo en SVG con Vue mantiene tokens, modo oscuro y nodos accesibles).
 - L4 Revisión visual: con pocos nodos el viewBox ampliaba el dibujo y los nombres salían enormes (y cortados en móvil); `cajaVisible` limita a 1:1.
+- L5 Con datos reales (50 tareas) los nombres se pisaban: con más de 25 tareas sus nombres solo se ven al resaltarlas o con zoom ≥ ×2; los nodos propios siempre lo muestran. Disposición algo más abierta (distancia 90, repulsión −260, choque 34).

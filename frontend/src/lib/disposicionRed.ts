@@ -67,10 +67,10 @@ export function disponerRed(red: Red): Disposicion {
       'enlaces',
       forceLink<NodoSimulado, SimulationLinkDatum<NodoSimulado>>(enlaces)
         .id((nodo) => nodo.id)
-        .distance(70),
+        .distance(90),
     )
-    .force('repulsion', forceManyBody().strength(-180))
-    .force('choque', forceCollide(28))
+    .force('repulsion', forceManyBody().strength(-260))
+    .force('choque', forceCollide(34))
     // Mantienen cerca del centro las tareas sueltas y los grupos separados.
     .force('x', forceX(0).strength(0.06))
     .force('y', forceY(0).strength(0.06))

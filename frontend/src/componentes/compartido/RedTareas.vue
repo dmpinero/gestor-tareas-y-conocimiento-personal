@@ -259,6 +259,21 @@ function alSoltarFondo(): void {
 }
 
 // El fondo cubre de sobra lo que se ve, también al alejar o desplazar.
+// Con muchas tareas sus nombres se pisan: con más de MAXIMO_NOMBRES solo se
+// ven los de las tareas resaltadas, o todos al acercar con el zoom. Los nodos
+// propios (pocos) siempre lo llevan, y el nombre accesible siempre está.
+const MAXIMO_NOMBRES = 25
+const ESCALA_NOMBRES = 2
+const nombresDeTareasVisibles = computed(
+  () =>
+    red.value.nodos.filter((nodo) => nodo.clase === 'tarea').length <= MAXIMO_NOMBRES ||
+    escala.value >= ESCALA_NOMBRES,
+)
+
+function muestraNombre(id: string, clase: string): boolean {
+  return clase !== 'tarea' || nombresDeTareasVisibles.value || (resaltados.value?.has(id) ?? false)
+}
+
 const fondo = computed(() => {
   const { x, y, ancho, alto } = caja.value
   const extra = Math.max(ancho, alto) * 20
@@ -409,6 +424,8 @@ const fondo = computed(() => {
                     ]"
                   />
                   <text
+                    v-if="muestraNombre(nodo.id, nodo.clase)"
+                    data-nombre-nodo
                     y="25"
                     text-anchor="middle"
                     aria-hidden="true"
@@ -429,6 +446,7 @@ const fondo = computed(() => {
                     class="stroke-card stroke-1"
                   />
                   <text
+                    data-nombre-nodo
                     y="27"
                     text-anchor="middle"
                     aria-hidden="true"
