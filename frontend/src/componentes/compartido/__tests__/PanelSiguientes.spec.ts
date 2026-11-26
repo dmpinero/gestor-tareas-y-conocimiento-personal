@@ -184,6 +184,37 @@ describe('PanelSiguientes', () => {
     expect(sugerencias(wrapper)).toEqual(['Revisar oferta', 'Informe'])
   })
 
+  it('cada sugerencia muestra el contador hasta su vencimiento, o «Sin vencimiento»', async () => {
+    const wrapper = await montar([])
+
+    const [conVencimiento, sinVencimiento] = wrapper.findAll('[data-sugerencia]')
+    expect(conVencimiento!.get('a').text()).toBe('Revisar oferta')
+    const contador = conVencimiento!.get('[role="timer"][data-testid="contador-vencimiento"]')
+    expect(contador.get('[data-testid="contador-texto"]').text()).not.toBe('')
+    expect(sinVencimiento!.get('a').text()).toBe('Informe')
+    expect(sinVencimiento!.find('[role="timer"]').exists()).toBe(false)
+    expect(sinVencimiento!.get('[data-sin-vencimiento]').text()).toBe('Sin vencimiento')
+  })
+
+  it('cada sugerencia muestra su prioridad, si la tiene', async () => {
+    const wrapper = await montar(
+      [],
+      [tarea(1, 'Urgente', { prioridad: 1 }), tarea(2, 'Sin prioridad')],
+    )
+
+    const [conPrioridad, sinPrioridad] = wrapper.findAll('[data-sugerencia]')
+    expect(conPrioridad!.get('[data-prioridad-sugerencia]').text()).toBe('Prioridad 1')
+    expect(sinPrioridad!.find('[data-prioridad-sugerencia]').exists()).toBe(false)
+  })
+
+  it('explica el criterio de las sugerencias', async () => {
+    const wrapper = await montar([])
+
+    expect(wrapper.get('[data-criterio-sugerencias]').text()).toBe(
+      'Tareas pendientes que vencen antes; a igual vencimiento, por prioridad y después por antigüedad. No incluye las hibernadas, las que están en DONE, las de la cola ni la que está en foco.',
+    )
+  })
+
   it('«Añadir a siguientes» en una sugerencia la sube al final de la cola', async () => {
     const cola = [sig(TAREAS[0]!)]
     vi.mocked(clienteApi.crear).mockResolvedValue([...cola, sig(TAREAS[2]!)])

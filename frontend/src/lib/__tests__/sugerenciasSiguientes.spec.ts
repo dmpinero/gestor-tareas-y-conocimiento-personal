@@ -75,6 +75,12 @@ describe('sugerenciasSiguientes', () => {
     expect(ids(sugerenciasSiguientes(tareas, [3], 4))).toEqual([5])
   })
 
+  it('excluye las que están en DONE (contador congelado) aunque no estén completadas', () => {
+    const tareas = [tarea(1, { congelada_en: '2026-11-20T10:00:00Z' }), tarea(2)]
+
+    expect(ids(sugerenciasSiguientes(tareas, [], null))).toEqual([2])
+  })
+
   it('devuelve como mucho 5', () => {
     const tareas = [1, 2, 3, 4, 5, 6, 7].map((id) => tarea(id))
 

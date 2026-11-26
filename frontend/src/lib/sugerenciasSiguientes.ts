@@ -18,7 +18,8 @@ function compararNulosAlFinal<T extends string | number>(a: T | null, b: T | nul
  * vencimiento (el más cercano o vencido primero; sin vencimiento al final),
  * después por prioridad (1 primero; sin prioridad al final), después por fecha
  * de creación (la más antigua primero) y por id. Quedan fuera las completadas,
- * las hibernadas, las que ya están en la cola y la del foco.
+ * las que están en DONE (contador congelado sin estar completadas), las
+ * hibernadas, las que ya están en la cola y la del foco.
  */
 export function sugerenciasSiguientes(
   tareas: readonly Tarea[],
@@ -29,7 +30,11 @@ export function sugerenciasSiguientes(
   return tareas
     .filter(
       (tarea) =>
-        !tarea.completada && !estaHibernada(tarea) && !enCola.has(tarea.id) && tarea.id !== idFoco,
+        !tarea.completada &&
+        tarea.congelada_en === null &&
+        !estaHibernada(tarea) &&
+        !enCola.has(tarea.id) &&
+        tarea.id !== idFoco,
     )
     .sort(
       (a, b) =>

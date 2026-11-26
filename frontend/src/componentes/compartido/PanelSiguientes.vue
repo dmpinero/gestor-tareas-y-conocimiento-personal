@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronUp, X } from '@lucide/vue'
+import { useMediaQuery } from '@vueuse/core'
 import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
+import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import { Button } from '@/componentes/ui/button'
 import { sugerenciasSiguientes } from '@/lib/sugerenciasSiguientes'
 import { useTiendaFoco } from '@/stores/foco'
@@ -14,7 +16,9 @@ import { useTiendaTareas } from '@/stores/tareas'
 // Panel "A continuación" de Inicio: la cola de siguientes, en orden, con
 // "Trabajar en esta", subir, bajar y quitar en cada fila; debajo, sugerencias
 // calculadas con las tareas cargadas (ver `sugerenciasSiguientes`) para
-// añadirlas al final de la cola. Al montarse carga la cola y las tareas.
+// añadirlas al final de la cola, cada una con su cuenta atrás hasta el
+// vencimiento y su prioridad, que son el porqué de su orden (el criterio se
+// explica bajo el título). Al montarse carga la cola y las tareas.
 const tiendaSiguientes = useTiendaSiguientes()
 const tiendaTareas = useTiendaTareas()
 const tiendaFoco = useTiendaFoco()
@@ -26,6 +30,10 @@ const sugerencias = computed(() =>
     tiendaFoco.foco?.tarea_id ?? null,
   ),
 )
+
+// En pantallas estrechas «Añadir a siguientes» queda en solo icono, para que
+// quepa el nombre.
+const ancha = useMediaQuery('(min-width: 640px)')
 
 function enlace(tareaId: number) {
   return { path: '/tareas', query: { tarea: String(tareaId) } }
@@ -103,6 +111,11 @@ onMounted(() => {
     </ol>
 
     <h4 class="mt-4 text-sm font-semibold">Sugerencias</h4>
+    <p data-criterio-sugerencias class="text-muted-foreground mt-1 text-xs">
+      Tareas pendientes que vencen antes; a igual vencimiento, por prioridad y después por
+      antigüedad. No incluye las hibernadas, las que están en DONE, las de la cola ni la que está en
+      foco.
+    </p>
     <p v-if="sugerencias.length === 0" class="text-muted-foreground mt-2 text-sm">
       No hay sugerencias.
     </p>
@@ -111,10 +124,30 @@ onMounted(() => {
         v-for="tarea in sugerencias"
         :key="tarea.id"
         data-sugerencia
-        class="flex flex-wrap items-center gap-2 py-1"
+        class="flex items-center gap-2 py-1.5"
       >
-        <RouterLink :to="enlace(tarea.id)" :class="CLASE_ENLACE">{{ tarea.nombre }}</RouterLink>
-        <BotonSiguientes :tarea-id="tarea.id" :nombre="tarea.nombre" />
+        <div class="flex min-w-0 flex-1 flex-col">
+          <RouterLink :to="enlace(tarea.id)" :class="CLASE_ENLACE">{{ tarea.nombre }}</RouterLink>
+          <span class="flex flex-wrap items-center gap-x-3 text-sm">
+            <ContadorVencimiento
+              v-if="tarea.fecha_vencimiento"
+              :vencimiento="tarea.fecha_vencimiento"
+            />
+            <span v-else data-sin-vencimiento class="text-muted-foreground">Sin vencimiento</span>
+            <span
+              v-if="tarea.prioridad !== null"
+              data-prioridad-sugerencia
+              class="text-muted-foreground"
+              >Prioridad {{ tarea.prioridad }}</span
+            >
+          </span>
+        </div>
+        <BotonSiguientes
+          class="shrink-0"
+          :tarea-id="tarea.id"
+          :nombre="tarea.nombre"
+          :compacto="!ancha"
+        />
       </li>
     </ul>
   </section>

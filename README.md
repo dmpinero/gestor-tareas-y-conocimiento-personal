@@ -375,7 +375,9 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   panel «A continuación» muestra la cola en orden, con "Trabajar en esta",
   subir, bajar y quitar, y debajo hasta 5 **Sugerencias**: las tareas pendientes
   que vencen antes (las sin vencimiento al final), después por prioridad y por
-  antigüedad, sin las hibernadas, las de la cola ni la del foco. El desplegable
+  antigüedad, sin las hibernadas, las que están en DONE, las de la cola ni la del
+  foco. Cada sugerencia muestra la cuenta atrás hasta su vencimiento y su
+  prioridad, y el panel explica ese criterio. El desplegable
   «Siguientes» de la barra superior enseña las 3 primeras y "Pasar a la
   siguiente: X", que la pone en foco. Poner en foco una tarea la saca de la
   cola; las completadas no se ven (si se reabren vuelven a su sitio) y borrarla
