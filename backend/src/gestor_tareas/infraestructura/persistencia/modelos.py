@@ -36,6 +36,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 
+from gestor_tareas.dominio.siguientes.entidades import Lista
 from gestor_tareas.dominio.tarea.entidades import TipoTarea
 from gestor_tareas.infraestructura.persistencia.sesion import Base
 
@@ -504,10 +505,15 @@ class FocoTrabajoModelo(Base):
     desde: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
 
+# Valores admitidos en `cola_siguientes.lista`: los de `Lista`.
+_LISTAS_SIGUIENTES = ", ".join(f"'{lista.value}'" for lista in Lista)
+
+
 class ColaSiguientesModelo(Base):
-    """Cola de siguientes tareas: las elegidas para trabajar en ellas después del
-    foco, cada una como mucho una vez, por ``posicion`` (y ``tarea_id`` a igual
-    posición).
+    """Las dos listas de tareas para después del foco: la cola de siguientes y las
+    sugerencias elegidas (``lista``, un valor de ``Lista``). Cada tarea está como
+    mucho una vez y en una sola lista (la clave es ``tarea_id``); cada lista se
+    ordena por ``posicion`` (y ``tarea_id`` a igual posición).
 
     Las completadas se conservan en su sitio (la aplicación no las muestra), para
     que al reabrirlas vuelvan a él. Borrar la tarea borra su fila (ON DELETE
@@ -515,12 +521,16 @@ class ColaSiguientesModelo(Base):
     """
 
     __tablename__ = "cola_siguientes"
+    __table_args__ = (
+        CheckConstraint(f"lista IN ({_LISTAS_SIGUIENTES})", name="ck_cola_siguientes_lista_valida"),
+    )
 
     tarea_id: Mapped[int] = mapped_column(
         ForeignKey("tareas.id", name="fk_cola_siguientes_tarea", ondelete="CASCADE"),
         primary_key=True,
         autoincrement=False,
     )
+    lista: Mapped[str] = mapped_column(String(20), nullable=False)
     posicion: Mapped[int] = mapped_column(Integer, nullable=False)
 
 

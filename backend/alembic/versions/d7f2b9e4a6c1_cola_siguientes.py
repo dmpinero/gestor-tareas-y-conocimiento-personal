@@ -20,12 +20,17 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Crea la cola de siguientes tareas, vacía: una fila por tarea con su posición.
-    Borrar la tarea borra su fila. Ningún otro dato cambia."""
+    """Crea la cola de siguientes tareas, vacía: una fila por tarea con su lista
+    (``siguientes`` o ``sugerencias``) y su posición dentro de ella. Borrar la tarea
+    borra su fila. Ningún otro dato cambia."""
     op.create_table(
         "cola_siguientes",
         sa.Column("tarea_id", sa.Integer(), autoincrement=False, nullable=False),
+        sa.Column("lista", sa.String(length=20), nullable=False),
         sa.Column("posicion", sa.Integer(), nullable=False),
+        sa.CheckConstraint(
+            "lista IN ('siguientes', 'sugerencias')", name="ck_cola_siguientes_lista_valida"
+        ),
         sa.ForeignKeyConstraint(
             ["tarea_id"],
             ["tareas.id"],
@@ -37,5 +42,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Quita la tabla: se pierde la cola de siguientes."""
+    """Quita la tabla: se pierden la cola de siguientes y las sugerencias elegidas."""
     op.drop_table("cola_siguientes")

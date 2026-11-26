@@ -1,11 +1,15 @@
 from collections.abc import Sequence
 
 from gestor_tareas.aplicacion.reintentos import reintentar_si_hay_conflicto
-from gestor_tareas.dominio.siguientes.entidades import TareaSiguiente
+from gestor_tareas.dominio.siguientes.entidades import Lista, TareaSiguiente
 from gestor_tareas.dominio.siguientes.repositorio import RepositorioSiguientes
 
 
 class _CasoDeUsoSiguientes:
+    """Base de los casos de uso; ``_LISTA`` es la lista sobre la que actúan."""
+
+    _LISTA = Lista.SIGUIENTES
+
     def __init__(self, repositorio: RepositorioSiguientes) -> None:
         self._repositorio = repositorio
 
@@ -14,16 +18,17 @@ class ListarSiguientes(_CasoDeUsoSiguientes):
     """La cola de siguientes en su orden, sin las tareas completadas."""
 
     def ejecutar(self) -> list[TareaSiguiente]:
-        return self._repositorio.listar()
+        return self._repositorio.listar(self._LISTA)
 
 
 class AnadirASiguientes(_CasoDeUsoSiguientes):
-    """Añade una tarea al final de la cola (si ya estaba, no cambia nada) y devuelve
-    la cola. ``EntidadNoEncontradaError`` si la tarea no existe y
+    """Añade una tarea al final de la cola (si estaba en sugerencias, la saca de
+    ellas; si ya estaba en la cola, no cambia nada) y devuelve la cola.
+    ``EntidadNoEncontradaError`` si la tarea no existe y
     ``TareaCompletadaEnLaColaError`` si está completada."""
 
     def ejecutar(self, id_tarea: int) -> list[TareaSiguiente]:
-        return reintentar_si_hay_conflicto(lambda: self._repositorio.anadir(id_tarea))
+        return reintentar_si_hay_conflicto(lambda: self._repositorio.anadir(id_tarea, self._LISTA))
 
 
 class ReordenarSiguientes(_CasoDeUsoSiguientes):
@@ -32,11 +37,34 @@ class ReordenarSiguientes(_CasoDeUsoSiguientes):
     visible; entonces no cambia nada."""
 
     def ejecutar(self, ids: Sequence[int]) -> list[TareaSiguiente]:
-        return reintentar_si_hay_conflicto(lambda: self._repositorio.reordenar(ids))
+        return reintentar_si_hay_conflicto(lambda: self._repositorio.reordenar(ids, self._LISTA))
 
 
 class QuitarDeSiguientes(_CasoDeUsoSiguientes):
-    """Saca una tarea de la cola y la devuelve; si no estaba, no cambia nada."""
+    """Saca una tarea de la cola y la devuelve; si no estaba, no cambia nada (si está
+    en sugerencias, sigue en ellas)."""
 
     def ejecutar(self, id_tarea: int) -> list[TareaSiguiente]:
-        return reintentar_si_hay_conflicto(lambda: self._repositorio.quitar(id_tarea))
+        return reintentar_si_hay_conflicto(lambda: self._repositorio.quitar(id_tarea, self._LISTA))
+
+
+class ListarSugerencias(ListarSiguientes):
+    """Las sugerencias elegidas en su orden, sin las tareas completadas."""
+
+    _LISTA = Lista.SUGERENCIAS
+
+
+class AnadirASugerencias(AnadirASiguientes):
+    """Añade una tarea al final de las sugerencias elegidas (si estaba en la cola, la
+    saca de ella; si ya estaba en sugerencias, no cambia nada) y las devuelve.
+    ``EntidadNoEncontradaError`` si la tarea no existe y
+    ``TareaCompletadaEnLaColaError`` si está completada."""
+
+    _LISTA = Lista.SUGERENCIAS
+
+
+class QuitarDeSugerencias(QuitarDeSiguientes):
+    """Saca una tarea de las sugerencias elegidas y las devuelve; si no estaba, no
+    cambia nada (si está en la cola, sigue en ella)."""
+
+    _LISTA = Lista.SUGERENCIAS

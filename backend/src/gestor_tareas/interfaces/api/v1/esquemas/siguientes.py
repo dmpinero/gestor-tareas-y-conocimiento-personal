@@ -12,7 +12,8 @@ def _sin_repetidos(ids: list[int]) -> list[int]:
 
 
 class SiguienteAnadirEsquema(BaseModel):
-    """Cuerpo para añadir una tarea al final de la cola de siguientes."""
+    """Cuerpo para añadir una tarea al final de la cola de siguientes o de las
+    sugerencias elegidas."""
 
     tarea_id: IdEntero = Field(description="Obligatorio. Id de una tarea no completada.")
 
@@ -31,7 +32,7 @@ class OrdenSiguientesEsquema(BaseModel):
 
 
 class TareaSiguienteEsquema(BaseModel):
-    """Una tarea de la cola de siguientes."""
+    """Una tarea de la cola de siguientes o de las sugerencias elegidas."""
 
     tarea_id: int
     tarea_nombre: str = Field(description="Nombre actual de la tarea.")

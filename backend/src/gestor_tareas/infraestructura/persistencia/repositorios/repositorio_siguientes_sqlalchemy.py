@@ -4,7 +4,7 @@ from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from gestor_tareas.dominio.foco.errores import tarea_no_encontrada
-from gestor_tareas.dominio.siguientes.entidades import TareaSiguiente
+from gestor_tareas.dominio.siguientes.entidades import Lista, TareaSiguiente
 from gestor_tareas.dominio.siguientes.reglas import (
     EntradaDeLaCola,
     comprobar_que_se_puede_anadir,
@@ -21,19 +21,21 @@ _ORDEN = (ColaSiguientesModelo.posicion, ColaSiguientesModelo.tarea_id)
 class RepositorioSiguientesSqlAlchemy:
     """Adaptador de ``RepositorioSiguientes`` sobre MySQL.
 
-    Cada escritura bloquea antes todas las filas de la cola (``FOR UPDATE``), así que
-    las escrituras simultáneas se ejecutan una detrás de otra y cada una ve la cola
-    que dejó la anterior. Las completadas se guardan pero no se devuelven.
+    Las dos listas comparten la tabla ``cola_siguientes`` (la columna ``lista`` dice
+    en cuál está cada tarea). Cada escritura bloquea antes todas sus filas
+    (``FOR UPDATE``), así que las escrituras simultáneas, en una lista o en otra, se
+    ejecutan una detrás de otra y cada una ve las listas que dejó la anterior. Las
+    completadas se guardan pero no se devuelven.
     """
 
     def __init__(self, sesion: Session) -> None:
         self._sesion = sesion
 
-    def listar(self) -> list[TareaSiguiente]:
+    def listar(self, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
         consulta = (
             select(ColaSiguientesModelo.tarea_id, TareaModelo.nombre)
             .join(TareaModelo, TareaModelo.id == ColaSiguientesModelo.tarea_id)
-            .where(TareaModelo.completada.is_(False))
+            .where(ColaSiguientesModelo.lista == lista.value, TareaModelo.completada.is_(False))
             .order_by(*_ORDEN)
         )
         return [
@@ -41,21 +43,24 @@ class RepositorioSiguientesSqlAlchemy:
             for id_tarea, nombre in self._sesion.execute(consulta)
         ]
 
-    def _bloquear_cola(self) -> list[EntradaDeLaCola]:
-        """La cola guardada en su orden, con las filas de la cola bloqueadas hasta
-        confirmar (las de las tareas no se bloquean)."""
+    def _bloquear_listas(self, lista: Lista) -> list[EntradaDeLaCola]:
+        """La lista ``lista`` guardada en su orden. Bloquea hasta confirmar las filas
+        de las dos listas (las de las tareas no se bloquean)."""
         consulta = (
-            select(ColaSiguientesModelo.tarea_id, TareaModelo.completada)
+            select(
+                ColaSiguientesModelo.tarea_id, ColaSiguientesModelo.lista, TareaModelo.completada
+            )
             .join(TareaModelo, TareaModelo.id == ColaSiguientesModelo.tarea_id)
             .order_by(*_ORDEN)
             .with_for_update(of=ColaSiguientesModelo)
         )
         return [
             EntradaDeLaCola(tarea_id=id_tarea, completada=completada)
-            for id_tarea, completada in self._sesion.execute(consulta)
+            for id_tarea, de_la_lista, completada in self._sesion.execute(consulta)
+            if de_la_lista == lista.value
         ]
 
-    def anadir(self, id_tarea: int) -> list[TareaSiguiente]:
+    def anadir(self, id_tarea: int, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
         with traducir_conflictos(self._sesion):
             # Bloqueo compartido: nadie la borra ni la completa hasta confirmar.
             completada = self._sesion.scalar(
@@ -70,28 +75,39 @@ class RepositorioSiguientesSqlAlchemy:
             except Exception:
                 self._sesion.rollback()
                 raise
-            self._bloquear_cola()
-            ultima = self._sesion.scalar(select(func.max(ColaSiguientesModelo.posicion)))
-            ya_estaba = self._sesion.scalar(
-                select(ColaSiguientesModelo.tarea_id).where(
-                    ColaSiguientesModelo.tarea_id == id_tarea
+            self._bloquear_listas(lista)
+            ultima = self._sesion.scalar(
+                select(func.max(ColaSiguientesModelo.posicion)).where(
+                    ColaSiguientesModelo.lista == lista.value
                 )
             )
-            if ya_estaba is None:
+            posicion = 0 if ultima is None else ultima + 1
+            esta_en = self._sesion.scalar(
+                select(ColaSiguientesModelo.lista).where(ColaSiguientesModelo.tarea_id == id_tarea)
+            )
+            if esta_en is None:
                 self._sesion.add(
-                    ColaSiguientesModelo(
-                        tarea_id=id_tarea, posicion=0 if ultima is None else ultima + 1
-                    )
+                    ColaSiguientesModelo(tarea_id=id_tarea, lista=lista.value, posicion=posicion)
                 )
                 self._sesion.flush()
-            cola = self.listar()
+            elif esta_en != lista.value:
+                # Estaba en la otra lista: pasa al final de esta.
+                self._sesion.execute(
+                    update(ColaSiguientesModelo)
+                    .where(ColaSiguientesModelo.tarea_id == id_tarea)
+                    .values(lista=lista.value, posicion=posicion)
+                    .execution_options(synchronize_session=False)
+                )
+            resultado = self.listar(lista)
             self._sesion.commit()
-        return cola
+        return resultado
 
-    def reordenar(self, ids: Sequence[int]) -> list[TareaSiguiente]:
+    def reordenar(
+        self, ids: Sequence[int], lista: Lista = Lista.SIGUIENTES
+    ) -> list[TareaSiguiente]:
         with traducir_conflictos(self._sesion):
             try:
-                orden = nuevo_orden_de_la_cola(self._bloquear_cola(), ids)
+                orden = nuevo_orden_de_la_cola(self._bloquear_listas(lista), ids)
             except Exception:
                 self._sesion.rollback()
                 raise
@@ -99,19 +115,25 @@ class RepositorioSiguientesSqlAlchemy:
                 posiciones = {id_tarea: posicion for posicion, id_tarea in enumerate(orden)}
                 self._sesion.execute(
                     update(ColaSiguientesModelo)
-                    .where(ColaSiguientesModelo.tarea_id.in_(orden))
+                    .where(
+                        ColaSiguientesModelo.lista == lista.value,
+                        ColaSiguientesModelo.tarea_id.in_(orden),
+                    )
                     .values(posicion=case(posiciones, value=ColaSiguientesModelo.tarea_id))
                     .execution_options(synchronize_session=False)
                 )
-            cola = self.listar()
+            resultado = self.listar(lista)
             self._sesion.commit()
-        return cola
+        return resultado
 
-    def quitar(self, id_tarea: int) -> list[TareaSiguiente]:
+    def quitar(self, id_tarea: int, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
         with traducir_conflictos(self._sesion):
             self._sesion.execute(
-                delete(ColaSiguientesModelo).where(ColaSiguientesModelo.tarea_id == id_tarea)
+                delete(ColaSiguientesModelo).where(
+                    ColaSiguientesModelo.tarea_id == id_tarea,
+                    ColaSiguientesModelo.lista == lista.value,
+                )
             )
-            cola = self.listar()
+            resultado = self.listar(lista)
             self._sesion.commit()
-        return cola
+        return resultado

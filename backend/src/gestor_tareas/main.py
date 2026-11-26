@@ -56,6 +56,7 @@ def crear_aplicacion() -> FastAPI:
     aplicacion.include_router(imagenes.enrutador, prefix="/api/v1")
     aplicacion.include_router(foco.enrutador, prefix="/api/v1")
     aplicacion.include_router(siguientes.enrutador, prefix="/api/v1")
+    aplicacion.include_router(siguientes.enrutador_sugerencias, prefix="/api/v1")
 
     Instrumentator().instrument(aplicacion).expose(
         aplicacion, endpoint="/metricas", include_in_schema=False

@@ -1,9 +1,10 @@
-"""Reglas de la cola de siguientes tareas.
+"""Reglas de la cola de siguientes tareas y de las sugerencias elegidas.
 
-La cola es una lista ordenada de tareas, cada una como mucho una vez. Las tareas
-completadas siguen guardadas en su sitio pero no se ven: al reabrirlas vuelven a
-aparecer donde estaban. Borrar una tarea, o ponerla en foco (a ella o a una subtarea
-suya), la saca de la cola.
+Cada una es una lista ordenada de tareas, y una tarea está como mucho en una de las
+dos (añadirla a una la quita de la otra y la pone al final). Las reglas de abajo
+valen para cada lista por separado. Las tareas completadas siguen guardadas en su
+sitio pero no se ven: al reabrirlas vuelven a aparecer donde estaban. Borrar una
+tarea, o ponerla en foco (a ella o a una subtarea suya), la saca de su lista.
 """
 
 from collections.abc import Sequence

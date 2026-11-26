@@ -13,7 +13,7 @@ from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.foco.entidades import Foco, PeriodoDeFoco
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
-from gestor_tareas.dominio.siguientes.entidades import TareaSiguiente
+from gestor_tareas.dominio.siguientes.entidades import Lista, TareaSiguiente
 from gestor_tareas.dominio.siguientes.reglas import (
     EntradaDeLaCola,
     comprobar_que_se_puede_anadir,
@@ -462,58 +462,71 @@ class RepositorioPersonasFalso(_RepositorioCatalogoFalso[Persona]):
 
 
 class RepositorioSiguientesFalso:
-    """Doble de RepositorioSiguientes en memoria: la cola son ids de tareas del
-    repositorio de tareas, con las mismas reglas que el real (las completadas no se
-    ven, y las borradas desaparecen)."""
+    """Doble de RepositorioSiguientes en memoria: cada lista son ids de tareas del
+    repositorio de tareas, con las mismas reglas que el real (una tarea en una sola
+    lista, las completadas no se ven y las borradas desaparecen)."""
 
     def __init__(self, tareas: RepositorioTareasFalso) -> None:
         self._tareas = tareas
-        self.ids: list[int] = []
+        self.listas: dict[Lista, list[int]] = {lista: [] for lista in Lista}
 
-    def _existentes(self) -> list[Tarea]:
-        """Las tareas de la cola en su orden; las borradas salen de ella."""
-        tareas = [self._tareas.obtener_por_id(i) for i in self.ids]
+    @property
+    def ids(self) -> list[int]:
+        """Los ids guardados en la cola de siguientes, en su orden."""
+        return self.listas[Lista.SIGUIENTES]
+
+    def _existentes(self, lista: Lista) -> list[Tarea]:
+        """Las tareas de la lista en su orden; las borradas salen de ella."""
+        tareas = [self._tareas.obtener_por_id(i) for i in self.listas[lista]]
         existentes = [t for t in tareas if t is not None and t.id is not None]
-        self.ids = [t.id for t in existentes if t.id is not None]
+        self.listas[lista] = [t.id for t in existentes if t.id is not None]
         return existentes
 
-    def _entradas(self) -> list[EntradaDeLaCola]:
+    def _entradas(self, lista: Lista) -> list[EntradaDeLaCola]:
         return [
             EntradaDeLaCola(tarea_id=t.id, completada=t.completada)
-            for t in self._existentes()
+            for t in self._existentes(lista)
             if t.id is not None
         ]
 
-    def listar(self) -> list[TareaSiguiente]:
+    def listar(self, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
         return [
             TareaSiguiente(tarea_id=t.id, tarea_nombre=t.nombre)
-            for t in self._existentes()
+            for t in self._existentes(lista)
             if t.id is not None and not t.completada
         ]
 
-    def anadir(self, id_tarea: int) -> list[TareaSiguiente]:
+    def anadir(self, id_tarea: int, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
         tarea = self._tareas.obtener_por_id(id_tarea)
         if tarea is None:
             raise EntidadNoEncontradaError(f"No existe la tarea con id {id_tarea}")
         comprobar_que_se_puede_anadir(tarea.completada)
-        if id_tarea not in self.ids:
-            self.ids.append(id_tarea)
-        return self.listar()
+        if id_tarea not in self.listas[lista]:
+            self.sacar_de_todas(id_tarea)
+            self.listas[lista].append(id_tarea)
+        return self.listar(lista)
 
-    def reordenar(self, ids: Sequence[int]) -> list[TareaSiguiente]:
-        self.ids = nuevo_orden_de_la_cola(self._entradas(), ids)
-        return self.listar()
+    def reordenar(
+        self, ids: Sequence[int], lista: Lista = Lista.SIGUIENTES
+    ) -> list[TareaSiguiente]:
+        self.listas[lista] = nuevo_orden_de_la_cola(self._entradas(lista), ids)
+        return self.listar(lista)
 
-    def quitar(self, id_tarea: int) -> list[TareaSiguiente]:
-        self.ids = [i for i in self.ids if i != id_tarea]
-        return self.listar()
+    def quitar(self, id_tarea: int, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
+        self.listas[lista] = [i for i in self.listas[lista] if i != id_tarea]
+        return self.listar(lista)
+
+    def sacar_de_todas(self, id_tarea: int) -> None:
+        """Saca la tarea de la lista en la que esté, como al fijar el foco."""
+        for lista in Lista:
+            self.listas[lista] = [i for i in self.listas[lista] if i != id_tarea]
 
 
 class RepositorioFocoFalso:
     """Doble de RepositorioFoco en memoria: guarda como mucho un foco y lee los
     nombres de la tarea y la subtarea del repositorio de tareas, como el real. Si se
-    le da la cola de siguientes, al fijar el foco saca de ella la tarea, como el
-    real."""
+    le dan las listas de siguientes, al fijar el foco saca la tarea de la suya, como
+    el real."""
 
     def __init__(
         self,
@@ -549,7 +562,7 @@ class RepositorioFocoFalso:
         self._fila = (id_tarea, id_subtarea, desde)
         self.veces_fijado += 1
         if self._siguientes is not None:
-            self._siguientes.quitar(id_tarea)
+            self._siguientes.sacar_de_todas(id_tarea)
         foco = self.obtener()
         assert foco is not None
         # Como el real: cierra el periodo en curso y abre otro con los nombres.

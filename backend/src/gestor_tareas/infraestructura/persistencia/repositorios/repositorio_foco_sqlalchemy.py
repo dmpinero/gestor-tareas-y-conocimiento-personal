@@ -92,7 +92,8 @@ class RepositorioFocoSqlAlchemy:
             # el periodo en curso que cierra es siempre el último.
             self._cerrar_en_curso(desde)
             self._abrir_periodo(id_tarea, id_subtarea, desde)
-            # La tarea en foco (o la de la subtarea) sale de la cola de siguientes.
+            # La tarea en foco (o la de la subtarea) sale de su lista (la cola de
+            # siguientes o las sugerencias elegidas).
             self._sesion.execute(
                 delete(ColaSiguientesModelo).where(ColaSiguientesModelo.tarea_id == id_tarea)
             )

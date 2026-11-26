@@ -2,6 +2,7 @@
 
 import pytest
 
+from gestor_tareas.dominio.siguientes.entidades import Lista
 from gestor_tareas.dominio.siguientes.reglas import (
     EntradaDeLaCola,
     OrdenDeLaColaInvalidoError,
@@ -55,3 +56,7 @@ def test_reordenar_con_ids_que_no_son_la_cola_visible_falla(ids: list[int]) -> N
 
     with pytest.raises(OrdenDeLaColaInvalidoError):
         nuevo_orden_de_la_cola(cola, ids)
+
+
+def test_hay_dos_listas_siguientes_y_sugerencias_con_su_valor_guardado() -> None:
+    assert [lista.value for lista in Lista] == ["siguientes", "sugerencias"]
