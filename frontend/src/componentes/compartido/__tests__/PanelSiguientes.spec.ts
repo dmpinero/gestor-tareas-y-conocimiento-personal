@@ -260,7 +260,7 @@ describe('PanelSiguientes', () => {
     }
     const wrapper = await montar([], TAREAS, foco)
 
-    expect(wrapper.get('h4').text()).toBe('Sugerencias')
+    expect(wrapper.get('#titulo-sugerencias').text()).toBe('Sugerencias')
     expect(sugerencias(wrapper)).toEqual(['Revisar oferta', 'Informe'])
   })
 

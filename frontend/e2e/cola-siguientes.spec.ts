@@ -137,7 +137,9 @@ test('una tarea muy vencida aparece en las sugerencias y se sube a la cola', asy
   })
   try {
     await page.goto('/')
-    const sugerencia = panel(page).locator('[data-sugerencia]', { hasText: nombre })
+    const sugerencia = page
+      .getByRole('region', { name: 'Sugerencias' })
+      .locator('[data-sugerencia]', { hasText: nombre })
     await expect(sugerencia).toBeVisible()
     await sugerencia.getByRole('button', { name: /Añadir a siguientes/ }).click()
     await expect(panel(page).locator('[data-fila-siguiente]', { hasText: nombre })).toBeVisible()
