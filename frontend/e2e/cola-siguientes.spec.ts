@@ -245,6 +245,11 @@ for (const { modo, preparar } of MODOS) {
     expect((await request.post('/api/v1/siguientes', { data: { tarea_id: id } })).status()).toBe(
       200,
     )
+    const nombreElegida = `Cola a11y elegida ${modo} ${Date.now()}`
+    const idElegida = await crearTarea(request, nombreElegida, grupoE2e)
+    expect(
+      (await request.post('/api/v1/sugerencias', { data: { tarea_id: idElegida } })).status(),
+    ).toBe(200)
     const auditar = () =>
       new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -255,6 +260,9 @@ for (const { modo, preparar } of MODOS) {
       await preparar(page)
       await page.goto('/')
       await expect(panel(page).locator('[data-fila-siguiente]', { hasText: nombre })).toBeVisible()
+      await expect(
+        sugerencias(page).locator('[data-sugerencia-elegida]', { hasText: nombreElegida }),
+      ).toBeVisible()
       expect((await auditar()).violations).toEqual([])
 
       await page.locator('[data-siguientes]').click()
@@ -266,7 +274,7 @@ for (const { modo, preparar } of MODOS) {
       await page.screenshot({ path: `e2e/capturas/siguientes-02-desplegable-${modo}.png` })
       expect((await auditar()).violations).toEqual([])
     } finally {
-      await vaciarCola(request, [id])
+      await vaciarCola(request, [id, idElegida])
     }
   })
 }

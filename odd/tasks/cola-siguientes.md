@@ -56,8 +56,8 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - T6 S9 arrastrar en panel y desplegable — inline — d7c46ce
 - T7 S10 estilos homogéneos en Inicio — inline
 - T8 S11 buscador (DialogoElegirTareas común con Relacionar tareas) — inline
-- T9 S12 backend (lista en cola_siguientes, /sugerencias, mover entre listas) — delegado (writer C, paralelo con T10)
-- T10 S12 frontend (tienda, buscador con dos destinos, ✕ pasa a sugerencias, elegidas en Sugerencias) — delegado (writer D, paralelo con T9)
+- T9 S12 backend (lista en cola_siguientes, /sugerencias, mover entre listas) — delegado (writer C, paralelo con T10) — hecho 1a89d59: unitarios 785, suite completa 1745 ok
+- T10 S12 frontend (tienda, buscador con dos destinos, ✕ pasa a sugerencias, elegidas en Sugerencias) — delegado (writer D, paralelo con T9) — hecho 3e37a33: vitest 1261, vue-tsc limpio
 - T3 integración: e2e, README, vista previa — inline — hecho 7112d17 + arreglo e2e: 4 e2e nuevos ok; suite e2e 96+1, el fallo (historial-foco) era una aserción de URL dependiente del tiempo, corregida (3/3 ok)
 
 ## Log
