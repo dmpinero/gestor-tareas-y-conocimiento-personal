@@ -369,6 +369,17 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
   con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
   `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
+- Vista de red (botón «Ver como red» de Tareas): un grafo con las tareas que
+  pasan la búsqueda y los filtros. Cada tarea es un círculo con el color de su
+  prioridad; cada etiqueta, persona, subestado u oportunidad que comparten dos o
+  más tareas es un nodo propio unido a ellas, y las tareas relacionadas se unen
+  directamente. Las casillas eligen qué uniones se ven (se recuerdan). Pasar el
+  ratón o enfocar un nodo resalta sus vecinos (con más de 25 tareas, sus
+  nombres solo se ven al resaltarlas o al acercar con el zoom, para que no se
+  pisen); un clic en una tarea abre su
+  detalle y en un nodo propio fija el resaltado de sus tareas. Zoom con botones
+  o la rueda, y se arrastra el fondo para moverse. La disposición la calcula
+  `d3-force`.
 - A continuación y Sugerencias: para saber en qué trabajar después del foco.
   - **A continuación** es la cola de tareas que eliges, en el orden en que
     quieres abordarlas. "Añadir a siguientes" (detalle, tablero y menú "⋯" del

@@ -11,6 +11,7 @@ import {
   List,
   ListFilter,
   Search,
+  Share2,
 } from '@lucide/vue'
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import {
@@ -76,6 +77,7 @@ import { useProveedorTareasRelacionadas } from '@/composables/useTareasRelaciona
 import { useConfirmarDescarte } from '@/composables/useConfirmarDescarte'
 import CalendarioTareas from '@/componentes/compartido/CalendarioTareas.vue'
 import TableroTareas from '@/componentes/compartido/TableroTareas.vue'
+import RedTareas from '@/componentes/compartido/RedTareas.vue'
 import {
   CLASE_PILDORA,
   PILDORA_PRIORIDAD,
@@ -207,7 +209,7 @@ function alCambiarConfirmacion(abierta: boolean): void {
 }
 
 function destinoFocoTras(id: number): string {
-  // En el tablero y el calendario no hay menús por fila.
+  // En el tablero, el calendario y la red no hay menús por fila.
   if (vista.value !== 'lista') return ID_TITULO_LISTA
   const filas = filasVisibles.value
   const indice = filas.findIndex((tarea) => tarea.id === id)
@@ -292,7 +294,7 @@ onMounted(() => {
 // --- Lista / Tablero ---
 // Preferencias de este navegador, como las columnas: si no se pueden leer o
 // guardar se usa la lista y el primer grupo.
-type Vista = 'lista' | 'tablero' | 'calendario'
+type Vista = 'lista' | 'tablero' | 'calendario' | 'red'
 const CLAVE_VISTA = 'gestor-tareas:vista-tareas'
 const CLAVE_GRUPO_TABLERO = 'gestor-tareas:grupo-tablero'
 
@@ -316,6 +318,7 @@ const OPCIONES_VISTA: { valor: Vista; etiqueta: string; icono: Component }[] = [
   { valor: 'lista', etiqueta: 'Ver como lista', icono: List },
   { valor: 'tablero', etiqueta: 'Ver como tablero', icono: Kanban },
   { valor: 'calendario', etiqueta: 'Ver como calendario', icono: CalendarDays },
+  { valor: 'red', etiqueta: 'Ver como red', icono: Share2 },
 ]
 
 // Un valor guardado desconocido muestra la lista.
@@ -1944,6 +1947,12 @@ async function guardar(): Promise<void> {
 
     <CalendarioTareas
       v-else-if="vista === 'calendario'"
+      :tareas="filasOrdenadas"
+      @ver-detalle="(id) => (idEnDetalle = id)"
+    />
+
+    <RedTareas
+      v-else-if="vista === 'red'"
       :tareas="filasOrdenadas"
       @ver-detalle="(id) => (idEnDetalle = id)"
     />
