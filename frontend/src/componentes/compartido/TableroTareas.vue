@@ -5,6 +5,7 @@ import {
   ChevronDown,
   CircleDot,
   ChevronRight,
+  Link2,
   ListTree,
   MessageSquare,
   MoveRight,
@@ -491,6 +492,29 @@ const idAltaAbierta = ref<number | null>(null)
 const nombreNueva = ref('')
 const errorNueva = ref<string | null>(null)
 const guardandoNueva = ref(false)
+
+// --- Árbol de tareas relacionadas ------------------------------------------
+// Junto a "Hibernar", el número de tareas relacionadas despliega bajo la
+// tarjeta un árbol como el de las subtareas. Salen del almacén de tareas, así
+// que aparecen aunque sean de otro grupo o el filtro las oculte; pulsar una
+// abre su detalle.
+const idsRelacionadasDesplegadas = ref(new Set<number>())
+
+function idPanelRelacionadas(tarea: Tarea): string {
+  return `relacionadas-tablero-${tarea.id}`
+}
+
+function relacionadasDe(tarea: Tarea): Tarea[] {
+  return tarea.vinculadas
+    .map((id) => tienda.tareas.find((otra) => otra.id === id))
+    .filter((otra): otra is Tarea => otra !== undefined)
+}
+
+function alternarRelacionadas(tarea: Tarea): void {
+  const ids = idsRelacionadasDesplegadas.value
+  if (ids.has(tarea.id)) ids.delete(tarea.id)
+  else ids.add(tarea.id)
+}
 
 function idPanelSubtareas(tarea: Tarea): string {
   return `subtareas-tablero-${tarea.id}`
@@ -1131,6 +1155,26 @@ function terminarArrastre(): void {
                           />
                           <BotonHibernar :tarea="tarea" compacto />
                         </span>
+                        <Button
+                          v-if="tarea.vinculadas.length > 0"
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          data-boton-relacionadas
+                          class="text-muted-foreground gap-1 px-2"
+                          :aria-label="`${tarea.vinculadas.length} tareas relacionadas de ${tarea.nombre}`"
+                          :title="`${tarea.vinculadas.length} tareas relacionadas de ${tarea.nombre}`"
+                          :aria-expanded="idsRelacionadasDesplegadas.has(tarea.id)"
+                          :aria-controls="
+                            idsRelacionadasDesplegadas.has(tarea.id)
+                              ? idPanelRelacionadas(tarea)
+                              : undefined
+                          "
+                          @click="alternarRelacionadas(tarea)"
+                        >
+                          {{ tarea.vinculadas.length }}
+                          <Link2 aria-hidden="true" />
+                        </Button>
 
                         <Popover
                           :open="idMenuAbierto === tarea.id"
@@ -1348,6 +1392,60 @@ function terminarArrastre(): void {
                         <Plus aria-hidden="true" />
                         Agregar subtarea
                       </Button>
+                    </div>
+
+                    <!-- Tareas relacionadas: el mismo árbol que las subtareas. -->
+                    <div
+                      v-if="idsRelacionadasDesplegadas.has(tarea.id)"
+                      :id="idPanelRelacionadas(tarea)"
+                      class="border-border ml-4 flex flex-col gap-1.5 border-l-2 pt-1.5 pl-3"
+                    >
+                      <ul
+                        :aria-label="`Tareas relacionadas de ${tarea.nombre}`"
+                        class="flex flex-col gap-1.5"
+                      >
+                        <li
+                          v-for="relacionada in relacionadasDe(tarea)"
+                          :key="relacionada.id"
+                          class="before:border-border relative before:absolute before:top-1/2 before:-left-3 before:w-3 before:border-t-2"
+                        >
+                          <div
+                            data-relacionada
+                            :data-en-foco="
+                              tiendaFoco.esTareaEnFoco(relacionada.id) ? 'true' : undefined
+                            "
+                            :class="[
+                              'text-card-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5 shadow-xs',
+                              tiendaFoco.esTareaEnFoco(relacionada.id)
+                                ? CLASES_FOCO
+                                : relacionada.completada
+                                  ? 'bg-muted/50'
+                                  : 'bg-card',
+                            ]"
+                          >
+                            <Link2
+                              class="text-muted-foreground size-3.5 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <button
+                              type="button"
+                              data-nombre-relacionada
+                              class="focus-visible:ring-ring/50 min-w-0 flex-1 rounded-sm text-left text-sm outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px]"
+                              :class="
+                                relacionada.completada ? 'text-muted-foreground line-through' : ''
+                              "
+                              @click="emit('verDetalle', relacionada.id)"
+                            >
+                              {{ relacionada.nombre
+                              }}<span v-if="relacionada.completada" class="sr-only">{{
+                                ' (completada)'
+                              }}</span>
+                            </button>
+                            <InsigniaFoco v-if="tiendaFoco.esTareaEnFoco(relacionada.id)" />
+                            <InsigniaHibernada v-if="estaHibernada(relacionada)" />
+                          </div>
+                        </li>
+                      </ul>
                     </div>
                   </li>
                 </ul>

@@ -415,7 +415,9 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   existentes. La relación va en ambos sentidos: cada tarea ve a la otra. Pulsar
   una tarea relacionada abre su detalle, y el botón de quitar deshace la
   relación en las dos. Al borrar una tarea desaparece de las relaciones de las
-  demás. API: `POST /api/v1/tareas/{id}/vinculadas` (cuerpo `{"ids": [...]}`)
+  demás. En el tablero, junto a «Hibernar», el botón 🔗 con el número de
+  relacionadas despliega bajo la tarjeta un árbol con ellas, como el de las
+  subtareas (aunque sean de otro grupo); pulsar una abre su detalle. API: `POST /api/v1/tareas/{id}/vinculadas` (cuerpo `{"ids": [...]}`)
   y `DELETE /api/v1/tareas/{id}/vinculadas/{vinculada_id}`. Cada tarea devuelve
   sus relaciones en `vinculadas`, una lista de ids.
 - Vistas legibles:
