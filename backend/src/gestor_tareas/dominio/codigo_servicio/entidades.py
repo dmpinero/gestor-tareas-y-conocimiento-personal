@@ -12,8 +12,13 @@ ESPACIOS_ECMA = (
     "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 )
 
-# `pattern` que publica el contrato: sin espacios.
-PATRON_CODIGO_SERVICIO = r"^\S+$"
+# `pattern` que publica el contrato: de 2 a 20 caracteres sin espacios. Los
+# espacios de los extremos se admiten porque la API los recorta antes de validar
+# (un nombre como "AB " se guarda como "AB"); por eso la longitud va en el
+# `pattern` y no en `minLength`/`maxLength`, que contarían esos espacios.
+PATRON_CODIGO_SERVICIO = (
+    rf"^\s*\S{{{LONGITUD_MINIMA_CODIGO_SERVICIO},{LONGITUD_MAXIMA_CODIGO_SERVICIO}}}\s*$"
+)
 
 
 @dataclass(frozen=True)

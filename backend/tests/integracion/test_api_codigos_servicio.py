@@ -175,5 +175,8 @@ def test_el_contrato_publica_los_limites_del_nombre(cliente: TestClient) -> None
     esquemas = cliente.get("/openapi.json").json()["components"]["schemas"]
 
     nombre = esquemas["CodigoServicioEsquema"]["properties"]["nombre"]
-    assert (nombre["minLength"], nombre["maxLength"]) == (2, 20)
-    assert nombre["pattern"] == r"^\S+$"
+    # Los límites van en el `pattern`, que admite los espacios de los extremos
+    # porque la API los recorta antes de validar.
+    assert nombre["pattern"] == r"^\s*\S{2,20}\s*$"
+    assert "minLength" not in nombre
+    assert "maxLength" not in nombre
