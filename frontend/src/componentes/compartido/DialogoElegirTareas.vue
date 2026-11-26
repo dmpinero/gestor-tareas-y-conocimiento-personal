@@ -1,3 +1,17 @@
+<script lang="ts">
+/** Un botón de confirmar del diálogo: "`texto` (n)". */
+export interface AccionEleccion {
+  /** Valor de `data-accion-eleccion` en su botón. */
+  clave: string
+  texto: string
+  /** Tareas que ya están en su destino: no cuentan en su (n) ni se le pasan. */
+  yaIncluida?: (tareaId: number) => boolean
+  /** Recibe los ids marcados (sin los `yaIncluida`) en el orden en que se
+   * marcaron; `null` cierra el diálogo y un mensaje lo deja abierto con él. */
+  confirmar: (ids: number[]) => Promise<string | null>
+}
+</script>
+
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
@@ -18,21 +32,24 @@ import { Label } from '@/componentes/ui/label'
 
 // Diálogo para elegir una o varias tareas de `tareas` (ya filtradas por quien lo
 // usa), en orden alfabético y filtradas por un buscador que no distingue
-// mayúsculas ni acentos. El botón "`textoAccion` (n)" llama a `confirmar` con
-// los ids en el orden en que se marcaron: si devuelve `null` cierra el diálogo
-// (`update:abierto`) y, si devuelve un mensaje, sigue abierto mostrándolo.
-// Cancelar, Escape o un clic fuera lo cierran sin cambios; al reabrirlo empieza
-// vacío. Lo usan "Relacionar tareas" y "Añadir a siguientes".
+// mayúsculas ni acentos. Cada una de las `acciones` es un botón "`texto` (n)"
+// que llama a su `confirmar` con los ids marcados en el orden en que se
+// marcaron, sin los que ya están en su destino (`yaIncluida`): si devuelve
+// `null` cierra el diálogo (`update:abierto`) y, si devuelve un mensaje, sigue
+// abierto mostrándolo. `nota` añade un texto breve junto a una tarea (p. ej.
+// dónde está ya). Cancelar, Escape o un clic fuera lo cierran sin cambios; al
+// reabrirlo empieza vacío. Lo usan "Relacionar tareas" (una acción) y "Añadir a
+// siguientes" (dos).
 const props = defineProps<{
   abierto: boolean
   titulo: string
   descripcion: string
   etiquetaLista: string
-  textoAccion: string
   textoSinTareas: string
   idBuscador: string
   tareas: readonly Tarea[]
-  confirmar: (ids: number[]) => Promise<string | null>
+  acciones: readonly AccionEleccion[]
+  nota?: (tarea: Tarea) => string | null
 }>()
 const emit = defineEmits<{ 'update:abierto': [abierto: boolean] }>()
 
@@ -60,10 +77,16 @@ const visibles = computed(() => {
   return disponibles.value.filter((otra) => normalizarTextoBusqueda(otra.nombre).includes(clave))
 })
 
-const textoConfirmar = computed(() =>
-  elegidas.value.length === 0
-    ? props.textoAccion
-    : `${props.textoAccion} (${elegidas.value.length})`,
+// Ids marcados que recibe cada acción, en el orden en que se marcaron.
+function idsPara(accion: AccionEleccion): number[] {
+  return elegidas.value.filter((id) => !accion.yaIncluida?.(id))
+}
+
+const botones = computed(() =>
+  props.acciones.map((accion) => {
+    const n = idsPara(accion).length
+    return { accion, n, texto: n === 0 ? accion.texto : `${accion.texto} (${n})` }
+  }),
 )
 
 function alCambiarApertura(abierto: boolean): void {
@@ -71,11 +94,12 @@ function alCambiarApertura(abierto: boolean): void {
   emit('update:abierto', abierto)
 }
 
-async function alConfirmar(): Promise<void> {
-  if (elegidas.value.length === 0 || procesando.value) return
+async function alConfirmar(accion: AccionEleccion): Promise<void> {
+  const ids = idsPara(accion)
+  if (ids.length === 0 || procesando.value) return
   procesando.value = true
   error.value = null
-  const fallo = await props.confirmar([...elegidas.value])
+  const fallo = await accion.confirmar(ids)
   procesando.value = false
   if (fallo !== null) {
     error.value = fallo
@@ -118,9 +142,17 @@ async function alConfirmar(): Promise<void> {
                 :disabled="procesando"
                 class="accent-primary size-4 shrink-0"
               />
-              <span :class="otra.completada ? 'text-muted-foreground line-through' : ''">{{
-                otra.nombre
-              }}</span>
+              <span
+                data-nombre-eleccion
+                :class="otra.completada ? 'text-muted-foreground line-through' : ''"
+                >{{ otra.nombre }}</span
+              >
+              <span
+                v-if="props.nota?.(otra)"
+                data-nota-eleccion
+                class="bg-muted text-muted-foreground ml-auto shrink-0 rounded-full px-2 py-0.5 text-xs"
+                >{{ props.nota(otra) }}</span
+              >
             </label>
           </li>
         </ul>
@@ -140,11 +172,14 @@ async function alConfirmar(): Promise<void> {
           <Button type="button" variant="outline" :disabled="procesando">Cancelar</Button>
         </DialogClose>
         <Button
+          v-for="boton in botones"
+          :key="boton.accion.clave"
           type="button"
           data-confirmar-eleccion
-          :disabled="elegidas.length === 0 || procesando"
-          @click="alConfirmar"
-          >{{ textoConfirmar }}</Button
+          :data-accion-eleccion="boton.accion.clave"
+          :disabled="boton.n === 0 || procesando"
+          @click="alConfirmar(boton.accion)"
+          >{{ boton.texto }}</Button
         >
       </DialogFooter>
     </DialogContent>

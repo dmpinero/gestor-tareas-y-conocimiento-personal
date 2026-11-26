@@ -59,9 +59,11 @@ async function montar(
   cola: TareaSiguiente[],
   tareas: Tarea[] = TAREAS,
   foco: Foco | null = null,
+  elegidas: TareaSiguiente[] = [],
 ): Promise<VueWrapper> {
   vi.mocked(clienteApi.obtener).mockImplementation(async (ruta) => {
     if (ruta === '/siguientes') return cola
+    if (ruta === '/sugerencias') return elegidas
     if (ruta === '/tareas') return tareas
     return null
   })
@@ -123,6 +125,7 @@ describe('PanelSiguientes', () => {
     expect(wrapper.get('h3').text()).toBe('A continuación')
     expect(clienteApi.obtener).toHaveBeenCalledWith('/siguientes')
     expect(clienteApi.obtener).toHaveBeenCalledWith('/tareas')
+    expect(clienteApi.obtener).toHaveBeenCalledWith('/sugerencias')
   })
 
   it('con la cola vacía dice «No hay tareas en la cola.»', async () => {
@@ -230,15 +233,22 @@ describe('PanelSiguientes', () => {
     expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { ids: [2, 1] })
   })
 
-  it('quitar la saca de la cola con DELETE /siguientes/{id}', async () => {
-    vi.mocked(clienteApi.eliminar).mockResolvedValue([])
+  it('la ✕ de una fila la pasa a las sugerencias elegidas con POST /sugerencias', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValue([sig(TAREAS[0]!)])
     const wrapper = await montar([sig(TAREAS[0]!)])
 
-    await wrapper.get('button[aria-label="Quitar Informe de siguientes"]').trigger('click')
+    const aspa = wrapper.get(
+      '[data-fila-siguiente] button[aria-label="Pasar Informe a sugerencias"]',
+    )
+    expect(aspa.attributes('title')).toBe('Pasar a sugerencias')
+    await aspa.trigger('click')
     await flushPromises()
 
-    expect(clienteApi.eliminar).toHaveBeenCalledWith('/siguientes/1')
+    expect(clienteApi.crear).toHaveBeenCalledWith('/sugerencias', { tarea_id: 1 })
+    expect(clienteApi.eliminar).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('No hay tareas en la cola.')
+    expect(sugerencias(wrapper)[0]).toBe('Informe')
+    expect(wrapper.get('[data-sugerencia-elegida]').text()).toContain('Elegida por ti')
   })
 
   it('«Trabajar en esta» pone la tarea en foco y la saca de la cola', async () => {
@@ -302,8 +312,59 @@ describe('PanelSiguientes', () => {
     const wrapper = await montar([])
 
     expect(wrapper.get('[data-criterio-sugerencias]').text()).toBe(
-      'Tareas pendientes que vencen antes; a igual vencimiento, por prioridad y después por antigüedad. No incluye las hibernadas, las que están en DONE, las de la cola ni la que está en foco.',
+      'Primero, las que has elegido tú (con «Buscar tareas» o con la ✕ de «A continuación»), en el orden en que las añadiste. Después, tareas pendientes que vencen antes; a igual vencimiento, por prioridad y después por antigüedad. No incluye las hibernadas, las que están en DONE, las de la cola ni la que está en foco.',
     )
+  })
+
+  it('las elegidas van primero, en orden, con «Elegida por ti», y las automáticas las excluyen', async () => {
+    const wrapper = await montar([], TAREAS, null, [sig(TAREAS[1]!), sig(TAREAS[0]!)])
+
+    expect(sugerencias(wrapper)).toEqual(['Llamar', 'Informe', 'Revisar oferta'])
+    const elegidas = wrapper.findAll('[data-sugerencia-elegida]')
+    expect(elegidas.map((e) => e.get('a').text())).toEqual(['Llamar', 'Informe'])
+    expect(elegidas.map((e) => e.get('[data-pildora-elegida]').text())).toEqual([
+      'Elegida por ti',
+      'Elegida por ti',
+    ])
+    expect(wrapper.findAll('[data-pildora-elegida]')).toHaveLength(2)
+  })
+
+  it('las automáticas siguen siendo como mucho 5 aunque haya elegidas', async () => {
+    const muchas = Array.from({ length: 8 }, (_, i) => tarea(10 + i, `T${10 + i}`))
+    const wrapper = await montar([], muchas, null, [sig(muchas[0]!)])
+
+    expect(wrapper.findAll('[data-sugerencia-elegida]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-sugerencia]:not([data-sugerencia-elegida])')).toHaveLength(5)
+  })
+
+  it('la ✕ de una elegida la quita de las sugerencias con DELETE /sugerencias/{id}', async () => {
+    vi.mocked(clienteApi.eliminar).mockResolvedValue([])
+    const wrapper = await montar([], [TAREAS[1]!], null, [sig(TAREAS[1]!)])
+
+    const aspa = wrapper.get(
+      '[data-sugerencia-elegida] button[aria-label="Quitar Llamar de sugerencias"]',
+    )
+    expect(aspa.attributes('title')).toBe('Quitar de sugerencias')
+    await aspa.trigger('click')
+    await flushPromises()
+
+    expect(clienteApi.eliminar).toHaveBeenCalledWith('/sugerencias/2')
+    expect(wrapper.findAll('[data-sugerencia-elegida]')).toHaveLength(0)
+    expect(sugerencias(wrapper)).toEqual(['Llamar'])
+  })
+
+  it('«Añadir a siguientes» en una elegida la mueve a la cola', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValue([sig(TAREAS[1]!)])
+    const wrapper = await montar([], [TAREAS[1]!], null, [sig(TAREAS[1]!)])
+
+    await wrapper
+      .get('[data-sugerencia-elegida] button[aria-label="Añadir a siguientes (Llamar)"]')
+      .trigger('click')
+    await flushPromises()
+
+    expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', { tarea_id: 2 })
+    expect(filas(wrapper)).toEqual(['Llamar'])
+    expect(wrapper.findAll('[data-sugerencia]')).toHaveLength(0)
   })
 
   it('«Añadir a siguientes» en una sugerencia la sube al final de la cola', async () => {
@@ -328,12 +389,13 @@ describe('PanelSiguientes', () => {
   })
 
   it('muestra el error de la cola', async () => {
-    vi.mocked(clienteApi.eliminar).mockRejectedValue(new Error('caído'))
+    vi.mocked(clienteApi.crear).mockRejectedValue(new Error('caído'))
     const wrapper = await montar([sig(TAREAS[0]!)])
 
-    await wrapper.get('button[aria-label="Quitar Informe de siguientes"]').trigger('click')
+    await wrapper.get('button[aria-label="Pasar Informe a sugerencias"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.get('[role="alert"]').text()).toBe('caído')
+    expect(filas(wrapper)).toEqual(['Informe'])
   })
 })

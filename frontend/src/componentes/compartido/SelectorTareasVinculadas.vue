@@ -2,7 +2,9 @@
 import { computed } from 'vue'
 
 import type { Tarea } from '@/api/tipos'
-import DialogoElegirTareas from '@/componentes/compartido/DialogoElegirTareas.vue'
+import DialogoElegirTareas, {
+  type AccionEleccion,
+} from '@/componentes/compartido/DialogoElegirTareas.vue'
 import { useTiendaTareas } from '@/stores/tareas'
 
 // Diálogo para vincular `tarea` con una o varias tareas más: ofrece las demás
@@ -26,6 +28,10 @@ async function vincular(ids: number[]): Promise<string | null> {
   )
   return hecho ? null : tienda.error
 }
+
+const acciones: AccionEleccion[] = [
+  { clave: 'relacionar', texto: 'Relacionar', confirmar: vincular },
+]
 </script>
 
 <template>
@@ -34,11 +40,10 @@ async function vincular(ids: number[]): Promise<string | null> {
     :titulo="`Relacionar tareas con ${props.tarea.nombre}`"
     descripcion="Elige una o varias tareas. Cada una mostrará también esta tarea entre sus tareas relacionadas."
     etiqueta-lista="Tareas que se pueden relacionar"
-    texto-accion="Relacionar"
     texto-sin-tareas="No quedan tareas por relacionar."
     :id-buscador="`buscar-vinculadas-${props.tarea.id}`"
     :tareas="disponibles"
-    :confirmar="vincular"
+    :acciones="acciones"
     @update:abierto="emit('update:abierto', $event)"
   />
 </template>

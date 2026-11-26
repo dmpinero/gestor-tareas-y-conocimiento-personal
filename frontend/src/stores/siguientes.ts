@@ -3,8 +3,11 @@ import { ref } from 'vue'
 
 import {
   anadirSiguiente,
+  anadirSugerenciaElegida,
   obtenerSiguientes,
+  obtenerSugerenciasElegidas,
   quitarSiguiente,
+  quitarSugerenciaElegida,
   reordenarSiguientes,
 } from '@/api/siguientes'
 import type { TareaSiguiente } from '@/api/tipos'
@@ -15,8 +18,14 @@ import { useTiendaTareas } from '@/stores/tareas'
 // actual, en orden. Como las demás tiendas, las acciones devuelven `true` si la
 // API respondió bien; si falla, guardan el mensaje en `error` y la cola se
 // queda como estaba.
+//
+// También guarda las sugerencias elegidas por el usuario (`elegidas`), que van
+// antes que las automáticas. Una tarea está como mucho en una de las dos
+// listas: el servidor la mueve al añadirla a la otra y la tienda lo refleja
+// quitándola localmente de la lista que no devolvió.
 export const useTiendaSiguientes = defineStore('siguientes', () => {
   const cola = ref<TareaSiguiente[]>([])
+  const elegidas = ref<TareaSiguiente[]>([])
   const error = ref<string | null>(null)
 
   async function ejecutar(accion: () => Promise<void>): Promise<boolean> {
@@ -36,9 +45,14 @@ export const useTiendaSiguientes = defineStore('siguientes', () => {
     })
   }
 
+  function sinTarea(lista: TareaSiguiente[], tareaId: number): TareaSiguiente[] {
+    return lista.filter((entrada) => entrada.tarea_id !== tareaId)
+  }
+
   function anadir(tareaId: number): Promise<boolean> {
     return ejecutar(async () => {
       cola.value = await anadirSiguiente(tareaId)
+      elegidas.value = sinTarea(elegidas.value, tareaId)
     })
   }
 
@@ -49,6 +63,39 @@ export const useTiendaSiguientes = defineStore('siguientes', () => {
       if (!(await anadir(id))) return false
     }
     return true
+  }
+
+  function cargarElegidas(): Promise<boolean> {
+    return ejecutar(async () => {
+      elegidas.value = await obtenerSugerenciasElegidas()
+    })
+  }
+
+  /** La añade al final de las sugerencias elegidas (si estaba en la cola, sale
+   * de ella). La ✕ de una fila de la cola en Inicio usa esta acción. */
+  function anadirElegida(tareaId: number): Promise<boolean> {
+    return ejecutar(async () => {
+      elegidas.value = await anadirSugerenciaElegida(tareaId)
+      cola.value = sinTarea(cola.value, tareaId)
+    })
+  }
+
+  // Como `anadirVarias`, para las sugerencias elegidas.
+  async function anadirElegidas(ids: number[]): Promise<boolean> {
+    for (const id of ids) {
+      if (!(await anadirElegida(id))) return false
+    }
+    return true
+  }
+
+  function quitarElegida(tareaId: number): Promise<boolean> {
+    return ejecutar(async () => {
+      elegidas.value = await quitarSugerenciaElegida(tareaId)
+    })
+  }
+
+  function estaElegida(tareaId: number): boolean {
+    return elegidas.value.some((entrada) => entrada.tarea_id === tareaId)
   }
 
   function reordenar(ids: number[]): Promise<boolean> {
@@ -112,14 +159,15 @@ export const useTiendaSiguientes = defineStore('siguientes', () => {
     return cargar()
   }
 
-  // El servidor la saca de la cola al borrarla; esta lo refleja sin volver a
-  // pedirla.
+  // El servidor la saca de la cola (o de las elegidas) al borrarla; esta lo
+  // refleja sin volver a pedirla.
   function olvidarTarea(tareaId: number): void {
-    cola.value = cola.value.filter((entrada) => entrada.tarea_id !== tareaId)
+    cola.value = sinTarea(cola.value, tareaId)
+    elegidas.value = sinTarea(elegidas.value, tareaId)
   }
 
   // Reflejan sin repetir código en cada componente lo que el servidor ya hace
-  // con la cola: poner en foco una tarea (o una subtarea suya) o borrarla la
+  // con la cola y las elegidas: poner en foco una tarea (o una subtarea suya) o borrarla la
   // saca, y la cola no muestra las completadas (reabrirla la devuelve a su
   // sitio, por eso se recarga).
   useTiendaFoco().$onAction(({ name, args, after }) => {
@@ -140,17 +188,26 @@ export const useTiendaSiguientes = defineStore('siguientes', () => {
         const tarea = tiendaTareas.tareas.find((t) => t.id === tareaId)
         if (!tarea || tiendaTareas.error) return
         if (tarea.completada) olvidarTarea(tareaId)
-        else void cargar()
+        else {
+          void cargar()
+          void cargarElegidas()
+        }
       })
     }
   })
 
   return {
     cola,
+    elegidas,
     error,
     cargar,
     anadir,
     anadirVarias,
+    cargarElegidas,
+    anadirElegida,
+    anadirElegidas,
+    quitarElegida,
+    estaElegida,
     reordenar,
     moverA,
     subir,

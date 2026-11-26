@@ -36,10 +36,22 @@ async function colaEnApi(request: APIRequestContext): Promise<number[]> {
   return cola.map((entrada) => entrada.tarea_id)
 }
 
-// La cola es única para toda la aplicación: cada test deja la que había y se
-// lleva por delante solo sus tareas.
+async function sugerenciasEnApi(request: APIRequestContext): Promise<number[]> {
+  const lista = (await (await request.get('/api/v1/sugerencias')).json()) as { tarea_id: number }[]
+  return lista.map((entrada) => entrada.tarea_id)
+}
+
+// La cola y las sugerencias elegidas son únicas para toda la aplicación: cada
+// test saca de ellas solo sus tareas.
 async function vaciarCola(request: APIRequestContext, ids: number[]): Promise<void> {
-  for (const id of ids) await request.delete(`/api/v1/siguientes/${id}`)
+  for (const id of ids) {
+    await request.delete(`/api/v1/siguientes/${id}`)
+    await request.delete(`/api/v1/sugerencias/${id}`)
+  }
+}
+
+function sugerencias(page: Page) {
+  return page.getByRole('region', { name: 'Sugerencias' })
 }
 
 // Comparten la cola: dentro de este archivo, uno detrás de otro.
@@ -112,12 +124,22 @@ test('añade tareas a la cola, la reordena y pasa a la siguiente desde la barra 
     await expect(filas.nth(0)).toContainText(primera)
     expect(await colaEnApi(request)).toEqual([idPrimera])
 
-    // Quitar desde el panel.
+    // La ✕ de «A continuación» la pasa a las sugerencias elegidas.
     await panel(page)
-      .getByRole('button', { name: `Quitar ${primera} de siguientes` })
+      .getByRole('button', { name: `Pasar ${primera} a sugerencias` })
       .click()
     await expect(panel(page)).toContainText('No hay tareas en la cola.')
     expect(await colaEnApi(request)).toEqual([])
+    const elegida = sugerencias(page).locator('[data-sugerencia-elegida]', { hasText: primera })
+    await expect(elegida).toContainText('Elegida por ti')
+    expect(await sugerenciasEnApi(request)).toEqual([idPrimera])
+
+    // Y la ✕ de sugerencias la quita de ahí.
+    await sugerencias(page)
+      .getByRole('button', { name: `Quitar ${primera} de sugerencias` })
+      .click()
+    await expect(elegida).toHaveCount(0)
+    expect(await sugerenciasEnApi(request)).toEqual([])
   } finally {
     await vaciarCola(request, [idPrimera, idSegunda])
     await request.delete('/api/v1/foco')
@@ -137,9 +159,7 @@ test('una tarea muy vencida aparece en las sugerencias y se sube a la cola', asy
   })
   try {
     await page.goto('/')
-    const sugerencia = page
-      .getByRole('region', { name: 'Sugerencias' })
-      .locator('[data-sugerencia]', { hasText: nombre })
+    const sugerencia = sugerencias(page).locator('[data-sugerencia]', { hasText: nombre })
     await expect(sugerencia).toBeVisible()
     await sugerencia.getByRole('button', { name: /Añadir a siguientes/ }).click()
     await expect(panel(page).locator('[data-fila-siguiente]', { hasText: nombre })).toBeVisible()
@@ -182,21 +202,27 @@ test('el buscador añade varias tareas a la cola desde Inicio y desde la barra s
       .analyze()
     expect(auditoria.violations).toEqual([])
     await page.screenshot({ path: 'e2e/capturas/siguientes-03-buscador.png' })
-    await dialogo.getByRole('button', { name: 'Añadir (2)' }).click()
+    await dialogo.getByRole('button', { name: 'A continuación (2)' }).click()
     await expect(dialogo).toBeHidden()
     await expect(panel(page).locator('[data-fila-siguiente]')).toHaveCount(2)
     expect(await colaEnApi(request)).toEqual([ids[1], ids[0]])
 
-    // Desde el desplegable: ya no ofrece las de la cola.
+    // Desde el desplegable, a Sugerencias: ofrece también las de la cola
+    // (con una nota), y añadirlas a la otra lista las mueve.
     await page.locator('[data-siguientes]').click()
     await page.locator('[data-buscar-siguientes]').last().click()
     await expect(dialogo).toBeVisible()
     await dialogo.getByRole('searchbox', { name: 'Buscar tarea' }).fill(`${marca}`)
-    await expect(dialogo.getByRole('checkbox')).toHaveCount(1)
+    await expect(dialogo.getByRole('checkbox')).toHaveCount(3)
     await dialogo.getByRole('checkbox', { name: nombres[2] }).check()
-    await dialogo.getByRole('button', { name: 'Añadir (1)' }).click()
+    await dialogo.getByRole('checkbox', { name: nombres[0] }).check()
+    await dialogo.getByRole('button', { name: 'Sugerencias (2)' }).click()
     await expect(dialogo).toBeHidden()
-    expect(await colaEnApi(request)).toEqual([ids[1], ids[0], ids[2]])
+    expect(await sugerenciasEnApi(request)).toEqual([ids[2], ids[0]])
+    expect(await colaEnApi(request)).toEqual([ids[1]])
+    await expect(
+      sugerencias(page).locator('[data-sugerencia-elegida]', { hasText: String(marca) }),
+    ).toHaveCount(2)
   } finally {
     await vaciarCola(request, ids)
     for (const id of ids) await request.delete(`/api/v1/tareas/${id}`)

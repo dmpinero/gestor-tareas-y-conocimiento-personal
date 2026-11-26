@@ -27,11 +27,14 @@ import { useTiendaTareas } from '@/stores/tareas'
 // Inicio: "A continuación" y "Sugerencias", con tarjetas como las del
 // tablero (borde con el color de la prioridad, píldora de prioridad, fecha y
 // cuenta atrás). Panel "A continuación": la cola de siguientes, en orden, con
-// "Trabajar en esta", subir, bajar y quitar en cada fila; debajo, sugerencias
-// calculadas con las tareas cargadas (ver `sugerenciasSiguientes`) para
-// añadirlas al final de la cola, cada una con su cuenta atrás hasta el
-// vencimiento y su prioridad, que son el porqué de su orden (el criterio se
-// explica bajo el título). Al montarse carga la cola y las tareas.
+// "Trabajar en esta", subir, bajar y una ✕ que la pasa a las sugerencias
+// elegidas. "Sugerencias": primero las elegidas por el usuario, en orden y con
+// una ✕ para quitarlas; después las calculadas con las tareas cargadas (ver
+// `sugerenciasSiguientes`), sin las elegidas. Cada una se añade al final de la
+// cola con «Añadir a siguientes» y muestra su cuenta atrás hasta el
+// vencimiento y su prioridad, que son el porqué del orden automático (el
+// criterio se explica bajo el título). Al montarse carga la cola, las elegidas
+// y las tareas.
 const tiendaSiguientes = useTiendaSiguientes()
 const tiendaTareas = useTiendaTareas()
 const tiendaFoco = useTiendaFoco()
@@ -39,7 +42,7 @@ const tiendaFoco = useTiendaFoco()
 const sugerencias = computed(() =>
   sugerenciasSiguientes(
     tiendaTareas.tareas,
-    tiendaSiguientes.cola.map((entrada) => entrada.tarea_id),
+    [...tiendaSiguientes.cola, ...tiendaSiguientes.elegidas].map((entrada) => entrada.tarea_id),
     tiendaFoco.foco?.tarea_id ?? null,
   ),
 )
@@ -78,6 +81,8 @@ function clasePildoraPrioridad(prioridad: number): string {
   return `${CLASE_PILDORA} ${clave === 'sin' ? 'bg-muted text-muted-foreground' : PILDORA_PRIORIDAD[clave]}`
 }
 
+const CLASE_PILDORA_ELEGIDA = `${CLASE_PILDORA} border bg-secondary text-secondary-foreground`
+
 const CLASE_TITULO = 'text-base font-semibold'
 const CLASE_CRITERIO = 'text-muted-foreground text-sm'
 
@@ -86,6 +91,7 @@ const CLASE_ENLACE =
 
 onMounted(() => {
   void tiendaSiguientes.cargar()
+  void tiendaSiguientes.cargarElegidas()
   void tiendaTareas.cargar()
 })
 </script>
@@ -217,9 +223,9 @@ onMounted(() => {
               variant="ghost"
               size="icon"
               class="text-muted-foreground size-8"
-              :aria-label="`Quitar ${entrada.tarea_nombre} de siguientes`"
-              title="Quitar de siguientes"
-              @click="tiendaSiguientes.quitar(entrada.tarea_id)"
+              :aria-label="`Pasar ${entrada.tarea_nombre} a sugerencias`"
+              title="Pasar a sugerencias"
+              @click="tiendaSiguientes.anadirElegida(entrada.tarea_id)"
             >
               <X aria-hidden="true" />
             </Button>
@@ -237,18 +243,59 @@ onMounted(() => {
       <div>
         <h3 id="titulo-sugerencias" :class="CLASE_TITULO">Sugerencias</h3>
         <p data-criterio-sugerencias :class="CLASE_CRITERIO">
-          Tareas pendientes que vencen antes; a igual vencimiento, por prioridad y después por
-          antigüedad. No incluye las hibernadas, las que están en DONE, las de la cola ni la que
-          está en foco.
+          Primero, las que has elegido tú (con «Buscar tareas» o con la ✕ de «A continuación»), en
+          el orden en que las añadiste. Después, tareas pendientes que vencen antes; a igual
+          vencimiento, por prioridad y después por antigüedad. No incluye las hibernadas, las que
+          están en DONE, las de la cola ni la que está en foco.
         </p>
       </div>
       <p
-        v-if="sugerencias.length === 0"
+        v-if="sugerencias.length === 0 && tiendaSiguientes.elegidas.length === 0"
         class="text-muted-foreground rounded-lg border border-dashed p-4 text-center text-sm"
       >
         No hay sugerencias.
       </p>
       <ul v-else class="grid min-w-0 grid-cols-1 gap-2">
+        <li
+          v-for="entrada in tiendaSiguientes.elegidas"
+          :key="`elegida-${entrada.tarea_id}`"
+          data-sugerencia
+          data-sugerencia-elegida
+          :class="[claseTarjeta(tareaPorId.get(entrada.tarea_id)), 'flex items-center gap-2']"
+        >
+          <div class="min-w-0 flex-1">
+            <span class="flex min-w-0 items-center gap-2">
+              <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE">{{
+                entrada.tarea_nombre
+              }}</RouterLink>
+              <span data-pildora-elegida :class="[CLASE_PILDORA_ELEGIDA, 'shrink-0']"
+                >Elegida por ti</span
+              >
+            </span>
+            <usarDatos
+              v-if="tareaPorId.get(entrada.tarea_id)"
+              :tarea="tareaPorId.get(entrada.tarea_id)!"
+            />
+          </div>
+          <span class="flex shrink-0 items-center">
+            <BotonSiguientes
+              :tarea-id="entrada.tarea_id"
+              :nombre="entrada.tarea_nombre"
+              :compacto="!ancha"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              class="text-muted-foreground size-8"
+              :aria-label="`Quitar ${entrada.tarea_nombre} de sugerencias`"
+              title="Quitar de sugerencias"
+              @click="tiendaSiguientes.quitarElegida(entrada.tarea_id)"
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </span>
+        </li>
         <li
           v-for="tarea in sugerencias"
           :key="tarea.id"
