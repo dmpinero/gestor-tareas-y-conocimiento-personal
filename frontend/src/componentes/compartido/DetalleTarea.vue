@@ -22,6 +22,7 @@ import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
+import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
 import BotonHibernar from '@/componentes/compartido/BotonHibernar.vue'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
@@ -529,6 +530,12 @@ async function alHibernar(conComentario: boolean): Promise<void> {
           v-if="!props.editando && tareaMostrada"
           :tarea-id="tareaMostrada.id"
           :nombre="tareaMostrada.nombre"
+        />
+        <BotonSiguientes
+          v-if="!props.editando && tareaMostrada"
+          :tarea-id="tareaMostrada.id"
+          :nombre="tareaMostrada.nombre"
+          :completada="tareaMostrada.completada"
         />
         <BotonHibernar
           v-if="!props.editando && tareaMostrada"

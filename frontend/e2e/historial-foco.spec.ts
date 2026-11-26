@@ -66,6 +66,8 @@ test('el historial de foco lista los cambios por día y en total, y lleva a la t
 
   // Pulsar A abre su detalle.
   await entradas.nth(1).getByRole('link', { name: nombreA }).click()
-  await expect(page).toHaveURL(new RegExp(`/tareas\\?tarea=${idA}`))
+  // El enlace va a /tareas?tarea=<id>, que abre el detalle y quita el
+  // parámetro (sin esperar si las tareas ya estaban cargadas, p. ej. por Inicio).
   await expect(page.getByRole('dialog', { name: nombreA })).toBeVisible()
+  await expect(page).toHaveURL(/\/tareas$/)
 })

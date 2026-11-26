@@ -255,6 +255,29 @@ describe('TableroTareas: tarea en foco', () => {
     )
   })
 
+  it('"Añadir a siguientes" de una tarjeta la añade a la cola; no aparece en las completadas', async () => {
+    const { clienteApi } = await import('@/api/cliente')
+    vi.mocked(clienteApi.crear).mockResolvedValue([
+      { tarea_id: 2, tarea_nombre: 'Con subtarea de José' },
+    ])
+    await montar([], null, [PROPIA, CON_SUBTAREA, { ...AJENA, completada: true }])
+
+    tarjetaDe('Con subtarea de José')
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Añadir a siguientes (Con subtarea de José)"]',
+      )!
+      .click()
+    await flushPromises()
+
+    expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', { tarea_id: 2 })
+    expect(
+      tarjetaDe('Con subtarea de José').querySelector(
+        'button[aria-label="Quitar de siguientes (Con subtarea de José)"]',
+      ),
+    ).not.toBeNull()
+    expect(tarjetaDe('Ajena').querySelector('[data-boton-siguientes]')).toBeNull()
+  })
+
   describe('agrupado por subestado', () => {
     const CON_SUBESTADOS: Tarea[] = [
       { ...PROPIA, subestado: 'Bloqueado' },

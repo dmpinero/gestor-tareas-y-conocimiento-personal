@@ -21,7 +21,9 @@ class RepositorioFoco(Protocol):
         foco anterior si lo había, y confirma. La subtarea debe ser de la tarea.
 
         En la misma transacción cierra el periodo en curso del historial (``hasta =
-        desde``), si lo había, y abre otro con los nombres actuales.
+        desde``), si lo había, y abre otro con los nombres actuales; y saca la tarea
+        de la cola de siguientes, si estaba (también al poner en foco una subtarea
+        suya).
 
         Lanza ``EntidadNoEncontradaError`` si la tarea o la subtarea ya no existen
         (p. ej. otra petición las ha borrado); el foco anterior no cambia."""

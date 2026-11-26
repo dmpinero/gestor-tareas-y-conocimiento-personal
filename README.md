@@ -369,6 +369,31 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
   con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
   `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
+- A continuación y Sugerencias: para saber en qué trabajar después del foco.
+  - **A continuación** es la cola de tareas que eliges, en el orden en que
+    quieres abordarlas. "Añadir a siguientes" (detalle, tablero y menú "⋯" del
+    listado) pone la tarea al final; si ya está, "Quitar de siguientes" la saca.
+    Se reordena con las flechas o arrastrando las tareas.
+  - **Sugerencias** muestra primero las que has elegido tú ("Elegida por ti",
+    en el orden en que las añadiste) y después hasta 5 automáticas: las
+    pendientes que vencen antes (las sin vencimiento al final), luego por
+    prioridad y por antigüedad, sin las hibernadas, las que están en DONE, las
+    de las dos listas ni la del foco.
+  - En Inicio, cada tarea es una tarjeta con su prioridad, su fecha y la cuenta
+    atrás hasta el vencimiento, y cada sección explica su criterio. La ✕ de una
+    tarea de A continuación la pasa a Sugerencias; la ✕ de una elegida la quita
+    de Sugerencias.
+  - "Buscar tareas" (Inicio) y "Buscar y añadir tareas" (desplegable
+    «Siguientes» de la barra superior) abren un buscador para añadir varias a
+    **A continuación** o a **Sugerencias**, en el orden en que se marcan. Una
+    tarea está como mucho en una de las dos listas: añadirla a una la mueve.
+  - El desplegable «Siguientes» enseña las 3 primeras de la cola (también se
+    reordenan arrastrando) y "Pasar a la siguiente: X", que la pone en foco.
+    Poner en foco una tarea la saca de las listas, borrarla también, y las
+    completadas no se ven (si se reabren vuelven a su sitio).
+  - Se guarda en la tabla `cola_siguientes` (columna `lista`). API: `GET`/`POST`/
+    `PUT /api/v1/siguientes`, `DELETE /api/v1/siguientes/{tarea_id}`,
+    `GET`/`POST /api/v1/sugerencias` y `DELETE /api/v1/sugerencias/{tarea_id}`.
 - Hibernar una tarea: el botón "Hibernar" (en el detalle, en la tarjeta del
   tablero y en el menú "⋯" del listado) detiene su cuenta atrás
   hasta el vencimiento y pide un comentario opcional, que se guarda como un

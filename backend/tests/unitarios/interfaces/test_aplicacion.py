@@ -51,6 +51,10 @@ def test_la_api_expone_salud_tareas_catalogos_workflows_y_grupos_de_estados_bajo
         "/api/v1/codigos-servicio/{id_codigo}",
         "/api/v1/foco",
         "/api/v1/foco/historial",
+        "/api/v1/siguientes",
+        "/api/v1/siguientes/{id_tarea}",
+        "/api/v1/sugerencias",
+        "/api/v1/sugerencias/{id_tarea}",
     }
 
 
@@ -59,6 +63,10 @@ def test_la_api_publica_los_metodos_de_cada_ruta_nueva_o_cambiada() -> None:
     subtarea = "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}"
 
     assert set(rutas["/api/v1/tareas/{id_tarea}"]) == {"put", "delete"}
+    assert set(rutas["/api/v1/siguientes"]) == {"get", "post", "put"}
+    assert set(rutas["/api/v1/siguientes/{id_tarea}"]) == {"delete"}
+    assert set(rutas["/api/v1/sugerencias"]) == {"get", "post"}
+    assert set(rutas["/api/v1/sugerencias/{id_tarea}"]) == {"delete"}
     assert set(rutas[f"{subtarea}/comentarios"]) == {"get", "post"}
     assert set(rutas[f"{subtarea}/comentarios/{{id_comentario}}"]) == {"put", "delete"}
     grupos = "/api/v1/grupos-estados"

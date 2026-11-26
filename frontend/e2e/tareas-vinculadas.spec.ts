@@ -71,7 +71,7 @@ test('relaciona una tarea con dos a la vez, se ve en ambos sentidos y se quita',
   await expect(selector).toBeVisible()
   // Sin filtrar (la base de e2e tiene muchas tareas), la lista se desplaza dentro
   // del diálogo y no tapa los botones.
-  const lista = (await selector.locator('[data-lista-vinculables]').boundingBox())!
+  const lista = (await selector.locator('[data-lista-tareas]').boundingBox())!
   const cancelar = (await selector.getByRole('button', { name: 'Cancelar' }).boundingBox())!
   const dialogo = (await selector.boundingBox())!
   expect(lista.y + lista.height).toBeLessThanOrEqual(cancelar.y)

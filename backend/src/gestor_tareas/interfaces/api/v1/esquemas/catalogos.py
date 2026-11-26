@@ -3,8 +3,6 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, Field
 
 from gestor_tareas.dominio.codigo_servicio.entidades import (
-    LONGITUD_MAXIMA_CODIGO_SERVICIO,
-    LONGITUD_MINIMA_CODIGO_SERVICIO,
     PATRON_CODIGO_SERVICIO,
     validar_nombre_codigo_servicio,
 )
@@ -18,17 +16,12 @@ NombreSubestado = Annotated[
 
 # Nombre de un código de servicio: se recorta y la regla del dominio comprueba la
 # longitud (2–20) y que no tenga espacios, con mensajes en español. El contrato
-# publica esos mismos límites y el `pattern` sin espacios.
+# publica esas mismas reglas en el `pattern` (que admite los espacios de los
+# extremos, porque se recortan).
 NombreCodigoServicio = Annotated[
     TextoObligatorio,
     AfterValidator(validar_nombre_codigo_servicio),
-    Field(
-        json_schema_extra={
-            "minLength": LONGITUD_MINIMA_CODIGO_SERVICIO,
-            "maxLength": LONGITUD_MAXIMA_CODIGO_SERVICIO,
-            "pattern": PATRON_CODIGO_SERVICIO,
-        }
-    ),
+    Field(json_schema_extra={"pattern": PATRON_CODIGO_SERVICIO}),
 ]
 
 

@@ -19,6 +19,7 @@ import AvatarPersona from '@/componentes/compartido/AvatarPersona.vue'
 import BarraEstados from '@/componentes/compartido/BarraEstados.vue'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
+import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
 import BotonHibernar from '@/componentes/compartido/BotonHibernar.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
@@ -1122,6 +1123,12 @@ function terminarArrastre(): void {
                             <MessageSquare aria-hidden="true" />
                           </Button>
                           <BotonFoco :tarea-id="tarea.id" :nombre="tarea.nombre" compacto />
+                          <BotonSiguientes
+                            :tarea-id="tarea.id"
+                            :nombre="tarea.nombre"
+                            :completada="tarea.completada"
+                            compacto
+                          />
                           <BotonHibernar :tarea="tarea" compacto />
                         </span>
 

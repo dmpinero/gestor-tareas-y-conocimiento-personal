@@ -1067,7 +1067,7 @@ describe('VistaTareas', () => {
   })
 
   describe('acciones de la fila', () => {
-    it('cada fila tiene un único menú "⋯" con Editar, Ver detalle, Trabajar en esta, Hibernar y Eliminar, que conservan su nombre accesible', async () => {
+    it('cada fila tiene un único menú "⋯" con Editar, Ver detalle, Trabajar en esta, Añadir a siguientes, Hibernar y Eliminar, que conservan su nombre accesible', async () => {
       const envoltorio = await montar()
 
       const menu = envoltorio.get('button[aria-label="Acciones de la tarea Escribir informe"]')
@@ -1094,6 +1094,7 @@ describe('VistaTareas', () => {
         'Editar tarea Escribir informe',
         'Ver detalle de la tarea Escribir informe',
         'Trabajar en esta (Escribir informe)',
+        'Añadir a siguientes (Escribir informe)',
         'Hibernar la tarea Escribir informe',
         'Eliminar la tarea Escribir informe',
       ])
@@ -1101,6 +1102,7 @@ describe('VistaTareas', () => {
         'Editar',
         'Ver detalle',
         'Trabajar en esta',
+        'Añadir a siguientes',
         'Hibernar',
         'Eliminar',
       ])

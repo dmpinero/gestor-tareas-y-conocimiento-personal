@@ -1458,6 +1458,7 @@ async function guardar(): Promise<void> {
         :nombre="tarea.nombre"
         :id-disparador="idBotonAcciones(tarea.id)"
         :tarea-id="tarea.id"
+        :completada="tarea.completada"
         @editar="abrirParaEditar(tarea)"
         @detalle="idEnDetalle = tarea.id"
         :hibernada="estaHibernada(tarea)"

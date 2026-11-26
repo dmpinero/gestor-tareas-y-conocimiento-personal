@@ -893,6 +893,30 @@ describe('DetalleTarea', () => {
       expect(botonFoco.textContent?.trim()).toBe('Dejar de trabajar')
     })
 
+    it('"Añadir a siguientes" del pie la añade a la cola; en una completada no aparece', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValueOnce([
+        { tarea_id: 2, tarea_nombre: 'Leer artículo' },
+      ])
+      await montar(TAREA_SIN_TIPO)
+
+      modal()
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Añadir a siguientes (Leer artículo)"]',
+        )!
+        .click()
+      await flushPromises()
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', { tarea_id: 2 })
+      expect(
+        modal().querySelector('button[aria-label="Quitar de siguientes (Leer artículo)"]'),
+      ).not.toBeNull()
+
+      contenedor?.unmount()
+      document.body.innerHTML = ''
+      await montar({ ...TAREA_SIN_TIPO, completada: true })
+      expect(modal().querySelector('[data-boton-siguientes]')).toBeNull()
+    })
+
     it('con una subtarea en foco la cabecera no se marca', async () => {
       await montar(TAREA_SIN_TIPO)
       useTiendaFoco().foco = {

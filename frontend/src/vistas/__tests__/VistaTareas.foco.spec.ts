@@ -189,6 +189,49 @@ describe('VistaTareas: tarea en foco', () => {
     expect(useTiendaFoco().foco).toBeNull()
   })
 
+  it('el menú de la fila ofrece "Añadir a siguientes" y la añade a la cola', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValue([
+      { tarea_id: 1, tarea_nombre: 'Escribir informe' },
+    ])
+    const envoltorio = await montar('/tareas')
+
+    await envoltorio
+      .get('button[aria-label="Acciones de la tarea Escribir informe"]')
+      .trigger('click')
+    await flushPromises()
+    document.body
+      .querySelector<HTMLButtonElement>(
+        '[data-slot="popover-content"] button[aria-label="Añadir a siguientes (Escribir informe)"]',
+      )!
+      .click()
+    await flushPromises()
+
+    expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', { tarea_id: 1 })
+    await envoltorio
+      .get('button[aria-label="Acciones de la tarea Escribir informe"]')
+      .trigger('click')
+    await flushPromises()
+    expect(
+      document.body.querySelector(
+        '[data-slot="popover-content"] button[aria-label="Quitar de siguientes (Escribir informe)"]',
+      ),
+    ).not.toBeNull()
+  })
+
+  it('en una tarea completada el menú no ofrece "Añadir a siguientes"', async () => {
+    const envoltorio = await montar('/tareas', null, [
+      { ...tarea(1, 'Escribir informe'), completada: true },
+    ])
+
+    await envoltorio
+      .get('button[aria-label="Acciones de la tarea Escribir informe"]')
+      .trigger('click')
+    await flushPromises()
+
+    expect(document.body.querySelector('[data-slot="popover-content"]')).not.toBeNull()
+    expect(document.body.textContent).not.toContain('Añadir a siguientes')
+  })
+
   it('muestra el error si no se pudo poner en foco', async () => {
     vi.mocked(clienteApi.actualizar).mockRejectedValue(new Error('Tarea no encontrada'))
     const envoltorio = await montar('/tareas')

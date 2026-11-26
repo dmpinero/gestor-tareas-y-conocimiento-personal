@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 
 import { clienteApi } from '@/api/cliente'
-import type { Foco } from '@/api/tipos'
+import type { Foco, TareaSiguiente } from '@/api/tipos'
 import { useTiendaFoco } from '@/stores/foco'
+import { useTiendaSiguientes } from '@/stores/siguientes'
 import IndicadorFoco from '../IndicadorFoco.vue'
 
 vi.mock('@/api/cliente', async (original) => ({
@@ -25,6 +26,13 @@ const FOCO_TAREA: Foco = {
   desde: '2026-11-24T10:00:00',
 }
 
+const COLA: TareaSiguiente[] = [
+  { tarea_id: 1, tarea_nombre: 'Informe' },
+  { tarea_id: 2, tarea_nombre: 'Llamar' },
+  { tarea_id: 3, tarea_nombre: 'Revisar oferta' },
+  { tarea_id: 4, tarea_nombre: 'Cuarta' },
+]
+
 const FOCO_SUBTAREA: Foco = {
   ...FOCO_TAREA,
   subtarea_id: 70,
@@ -34,8 +42,10 @@ const FOCO_SUBTAREA: Foco = {
 let envoltorio: VueWrapper | null = null
 let router: Router
 
-async function montar(foco: Foco | null): Promise<VueWrapper> {
-  vi.mocked(clienteApi.obtener).mockResolvedValue(foco)
+async function montar(foco: Foco | null, cola: TareaSiguiente[] = []): Promise<VueWrapper> {
+  vi.mocked(clienteApi.obtener).mockImplementation(async (ruta) =>
+    ruta === '/siguientes' ? cola : ruta === '/tareas' ? [] : foco,
+  )
   const pinia = createPinia()
   setActivePinia(pinia)
   router = createRouter({
@@ -43,9 +53,41 @@ async function montar(foco: Foco | null): Promise<VueWrapper> {
     routes: [{ path: '/:ruta(.*)*', component: { render: () => null } }],
   })
   await router.push('/')
-  envoltorio = mount(IndicadorFoco, { global: { plugins: [pinia, router] } })
+  envoltorio = mount(IndicadorFoco, {
+    attachTo: document.body,
+    global: { plugins: [pinia, router] },
+  })
   await flushPromises()
   return envoltorio
+}
+
+// Arrastre nativo simulado: jsdom no trae DataTransfer.
+function crearDataTransfer() {
+  const datos: Record<string, string> = {}
+  return {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    setData: (tipo: string, valor: string) => {
+      datos[tipo] = valor
+    },
+    getData: (tipo: string) => datos[tipo] ?? '',
+  }
+}
+
+function lanzarEventoArrastre(elemento: Element, tipo: string, dataTransfer: object): void {
+  const evento = new Event(tipo, { bubbles: true, cancelable: true })
+  Object.defineProperty(evento, 'dataTransfer', { value: dataTransfer })
+  elemento.dispatchEvent(evento)
+}
+
+async function arrastrar(origen: Element, destino: Element): Promise<void> {
+  const dataTransfer = crearDataTransfer()
+  lanzarEventoArrastre(origen, 'dragstart', dataTransfer)
+  lanzarEventoArrastre(destino, 'dragover', dataTransfer)
+  await flushPromises()
+  lanzarEventoArrastre(destino, 'drop', dataTransfer)
+  lanzarEventoArrastre(origen, 'dragend', dataTransfer)
+  await flushPromises()
 }
 
 beforeEach(() => {
@@ -57,6 +99,7 @@ beforeEach(() => {
 afterEach(() => {
   envoltorio?.unmount()
   envoltorio = null
+  document.body.innerHTML = ''
   vi.useRealTimers()
 })
 
@@ -136,5 +179,93 @@ describe('IndicadorFoco', () => {
     envoltorio = null
 
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('carga la cola con GET /siguientes al montarse', async () => {
+    await montar(null)
+
+    expect(clienteApi.obtener).toHaveBeenCalledWith('/siguientes')
+  })
+
+  it('sin cola no ofrece el desplegable de siguientes', async () => {
+    const wrapper = await montar(FOCO_TAREA)
+
+    expect(wrapper.find('[data-siguientes]').exists()).toBe(false)
+  })
+
+  it('con cola, el desplegable «Siguientes» muestra las 3 primeras y «Pasar a la siguiente»', async () => {
+    const wrapper = await montar(FOCO_TAREA, COLA)
+
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+
+    const contenido = document.body.querySelector('[data-slot="popover-content"]')!
+    const nombres = [...contenido.querySelectorAll('[data-siguiente] [data-nombre-siguiente]')].map(
+      (a) => a.textContent?.trim(),
+    )
+    expect(nombres).toEqual(['Informe', 'Llamar', 'Revisar oferta'])
+    expect(contenido.querySelector('[data-pasar-siguiente]')?.textContent?.trim()).toBe(
+      'Pasar a la siguiente: Informe',
+    )
+  })
+
+  it('en el desplegable se reordenan las siguientes arrastrándolas', async () => {
+    vi.mocked(clienteApi.actualizar).mockResolvedValue([COLA[1]!, COLA[0]!, ...COLA.slice(2)])
+    const wrapper = await montar(FOCO_TAREA, COLA)
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+    const contenido = document.body.querySelector('[data-slot="popover-content"]')!
+    const filas = [...contenido.querySelectorAll('[data-siguiente]')]
+    expect(filas.every((fila) => fila.getAttribute('draggable') === 'true')).toBe(true)
+
+    await arrastrar(filas[1]!, filas[0]!)
+
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', {
+      ids: [COLA[1]!.tarea_id, COLA[0]!.tarea_id, ...COLA.slice(2).map((e) => e.tarea_id)],
+    })
+    const nombres = [...contenido.querySelectorAll('[data-nombre-siguiente]')].map((n) =>
+      n.textContent?.trim(),
+    )
+    expect(nombres.slice(0, 2)).toEqual(['Llamar', 'Informe'])
+  })
+
+  it('desde el desplegable se abre el buscador para añadir a siguientes', async () => {
+    const wrapper = await montar(FOCO_TAREA, COLA)
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+
+    document.body.querySelector<HTMLButtonElement>('[data-buscar-siguientes]')!.click()
+    await flushPromises()
+
+    expect(document.body.querySelector('[data-slot="popover-content"]')).toBeNull()
+    expect(document.body.querySelector('[role="dialog"] h2')?.textContent?.trim()).toBe(
+      'Añadir a siguientes',
+    )
+  })
+
+  it('sin foco pero con cola se muestra el acceso «Pasar a la siguiente»', async () => {
+    const wrapper = await montar(null, COLA)
+
+    expect(wrapper.find('[data-indicador-foco]').exists()).toBe(false)
+    expect(wrapper.find('[data-siguientes]').exists()).toBe(true)
+  })
+
+  it('«Pasar a la siguiente» fija el foco en la primera y recarga la cola', async () => {
+    vi.mocked(clienteApi.actualizar).mockResolvedValue({
+      ...FOCO_TAREA,
+      tarea_id: 1,
+      tarea_nombre: 'Informe',
+    })
+    const wrapper = await montar(FOCO_TAREA, COLA)
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+    vi.mocked(clienteApi.obtener).mockResolvedValue(COLA.slice(1))
+
+    document.body.querySelector<HTMLButtonElement>('[data-pasar-siguiente]')!.click()
+    await flushPromises()
+
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/foco', { tarea_id: 1, subtarea_id: null })
+    expect(useTiendaFoco().foco?.tarea_nombre).toBe('Informe')
+    expect(useTiendaSiguientes().cola.map((t) => t.tarea_id)).toEqual([2, 3, 4])
   })
 })
