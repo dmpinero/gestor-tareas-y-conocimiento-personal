@@ -74,6 +74,21 @@ test('agrupa la lista por subestado en secciones plegables y lo recuerda', async
     'false',
   )
 
+  // Con una sección desplegada, el botón del grupo las contrae todas; después
+  // las expande todas.
+  await page.getByRole('button', { name: 'Contraer todos los subestados de Pendientes' }).click()
+  await expect(page.getByRole('button', { name: 'Sin subestado · 1' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await expect(page.locator('tr[data-fila-tarea]', { hasText: marca })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Expandir todos los subestados de Pendientes' }).click()
+  await expect(page.getByRole('button', { name: `${revision} · 2` })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(page.locator('tr[data-fila-tarea]', { hasText: marca })).toHaveCount(3)
+
   await page.setViewportSize({ width: 390, height: 844 })
   await sinDesbordar(page)
 })
@@ -111,6 +126,20 @@ test('agrupa las tarjetas del tablero por subestado y mover solo cambia el estad
   ).toContainText(`${marca} uno`)
   await page.screenshot({ path: 'e2e/capturas/agrupar-02-tablero.png' })
   await sinViolaciones(page)
+
+  // El botón de la cabecera del carril contrae y expande todos sus grupos.
+  await pendiente
+    .getByRole('button', { name: 'Contraer todos los subestados de Pendiente' })
+    .click()
+  await expect(pendiente.getByRole('button', { name: `${bloqueado} (1 tarea)` })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await expect(pendiente.locator('[data-tarjeta]')).toHaveCount(0)
+  await pendiente
+    .getByRole('button', { name: 'Expandir todos los subestados de Pendiente' })
+    .click()
+  await expect(pendiente.locator('[data-tarjeta]')).toHaveCount(2)
 
   // "Mover a…" cambia el estado y la tarjeta conserva su subestado.
   await pendiente.getByRole('button', { name: `Mover a… (${marca} uno)` }).click()

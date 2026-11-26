@@ -237,6 +237,39 @@ describe('VistaTareas: agrupar por subestado', () => {
     expect(nombres(envoltorio)).toEqual(['Boletín', 'Carta', 'Dosier', 'Acta', 'Hecha'])
   })
 
+  it('un botón en la cabecera del grupo contrae y expande todas sus secciones a la vez', async () => {
+    const envoltorio = await montar()
+    const botonGrupo = (grupo = 'pendientes') =>
+      envoltorio.find(`tbody[data-grupo="${grupo}"]:not([data-subgrupo]) [data-plegar-secciones]`)
+    // Sin agrupar no hay secciones que plegar.
+    expect(botonGrupo().exists()).toBe(false)
+
+    await agrupar(envoltorio)
+    expect(botonGrupo().attributes('aria-label')).toBe(
+      'Contraer todos los subestados de Pendientes',
+    )
+
+    await botonGrupo().trigger('click')
+    await flushPromises()
+    for (const clave of ['subestado:Bloqueado', 'subestado:Revisión', 'sin']) {
+      expect(cabeceraSeccion(envoltorio, clave).attributes('aria-expanded')).toBe('false')
+    }
+    expect(nombres(envoltorio)).toEqual(['Hecha'])
+    // Las secciones de Completadas no cambian.
+    expect(
+      cabeceraSeccion(envoltorio, 'subestado:Bloqueado', 'completadas').attributes('aria-expanded'),
+    ).toBe('true')
+    expect(JSON.parse(localStorage.getItem(PLEGADOS)!)).toHaveLength(3)
+    expect(botonGrupo().attributes('aria-label')).toBe(
+      'Expandir todos los subestados de Pendientes',
+    )
+
+    await botonGrupo().trigger('click')
+    await flushPromises()
+    expect(nombres(envoltorio)).toEqual(['Boletín', 'Carta', 'Dosier', 'Acta', 'Hecha'])
+    expect(JSON.parse(localStorage.getItem(PLEGADOS)!)).toEqual([])
+  })
+
   it('activar y desactivar deja el foco en el botón y vuelve a la tabla sin secciones', async () => {
     const envoltorio = await montar()
     const boton = botonAgrupar(envoltorio)

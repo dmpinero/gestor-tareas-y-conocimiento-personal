@@ -6,6 +6,8 @@ import {
   CircleDot,
   ChevronRight,
   Link2,
+  ChevronsDownUp,
+  ChevronsUpDown,
   ListTree,
   MessageSquare,
   MoveRight,
@@ -322,6 +324,26 @@ function alternarBloque(estado: EstadoGrupo, bloque: BloqueColumna): void {
   if (plegados.value.has(clave)) plegados.value.delete(clave)
   else plegados.value.add(clave)
   guardarPlegados()
+}
+
+// El botón de la cabecera del carril contrae todos sus grupos de subestado si
+// alguno está desplegado y, si están todos contraídos, los expande todos.
+function carrilContraido(estado: EstadoGrupo): boolean {
+  return bloquesDe(estado).every((bloque) => estaPlegado(estado, bloque))
+}
+
+function alternarCarril(estado: EstadoGrupo): void {
+  const expandir = carrilContraido(estado)
+  for (const bloque of bloquesDe(estado)) {
+    const clave = clavePlegado(estado, bloque)
+    if (expandir) plegados.value.delete(clave)
+    else plegados.value.add(clave)
+  }
+  guardarPlegados()
+}
+
+function etiquetaCarril(estado: EstadoGrupo): string {
+  return `${carrilContraido(estado) ? 'Expandir' : 'Contraer'} todos los subestados de ${estado.nombre}`
 }
 
 function idBloque(estado: EstadoGrupo, indice: number): string {
@@ -931,6 +953,18 @@ function terminarArrastre(): void {
                 tareasEn(estado).length
               }}</span>
               <span class="sr-only">{{ ` (${textoTareas(tareasEn(estado).length)})` }}</span>
+              <button
+                v-if="agrupar && bloquesDe(estado).length > 0"
+                type="button"
+                data-plegar-carril
+                class="focus-visible:ring-ring/50 -my-1 ml-auto shrink-0 rounded-sm p-1 outline-none hover:bg-black/10 focus-visible:ring-[3px] dark:hover:bg-white/10 [&_svg]:size-4"
+                :aria-label="etiquetaCarril(estado)"
+                :title="etiquetaCarril(estado)"
+                @click="alternarCarril(estado)"
+              >
+                <ChevronsUpDown v-if="carrilContraido(estado)" aria-hidden="true" />
+                <ChevronsDownUp v-else aria-hidden="true" />
+              </button>
             </h3>
 
             <div class="flex flex-col gap-2 p-2">

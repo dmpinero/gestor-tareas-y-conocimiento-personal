@@ -334,6 +334,61 @@ describe('TableroTareas: agrupar por subestado', () => {
     expect(JSON.parse(localStorage.getItem(CLAVE_PLEGADOS)!)).toEqual([])
   })
 
+  it('un botón en la cabecera del carril contrae y expande todos sus grupos a la vez', async () => {
+    await montar()
+    const botonCarril = () =>
+      columna('Pendiente').querySelector<HTMLButtonElement>('[data-plegar-carril]')
+    // Sin agrupar no hay grupos que plegar.
+    expect(botonCarril()).toBeNull()
+
+    botonAgrupar().click()
+    await flushPromises()
+    expect(botonCarril()!.getAttribute('aria-label')).toBe(
+      'Contraer todos los subestados de Pendiente',
+    )
+
+    botonCarril()!.click()
+    await flushPromises()
+    expect(cabeceras('Pendiente').map((c) => c.getAttribute('aria-expanded'))).toEqual([
+      'false',
+      'false',
+      'false',
+    ])
+    expect(tarjetasDe(columna('Pendiente'))).toEqual([])
+    // Los demás carriles no cambian.
+    expect(cabecera('Hecho', 'Bloqueado').getAttribute('aria-expanded')).toBe('true')
+    expect(JSON.parse(localStorage.getItem(CLAVE_PLEGADOS)!)).toHaveLength(3)
+    expect(botonCarril()!.getAttribute('aria-label')).toBe(
+      'Expandir todos los subestados de Pendiente',
+    )
+
+    botonCarril()!.click()
+    await flushPromises()
+    expect(cabeceras('Pendiente').every((c) => c.getAttribute('aria-expanded') === 'true')).toBe(
+      true,
+    )
+    expect(JSON.parse(localStorage.getItem(CLAVE_PLEGADOS)!)).toEqual([])
+  })
+
+  it('con algún grupo del carril desplegado, el botón los contrae todos', async () => {
+    await montar()
+    botonAgrupar().click()
+    await flushPromises()
+    cabecera('Pendiente', 'Bloqueado').click()
+    await flushPromises()
+
+    const botonCarril =
+      columna('Pendiente').querySelector<HTMLButtonElement>('[data-plegar-carril]')!
+    expect(botonCarril.getAttribute('aria-label')).toBe(
+      'Contraer todos los subestados de Pendiente',
+    )
+    botonCarril.click()
+    await flushPromises()
+    expect(cabeceras('Pendiente').every((c) => c.getAttribute('aria-expanded') === 'false')).toBe(
+      true,
+    )
+  })
+
   it('recuerda la agrupación y los grupos plegados al volver', async () => {
     localStorage.setItem(CLAVE_AGRUPAR, 'true')
     localStorage.setItem(CLAVE_PLEGADOS, JSON.stringify(['10:sin', 7, '12:subestado:Bloqueado']))

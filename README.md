@@ -455,5 +455,9 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   (`/ajustes/subestados`: crear, renombrar y eliminar; al eliminarlo, sus
   tareas quedan sin subestado). Se muestra como una píldora de color en la
   tabla (columna "Subestado", que se puede ocultar, ordenar, filtrar y
-  exportar), en el detalle y en el tablero. API: `GET`/`POST /api/v1/subestados`,
-  `PUT`/`DELETE /api/v1/subestados/{id}` y el campo `subestado` de las tareas.
+  exportar), en el detalle y en el tablero. "Agrupar por subestado" divide la
+  lista en secciones plegables y cada columna del tablero en grupos plegables;
+  el botón de la cabecera de cada grupo de la lista (o de cada carril del
+  tablero) contrae o expande todos sus subestados a la vez. API: `GET`/`POST
+  /api/v1/subestados`, `PUT`/`DELETE /api/v1/subestados/{id}` y el campo
+  `subestado` de las tareas.
