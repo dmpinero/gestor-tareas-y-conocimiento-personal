@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronDown,
+  CircleDot,
   ChevronRight,
   ListTree,
   MessageSquare,
@@ -526,7 +527,22 @@ const CLASES_FOCO =
 
 function clasesTarjeta(tarea: Tarea): string {
   if (tiendaFoco.esTareaEnFoco(tarea.id)) return CLASES_FOCO
-  return tareaResaltada(tarea) ? CLASES_RESALTADA : 'bg-card'
+  if (tareaResaltada(tarea)) return CLASES_RESALTADA
+  // Las completadas se atenúan con un fondo apagado (no con opacidad, que
+  // bajaría el contraste del texto).
+  return tarea.completada ? 'bg-muted/50' : 'bg-card'
+}
+
+// Comentarios, foco e hibernar no aportan información en reposo: en
+// dispositivos con ratón se ocultan hasta pasarlo por la tarjeta o enfocarla
+// con el teclado. Ocultas del todo (no atenuadas) para no bajar el contraste.
+// Con la tarea en foco o hibernada se quedan a la vista: muestran su estado.
+const CLASE_ACCIONES_DISCRETAS =
+  'inline-flex items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 group-hover/tarjeta:opacity-100 group-focus-within/tarjeta:opacity-100'
+function clasesAccionesDiscretas(tarea: Tarea): string {
+  return tiendaFoco.esTareaEnFoco(tarea.id) || estaHibernada(tarea)
+    ? 'inline-flex items-center gap-1'
+    : CLASE_ACCIONES_DISCRETAS
 }
 
 function clasesSubtarea(subtarea: Subtarea): string {
@@ -790,7 +806,10 @@ function terminarArrastre(): void {
             </div>
           </div>
         </div>
-        <div v-if="grupoActivo.estados.length > 0" class="w-full pb-3 sm:w-64">
+        <div v-if="grupoActivo.estados.length > 0" class="flex w-full flex-col gap-1.5 sm:w-64">
+          <span id="tablero-reparto-estados" class="text-sm leading-none font-medium select-none"
+            >Tareas por estado</span
+          >
           <BarraEstados :estados="estadosBarra" :titulo="grupoActivo.nombre" />
         </div>
       </div>
@@ -973,7 +992,7 @@ function terminarArrastre(): void {
                       :data-resaltada="tareaResaltada(tarea) ? '' : undefined"
                       :data-en-foco="tiendaFoco.esTareaEnFoco(tarea.id) ? 'true' : undefined"
                       :class="[
-                        'text-card-foreground relative flex flex-col gap-2 rounded-lg border p-3 shadow-xs',
+                        'text-card-foreground group/tarjeta relative flex flex-col gap-2 rounded-lg border p-3 shadow-xs',
                         clasesTarjeta(tarea),
                         idArrastrada === tarea.id && 'opacity-50',
                       ]"
@@ -1010,7 +1029,7 @@ function terminarArrastre(): void {
                         <ul
                           v-if="tarea.asignados.length > 0"
                           aria-label="Asignados"
-                          class="flex -space-x-1.5"
+                          class="flex -space-x-0.5 [&_[data-testid=avatar-persona]]:ring-card"
                         >
                           <li v-for="persona in tarea.asignados" :key="persona" class="flex">
                             <NombreRelacionado
@@ -1033,7 +1052,9 @@ function terminarArrastre(): void {
                             :congelada-en="instanteCongelado(tarea)"
                             class="text-foreground"
                           />
+                          <!-- Completada, la cuenta atrás ya no importa: basta la fecha. -->
                           <ContadorVencimiento
+                            v-if="!tarea.completada"
                             :vencimiento="tarea.fecha_vencimiento"
                             :congelada-en="instanteCongelado(tarea)"
                             :hibernada="estaHibernada(tarea)"
@@ -1049,8 +1070,10 @@ function terminarArrastre(): void {
                           class="rounded-full"
                           ><span
                             data-testid="subestado-tablero"
-                            :class="`${CLASE_PILDORA} ${colorEtiqueta(tarea.subestado)} [overflow-wrap:anywhere]`"
-                            >{{ tarea.subestado }}</span
+                            :class="`${CLASE_PILDORA} ${colorEtiqueta(tarea.subestado)} gap-1 ring-1 ring-current/30 ring-inset [overflow-wrap:anywhere]`"
+                            ><CircleDot class="size-3 shrink-0" aria-hidden="true" />{{
+                              tarea.subestado
+                            }}</span
                           ></NombreRelacionado
                         >
                       </p>
@@ -1069,18 +1092,7 @@ function terminarArrastre(): void {
                         </li>
                       </ul>
 
-                      <div class="-mx-1 -mb-1 flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          class="text-muted-foreground size-8"
-                          :aria-label="`Comentarios de ${tarea.nombre}`"
-                          :title="`Comentarios de ${tarea.nombre}`"
-                          @click="emit('verDetalle', tarea.id)"
-                        >
-                          <MessageSquare aria-hidden="true" />
-                        </Button>
+                      <div class="-mx-1 -mb-1 flex flex-wrap items-center gap-1">
                         <Button
                           type="button"
                           variant="ghost"
@@ -1097,8 +1109,21 @@ function terminarArrastre(): void {
                           {{ tarea.subtareas.length }}
                           <ListTree aria-hidden="true" />
                         </Button>
-                        <BotonFoco :tarea-id="tarea.id" :nombre="tarea.nombre" compacto />
-                        <BotonHibernar :tarea="tarea" compacto />
+                        <span data-acciones-discretas :class="clasesAccionesDiscretas(tarea)">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            class="text-muted-foreground size-8"
+                            :aria-label="`Comentarios de ${tarea.nombre}`"
+                            :title="`Comentarios de ${tarea.nombre}`"
+                            @click="emit('verDetalle', tarea.id)"
+                          >
+                            <MessageSquare aria-hidden="true" />
+                          </Button>
+                          <BotonFoco :tarea-id="tarea.id" :nombre="tarea.nombre" compacto />
+                          <BotonHibernar :tarea="tarea" compacto />
+                        </span>
 
                         <Popover
                           :open="idMenuAbierto === tarea.id"

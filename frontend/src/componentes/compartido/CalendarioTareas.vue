@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, EyeOff } from '@lucide/vue'
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
-import { computed, nextTick, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 
 import type { Tarea } from '@/api/tipos'
 import AvisoVencimiento from '@/componentes/compartido/AvisoVencimiento.vue'
+import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import { Button } from '@/componentes/ui/button'
+import { BORDE_PRIORIDAD, clavePrioridad } from '@/lib/coloresTarea'
 import { dosCifras } from '@/lib/fechas'
 import { instanteCongelado } from '@/lib/hibernacion'
 
@@ -54,10 +56,29 @@ function irAHoy(): void {
   primeroDelMes.value = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
 }
 
+// --- Ocultar completadas (se recuerda entre visitas) ---
+const CLAVE_OCULTAR = 'gestor-tareas:ocultar-completadas-calendario'
+function leerOcultar(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_OCULTAR) === 'true'
+  } catch {
+    return false
+  }
+}
+const ocultarCompletadas = ref(leerOcultar())
+watch(ocultarCompletadas, (valor) => {
+  try {
+    localStorage.setItem(CLAVE_OCULTAR, String(valor))
+  } catch {
+    // Sin almacenamiento, la preferencia dura lo que la página.
+  }
+})
+
 // Tareas por día (`YYYY-MM-DD`), cada día por hora de vencimiento.
 const tareasPorDia = computed(() => {
   const mapa = new Map<string, Tarea[]>()
   for (const tarea of props.tareas) {
+    if (ocultarCompletadas.value && tarea.completada) continue
     if (!tarea.fecha_vencimiento) continue
     const clave = tarea.fecha_vencimiento.slice(0, 10)
     mapa.set(clave, [...(mapa.get(clave) ?? []), tarea])
@@ -138,6 +159,11 @@ async function desplegar(dia: Dia): Promise<void> {
     [MAXIMO_VISIBLES]?.focus()
 }
 
+// Las semanas sin ninguna tarea se encogen: dejan sitio a las que tienen.
+function semanaVacia(semana: (Dia | null)[]): boolean {
+  return semana.every((dia) => dia === null || dia.tareas.length === 0)
+}
+
 function hora(tarea: Tarea): string {
   return tarea.fecha_vencimiento?.slice(11, 16) ?? ''
 }
@@ -157,7 +183,8 @@ const plantillaTareasDia = createReusableTemplate<{ dia: Dia }>()
           type="button"
           data-tarea-calendario
           :class="[
-            'hover:bg-accent focus-visible:ring-ring/50 min-w-0 flex-1 rounded-sm border px-1.5 py-0.5 text-left text-xs outline-none focus-visible:ring-[3px]',
+            'hover:bg-accent focus-visible:ring-ring/50 min-w-0 flex-1 rounded-sm border border-l-4 px-1.5 py-0.5 text-left text-xs outline-none focus-visible:ring-[3px]',
+            BORDE_PRIORIDAD[clavePrioridad(tarea.prioridad)],
             tarea.completada ? 'text-muted-foreground line-through' : 'bg-background',
           ]"
           @click="emit('verDetalle', tarea.id)"
@@ -201,18 +228,53 @@ const plantillaTareasDia = createReusableTemplate<{ dia: Dia }>()
       >
         {{ tituloMes }}
       </h3>
-      <Button type="button" variant="outline" size="sm" @click="cambiarMes(-1)">
-        <ChevronLeft aria-hidden="true" />
-        Mes anterior
-      </Button>
-      <Button type="button" variant="outline" size="sm" @click="irAHoy">Hoy</Button>
-      <Button type="button" variant="outline" size="sm" @click="cambiarMes(1)">
-        Mes siguiente
-        <ChevronRight aria-hidden="true" />
-      </Button>
+      <div class="flex shrink-0 items-center gap-2">
+        <!-- En la agenda (estrecha) solo flechas, para que quepan en una línea. -->
+        <Button
+          type="button"
+          variant="outline"
+          :size="enAgenda ? 'icon' : 'sm'"
+          :class="enAgenda ? 'size-8' : undefined"
+          :aria-label="enAgenda ? 'Mes anterior' : undefined"
+          :title="enAgenda ? 'Mes anterior' : undefined"
+          @click="cambiarMes(-1)"
+        >
+          <ChevronLeft aria-hidden="true" />
+          <template v-if="!enAgenda">Mes anterior</template>
+        </Button>
+        <Button type="button" variant="outline" size="sm" @click="irAHoy">Hoy</Button>
+        <Button
+          type="button"
+          variant="outline"
+          :size="enAgenda ? 'icon' : 'sm'"
+          :class="enAgenda ? 'size-8' : undefined"
+          :aria-label="enAgenda ? 'Mes siguiente' : undefined"
+          :title="enAgenda ? 'Mes siguiente' : undefined"
+          @click="cambiarMes(1)"
+        >
+          <template v-if="!enAgenda">Mes siguiente</template>
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      </div>
     </div>
 
-    <p v-if="sinFecha > 0" class="text-muted-foreground text-sm">{{ textoSinFecha }}</p>
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p v-if="sinFecha > 0" class="text-muted-foreground text-sm">
+        <NombreRelacionado tipo="sinVencimiento" :nombre="textoSinFecha" class="underline" />
+      </p>
+      <!-- Su texto visible es su nombre accesible (WCAG 2.5.3). -->
+      <Button
+        type="button"
+        size="sm"
+        class="ml-auto"
+        :variant="ocultarCompletadas ? 'default' : 'outline'"
+        :aria-pressed="ocultarCompletadas"
+        @click="ocultarCompletadas = !ocultarCompletadas"
+      >
+        <EyeOff aria-hidden="true" />
+        Ocultar completadas
+      </Button>
+    </div>
 
     <template v-if="enAgenda">
       <p v-if="diasConTareas.length === 0" class="text-muted-foreground text-sm">
@@ -255,7 +317,7 @@ const plantillaTareasDia = createReusableTemplate<{ dia: Dia }>()
             v-for="(dia, indiceDia) in semana"
             :key="dia?.clave ?? `hueco-${indiceSemana}-${indiceDia}`"
             :class="[
-              'h-28 border p-1 align-top',
+              semanaVacia(semana) ? 'h-14 border p-1 align-top' : 'h-28 border p-1 align-top',
               dia === null && 'bg-muted/30',
               dia?.esHoy && 'bg-primary/5',
             ]"

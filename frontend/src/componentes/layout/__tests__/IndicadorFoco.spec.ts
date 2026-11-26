@@ -81,6 +81,15 @@ describe('IndicadorFoco', () => {
     )
   })
 
+  it('en pantallas estrechas oculta a la vista "Trabajando en:" para que quepa el nombre', async () => {
+    const wrapper = await montar(FOCO_TAREA)
+
+    const prefijo = wrapper.get('[data-prefijo-foco]')
+    expect(prefijo.text()).toBe('Trabajando en:')
+    expect(prefijo.classes()).toContain('max-sm:sr-only')
+    expect(wrapper.get('[data-abrir-foco]').text()).toContain('Migración portal')
+  })
+
   it('con una subtarea en foco muestra "Tarea › Subtarea"', async () => {
     const wrapper = await montar(FOCO_SUBTAREA)
 

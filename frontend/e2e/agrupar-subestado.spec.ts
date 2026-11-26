@@ -145,7 +145,7 @@ test('pulsar un subestado muestra todas las tareas con ese subestado', async ({
 
   const modal = page.getByRole('dialog', { name: `Subestado: ${bloqueada}` })
   await expect(modal).toContainText('Tareas con este subestado.')
-  const tareas = modal.getByRole('list', { name: 'Tareas' })
+  const tareas = modal.getByRole('table', { name: 'Tareas' })
   await expect(tareas).toContainText(`${marca} uno`)
   await expect(tareas).toContainText(`${marca} dos`)
   await expect(tareas).not.toContainText(`${marca} tres`)

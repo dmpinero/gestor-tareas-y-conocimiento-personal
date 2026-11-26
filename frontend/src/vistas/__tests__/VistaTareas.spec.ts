@@ -343,7 +343,7 @@ describe('VistaTareas', () => {
         'Informe trimestral',
         'Backend | Urgente',
         'Ana',
-        '10/11/2026 09:30:00',
+        '10 nov10/11/2026 09:30:00',
         '20 nov20/11/2026 18:00:00Vence en 10 d 23 h 14 min 30 s',
         '—',
         '—',
@@ -355,7 +355,7 @@ describe('VistaTareas', () => {
         'Artículo sobre Vue',
         '—',
         '—',
-        '01/12/2026 17:05:09',
+        '1 dic01/12/2026 17:05:09',
         '—',
         '—',
         '—',
@@ -547,7 +547,7 @@ describe('VistaTareas', () => {
       ...SIN_EXTRAS,
     })
     expect(filasTabla(envoltorio)).toEqual([
-      ['Con fecha', '—', 'Detalle', '—', '—', '02/01/2027 03:04:05', '—', '—', '—', ''],
+      ['Con fecha', '—', 'Detalle', '—', '—', '2 ene02/01/2027 03:04:05', '—', '—', '—', ''],
     ])
   })
 
@@ -615,7 +615,7 @@ describe('VistaTareas', () => {
         'Detalle',
         'Frontend | Urgente',
         'Luis',
-        AHORA_TEXTO,
+        `9 nov${AHORA_TEXTO}`,
         '30 nov30/11/2026 12:00:00Vence en 20 d 17 h 14 min 30 s',
         '—',
         '—',
@@ -735,7 +735,7 @@ describe('VistaTareas', () => {
         'Informe trimestral',
         'Urgente',
         'Ana',
-        '11/11/2026 08:00:00',
+        '11 nov11/11/2026 08:00:00',
         '—',
         '—',
         '—',
@@ -747,7 +747,7 @@ describe('VistaTareas', () => {
         'Artículo sobre Vue',
         '—',
         '—',
-        '01/12/2026 17:05:09',
+        '1 dic01/12/2026 17:05:09',
         '—',
         '—',
         '—',
@@ -815,7 +815,7 @@ describe('VistaTareas', () => {
     })
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(filasTabla(envoltorio)).toEqual([
-      ['Nueva', '1', 'Detalle', '—', '—', AHORA_TEXTO, '—', '—', '—', ''],
+      ['Nueva', '1', 'Detalle', '—', '—', `9 nov${AHORA_TEXTO}`, '—', '—', '—', ''],
     ])
 
     const panelReabierto = await abrirPanel(envoltorio)
@@ -950,7 +950,7 @@ describe('VistaTareas', () => {
         oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
       })
       expect(filasTabla(envoltorio)).toEqual([
-        ['Venta', '—', 'Detalle', '—', '—', AHORA_TEXTO, '—', 'Oportunidad', '—', ''],
+        ['Venta', '—', 'Detalle', '—', '—', `9 nov${AHORA_TEXTO}`, '—', 'Oportunidad', '—', ''],
       ])
     })
 
@@ -1530,24 +1530,33 @@ describe('VistaTareas', () => {
 
     it('cada grupo tiene su color en el borde izquierdo de todas sus filas', async () => {
       const envoltorio = await montar([COMPLETADA, ...TAREAS])
+      // Cabeceras y pies llevan borde; la celda fija del nombre, una franja
+      // (sombra interior) del mismo color, que se desplaza con ella.
+      const colorDe = (celda: { classes: () => string[] }) => {
+        const clases = celda.classes()
+        const borde = clases.find((clase) => /^border-l-[a-z]+-\d+$/.test(clase))
+        if (borde) {
+          expect(clases).toContain('border-l-4')
+          return borde.replace('border-l-', '')
+        }
+        const franja = clases.find((clase) =>
+          clase.startsWith('shadow-[inset_4px_0_0_var(--color-'),
+        )
+        return franja?.match(/--color-([a-z]+-\d+)/)?.[1]
+      }
 
       for (const id of ['pendientes', 'completadas'] as const) {
-        const filas = grupo(envoltorio, id).findAll('tr')
         const colores = new Set(
-          filas.map((fila) => {
-            const clases = fila.findAll('td')[0]!.classes()
-            expect(clases).toContain('border-l-4')
-            return clases.find((clase) => clase.startsWith('border-l-') && clase !== 'border-l-4')
-          }),
+          grupo(envoltorio, id)
+            .findAll('tr')
+            .map((fila) => colorDe(fila.findAll('td')[0]!)),
         )
         expect(colores.size).toBe(1)
+        expect([...colores][0]).toBeDefined()
       }
-      const colorDe = (id: 'pendientes' | 'completadas') =>
-        grupo(envoltorio, id)
-          .findAll('td')[0]!
-          .classes()
-          .find((clase) => clase.startsWith('border-l-') && clase !== 'border-l-4')
-      expect(colorDe('pendientes')).not.toBe(colorDe('completadas'))
+      expect(colorDe(grupo(envoltorio, 'pendientes').findAll('td')[0]!)).not.toBe(
+        colorDe(grupo(envoltorio, 'completadas').findAll('td')[0]!),
+      )
     })
 
     it('las filas de tareas de cada grupo alternan el fondo (cebra) para distinguirlas', async () => {
@@ -1556,11 +1565,13 @@ describe('VistaTareas', () => {
 
       const fondos = grupo(envoltorio, 'pendientes')
         .findAll('tr[data-fila-tarea]')
-        .map((fila) => fila.classes().includes('bg-muted/40'))
+        .map((fila) =>
+          fila.classes().includes('bg-[color-mix(in_oklab,var(--muted)_40%,var(--card))]'),
+        )
       expect(fondos).toEqual([false, true, false])
       // Cada grupo empieza de nuevo por una fila sin fondo.
       expect(grupo(envoltorio, 'completadas').get('tr[data-fila-tarea]').classes()).not.toContain(
-        'bg-muted/40',
+        'bg-[color-mix(in_oklab,var(--muted)_40%,var(--card))]',
       )
     })
 
@@ -3306,7 +3317,7 @@ describe('VistaTareas', () => {
         const modal = [...document.body.querySelectorAll('[role="dialog"]')].find(
           (d) => d.querySelector('h2')?.textContent?.trim() === 'Persona: Ana',
         )
-        expect(modal?.querySelector('ul[aria-label="Tareas"]')?.textContent).toContain(
+        expect(modal?.querySelector('[data-tabla="Tareas"]')?.textContent).toContain(
           'Escribir informe',
         )
         expect(
@@ -4445,6 +4456,86 @@ describe('VistaTareas', () => {
       expect(document.body.querySelector('[data-testid="calendario-tareas"] table')).not.toBeNull()
       expect(document.body.querySelector('[data-agenda]')).toBeNull()
     })
+
+    describe('legibilidad', () => {
+      const CLAVE_OCULTAR = 'gestor-tareas:ocultar-completadas-calendario'
+      afterEach(() => localStorage.removeItem(CLAVE_OCULTAR))
+
+      it('"Ocultar completadas" quita las completadas del mes y lo recuerda', async () => {
+        const envoltorio = await montarCalendario()
+        const boton = botonPorTexto('Ocultar completadas')
+        expect(boton.getAttribute('aria-pressed')).toBe('false')
+        expect(tareasDe('jueves, 12 de noviembre de 2026')).toEqual(['00:30 Copia de seguridad'])
+
+        boton.click()
+        await flushPromises()
+        expect(boton.getAttribute('aria-pressed')).toBe('true')
+        expect(
+          dia('jueves, 12 de noviembre de 2026').querySelector('[data-tarea-calendario]'),
+        ).toBeNull()
+        expect(tareasDe('miércoles, 11 de noviembre de 2026')).toEqual(['23:59 Cerrar caja'])
+        expect(localStorage.getItem(CLAVE_OCULTAR)).toBe('true')
+
+        envoltorio.unmount()
+        document.body.innerHTML = ''
+        await montarCalendario()
+        expect(botonPorTexto('Ocultar completadas').getAttribute('aria-pressed')).toBe('true')
+      })
+
+      it('las semanas sin tareas son más bajas que las que tienen', async () => {
+        await montarCalendario()
+        const semanas = [
+          ...document.body.querySelectorAll('[data-testid="calendario-tareas"] tbody tr'),
+        ]
+        // Semana del 1 de noviembre (vacía) y la del 9 al 15 (con tareas).
+        expect(semanas[0]!.querySelector('td')!.className).toContain('h-14')
+        expect(semanas[2]!.querySelector('td')!.className).toContain('h-28')
+      })
+
+      it('pulsar el aviso de tareas sin vencimiento las lista en una ventana', async () => {
+        await montarCalendario()
+        const aviso = botonPorEtiqueta('Ver 1 tarea sin fecha de vencimiento')
+        expect(aviso.textContent?.trim()).toBe('1 tarea sin fecha de vencimiento')
+        aviso.click()
+        await flushPromises()
+        const ventana = [...document.body.querySelectorAll('[role="dialog"]')].find(
+          (d) => d.querySelector('h2')?.textContent?.trim() === 'Tareas sin fecha de vencimiento',
+        )
+        expect(ventana).toBeDefined()
+        expect(
+          [...ventana!.querySelectorAll('[data-tabla="Tareas"] tbody button')].map((b) =>
+            b.textContent?.trim(),
+          ),
+        ).toEqual([TAREAS[1]!.nombre])
+      })
+
+      it('cada tarea lleva a la izquierda el color de su prioridad', async () => {
+        await montarCalendario()
+        const informe = dia('viernes, 20 de noviembre de 2026').querySelector(
+          '[data-tarea-calendario]',
+        )
+        expect(informe?.className).toContain('border-l-4')
+        expect(informe?.className).toContain('border-l-orange-500')
+      })
+
+      it('en la agenda estrecha la navegación usa flechas sin texto', async () => {
+        fijarAncho(500)
+        await montarCalendario()
+        for (const etiqueta of ['Mes anterior', 'Mes siguiente']) {
+          const boton = botonPorEtiqueta(etiqueta)
+          expect(boton.textContent?.trim()).toBe('')
+          expect(boton.getAttribute('title')).toBe(etiqueta)
+        }
+        expect(botonPorTexto('Hoy')).toBeDefined()
+      })
+
+      it('con ancho suficiente la navegación conserva su texto', async () => {
+        fijarAncho(900)
+        await montarCalendario()
+        expect(botonPorTexto('Mes anterior')).toBeDefined()
+        expect(botonPorTexto('Mes siguiente')).toBeDefined()
+      })
+    })
   })
 
   describe('editar desde el detalle', () => {
@@ -4646,7 +4737,7 @@ describe('VistaTareas', () => {
     }
 
     function textosLista(dialogo: HTMLElement, lista: string): string[] {
-      return [...dialogo.querySelectorAll(`ul[aria-label="${lista}"] li button`)].map(
+      return [...dialogo.querySelectorAll(`[data-tabla="${lista}"] tbody button`)].map(
         (b) => b.getAttribute('aria-label') ?? '',
       )
     }
@@ -4661,7 +4752,7 @@ describe('VistaTareas', () => {
 
       const modal = dialogoTitulado('Etiqueta: Urgente')
       expect(textosLista(modal, 'Tareas')).toEqual(['Abrir la tarea Escribir informe'])
-      expect(modal.querySelector('ul[aria-label="Subtareas"]')).toBeNull()
+      expect(modal.querySelector('[data-tabla="Subtareas"]')).toBeNull()
     })
 
     it('pulsar una persona de la tabla lista sus tareas y las subtareas que tiene asignadas', async () => {

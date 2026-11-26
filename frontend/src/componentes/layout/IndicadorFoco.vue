@@ -57,7 +57,11 @@ onUnmounted(() => {
         aria-hidden="true"
         class="size-2 shrink-0 rounded-full bg-violet-500 motion-safe:animate-pulse"
       />
-      <span class="truncate">{{ `Trabajando en: ${texto}` }}</span>
+      <!-- En pantallas estrechas el prefijo solo lo oye el lector de pantalla:
+           así cabe el nombre de la tarea. -->
+      <span class="truncate"
+        ><span data-prefijo-foco class="max-sm:sr-only">Trabajando en: </span>{{ texto }}</span
+      >
       <span class="-ml-2 shrink-0 whitespace-pre">{{ ` · ${tiempo}` }}</span>
     </button>
     <button

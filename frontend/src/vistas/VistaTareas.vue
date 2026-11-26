@@ -10,8 +10,17 @@ import {
   ListFilter,
   Search,
 } from '@lucide/vue'
-import { createReusableTemplate } from '@vueuse/core'
-import { computed, nextTick, onMounted, reactive, ref, watch, type Component } from 'vue'
+import { createReusableTemplate, useElementSize } from '@vueuse/core'
+import {
+  computed,
+  nextTick,
+  onMounted,
+  reactive,
+  ref,
+  useTemplateRef,
+  watch,
+  type Component,
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import {
@@ -28,7 +37,7 @@ import {
   agruparPorSubestado,
   type GrupoSubestado,
 } from '@/lib/agruparPorSubestado'
-import { aFechaHoraIso, formatearFechaHora } from '@/lib/fechas'
+import { aFechaHoraIso, formatearFechaCorta, formatearFechaHora } from '@/lib/fechas'
 import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
 import type { ValoresFormularioTarea } from '@/lib/formularioTarea'
 import { useTiendaFoco } from '@/stores/foco'
@@ -143,15 +152,14 @@ const extrasDetalle = reactive<{ completada: boolean; estadoId: number | '' }>({
   estadoId: '',
 })
 
-// Texto del tipo en la tabla; en una oportunidad con subtareas (p. ej. los pasos
-// de su workflow), con su avance: resueltas / total
-// ("Oportunidad · 3/7"). Ordenar, filtrar y exportar usan solo el tipo.
-function textoTipoEnTabla(tarea: Tarea): string {
-  const etiqueta = etiquetaTipoTarea(tarea.tipo)
-  if (etiqueta === null) return '—'
-  if (tarea.tipo !== 'oportunidad' || tarea.subtareas.length === 0) return etiqueta
+// Avance que sigue al tipo en la tabla en una oportunidad con subtareas (p. ej.
+// los pasos de su workflow): resueltas / total (" · 3/7", tras "Oportunidad").
+// Va fuera del botón del tipo, que solo nombra el tipo. Ordenar, filtrar y
+// exportar usan solo el tipo.
+function avanceTipoEnTabla(tarea: Tarea): string {
+  if (tarea.tipo !== 'oportunidad' || tarea.subtareas.length === 0) return ''
   const resueltas = tarea.subtareas.filter((subtarea) => subtarea.resuelta).length
-  return `${etiqueta} · ${resueltas}/${tarea.subtareas.length}`
+  return ` · ${resueltas}/${tarea.subtareas.length}`
 }
 
 // Píldora de la prioridad (sin prioridad no hay píldora, sino "—").
@@ -355,6 +363,20 @@ function abrirAltaEnEstado(idGrupo: number, idEstado: number): void {
 // Clases de las celdas de datos: las tareas completadas se muestran tachadas.
 // Se devuelve una cadena porque `TableCell` declara `class` como `string`.
 const TEXTO_AJUSTABLE = 'whitespace-normal [overflow-wrap:anywhere]'
+
+// --- Tabla o tarjetas según el ancho disponible ---------------------------
+// Por debajo de 640 px la tabla solo deja ver el nombre y la prioridad, así que
+// se pasa a tarjetas. Se pinta una sola de las dos vistas (v-if) para no
+// duplicar controles ni nombres accesibles. Sin medida (ancho 0, p. ej. en
+// jsdom) se usa la tabla.
+const ANCHO_MINIMO_TABLA = 640
+const raizVista = useTemplateRef<HTMLElement>('raizVista')
+const { width: anchoVista } = useElementSize(raizVista, undefined, { box: 'border-box' })
+const enTarjetas = computed(() => anchoVista.value > 0 && anchoVista.value < ANCHO_MINIMO_TABLA)
+// Píldora de subestado en una línea, truncada a 12rem en vez de a todo el ancho.
+const CLASE_PILDORA_SUBESTADO = `${CLASE_PILDORA.replace('max-w-full', 'max-w-48')} whitespace-nowrap`
+const CLASE_TARJETA_TAREA =
+  'bg-card cursor-pointer rounded-lg border p-3 shadow-xs hover:bg-blue-100/60 dark:hover:bg-blue-950/60'
 function claseCelda(tarea: Tarea, base = ''): string {
   return tarea.completada ? `${base} line-through`.trim() : base
 }
@@ -682,6 +704,9 @@ const GRUPOS_TABLA: {
   titulo: string
   completada: boolean
   borde: string
+  // La franja de color de la celda fija del nombre: con bordes colapsados, un
+  // borde no se desplaza con la celda fija y dejaría asomar lo de debajo.
+  franja: string
   fondo: string
 }[] = [
   {
@@ -689,6 +714,8 @@ const GRUPOS_TABLA: {
     titulo: 'Pendientes',
     completada: false,
     borde: 'border-l-blue-600 dark:border-l-blue-400',
+    franja:
+      'shadow-[inset_4px_0_0_var(--color-blue-600),inset_-1px_0_0_var(--border)] dark:shadow-[inset_4px_0_0_var(--color-blue-400),inset_-1px_0_0_var(--border)]',
     fondo: 'bg-blue-50 hover:bg-blue-50 dark:bg-blue-950/50 dark:hover:bg-blue-950/50',
   },
   {
@@ -696,18 +723,30 @@ const GRUPOS_TABLA: {
     titulo: 'Completadas',
     completada: true,
     borde: 'border-l-emerald-600 dark:border-l-emerald-400',
+    franja:
+      'shadow-[inset_4px_0_0_var(--color-emerald-600),inset_-1px_0_0_var(--border)] dark:shadow-[inset_4px_0_0_var(--color-emerald-400),inset_-1px_0_0_var(--border)]',
     fondo: 'bg-emerald-50 hover:bg-emerald-50 dark:bg-emerald-950/50 dark:hover:bg-emerald-950/50',
   },
 ]
 
 // Filas de tareas: fondo alterno (cebra) dentro de cada grupo y un resaltado
 // claro al pasar el ratón, porque la fila entera abre el detalle.
-const FONDO_FILA_ALTERNA = 'bg-muted/40'
-const CLASE_FILA_TAREA = 'cursor-pointer hover:bg-blue-100/60 dark:hover:bg-blue-950/60'
+// Fondos opacos (mezclados con el de la tarjeta): la celda fija del nombre los
+// hereda y tapa las columnas que pasan por debajo al desplazar en horizontal.
+const FONDO_FILA = 'bg-card'
+const FONDO_FILA_ALTERNA = 'bg-[color-mix(in_oklab,var(--muted)_40%,var(--card))]'
+const CLASE_FILA_TAREA =
+  'cursor-pointer hover:bg-[color-mix(in_oklab,var(--color-blue-100)_60%,var(--card))] dark:hover:bg-[color-mix(in_oklab,var(--color-blue-950)_60%,var(--card))]'
+// Columna Nombre fija al desplazar la tabla en horizontal; una línea a su
+// derecha la separa de lo que pasa por debajo.
+const CLASE_COLUMNA_FIJA = 'sticky left-0 z-10'
+const LINEA_COLUMNA_FIJA = 'shadow-[inset_-1px_0_0_var(--border)]'
+// Las acciones, fijas a la derecha: siempre al alcance y nunca bajo el nombre.
+const CLASE_ACCIONES_FIJAS = 'sticky right-0 z-10 shadow-[inset_1px_0_0_var(--border)]'
 // La tarea en foco, con el borde violeta de la tarea en foco del tablero.
 const CLASE_FILA_FOCO = 'ring-2 ring-violet-500 ring-inset dark:ring-violet-400'
 function claseFilaTarea(indice: number): string {
-  return indice % 2 === 1 ? `${CLASE_FILA_TAREA} ${FONDO_FILA_ALTERNA}` : CLASE_FILA_TAREA
+  return `${CLASE_FILA_TAREA} ${indice % 2 === 1 ? FONDO_FILA_ALTERNA : FONDO_FILA}`
 }
 
 function leerGruposPlegados(): IdGrupoTabla[] {
@@ -847,11 +886,25 @@ const filasVisibles = computed(() => gruposConFilas.value.flatMap(filasVisiblesD
 const plantillaFila = createReusableTemplate<{
   tarea: Tarea
   indice: number
-  borde: string
+  franja: string
 }>()
 const plantillaPieGrupo = createReusableTemplate<{
   grupo: (typeof gruposConFilas.value)[number]
 }>()
+// Piezas compartidas por la fila de la tabla y la tarjeta de pantallas estrechas.
+const plantillaNombre = createReusableTemplate<{ tarea: Tarea }>()
+const plantillaPrioridad = createReusableTemplate<{ tarea: Tarea }>()
+const plantillaEstado = createReusableTemplate<{ tarea: Tarea }>()
+const plantillaSubestado = createReusableTemplate<{ tarea: Tarea }>()
+const plantillaTipo = createReusableTemplate<{ tarea: Tarea }>()
+const plantillaAcciones = createReusableTemplate<{ tarea: Tarea }>()
+const plantillaAltaRapida = createReusableTemplate<{
+  grupo: (typeof gruposConFilas.value)[number]
+}>()
+const plantillaBotonGrupo = createReusableTemplate<{
+  grupo: (typeof gruposConFilas.value)[number]
+}>()
+const plantillaTarjeta = createReusableTemplate<{ tarea: Tarea }>()
 
 // Celdas de la tabla por fila: las columnas visibles más la de acciones.
 const numeroColumnasTabla = computed(() => columnasVisibles.value.length + 1)
@@ -1200,8 +1253,8 @@ async function guardar(): Promise<void> {
 </script>
 
 <template>
-  <section>
-    <plantillaFila.define v-slot="{ tarea, indice, borde }">
+  <section ref="raizVista">
+    <plantillaFila.define v-slot="{ tarea, indice, franja }">
       <TableRow
         data-fila-tarea
         :data-en-foco="tiendaFoco.esTareaEnFoco(tarea.id) ? 'true' : undefined"
@@ -1216,38 +1269,33 @@ async function guardar(): Promise<void> {
           Ancho mínimo para que la casilla y las campanas no estrechen el
           nombre, que se parte entre palabras salvo si una sola no cabe.
         -->
-        <TableCell :class="claseCelda(tarea, `whitespace-normal min-w-56 border-l-4 ${borde}`)">
-          <div class="flex items-start gap-2">
-            <Checkbox
-              class="mt-0.5"
-              :model-value="tarea.completada"
-              :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
-              :title="tarea.completada ? 'Completada' : 'Pendiente'"
-              @update:model-value="tienda.alternarCompletada(tarea.id)"
-            />
-            <span data-nombre-tarea class="min-w-0 flex-1 break-words">{{ tarea.nombre }}</span>
-            <InsigniaFoco v-if="tiendaFoco.esTareaEnFoco(tarea.id)" class="mt-0.5" />
-            <InsigniaHibernada v-if="estaHibernada(tarea)" class="mt-0.5" />
-            <AvisoVencimiento
-              class="mt-0.5"
-              :vencimiento="tarea.fecha_vencimiento"
-              :completada="tarea.completada"
-              :congelada-en="instanteCongelado(tarea)"
-            />
-          </div>
+        <TableCell
+          :class="
+            claseCelda(
+              tarea,
+              `whitespace-normal min-w-56 pl-3 bg-inherit ${CLASE_COLUMNA_FIJA} ${franja}`,
+            )
+          "
+        >
+          <plantillaNombre.reuse :tarea="tarea" />
         </TableCell>
         <TableCell v-if="esVisible('prioridad')" :class="claseCelda(tarea)">
+          <plantillaPrioridad.reuse :tarea="tarea" />
+        </TableCell>
+        <!-- Dos líneas como mucho: la descripción entera, al pasar el ratón. -->
+        <TableCell
+          v-if="esVisible('descripcion')"
+          :class="claseCelda(tarea, `${TEXTO_AJUSTABLE} min-w-48 max-w-80`)"
+        >
           <span
-            v-if="tarea.prioridad !== null"
-            data-testid="pildora-prioridad"
-            :class="clasePildoraPrioridad(tarea.prioridad)"
-            >{{ tarea.prioridad }}</span
+            v-if="tarea.descripcion"
+            data-descripcion-tarea
+            class="line-clamp-2"
+            :title="tarea.descripcion"
+            >{{ tarea.descripcion }}</span
           >
           <template v-else>—</template>
         </TableCell>
-        <TableCell v-if="esVisible('descripcion')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{
-          tarea.descripcion
-        }}</TableCell>
         <TableCell
           v-for="campoLista in camposListaVisibles"
           :key="campoLista"
@@ -1285,19 +1333,22 @@ async function guardar(): Promise<void> {
         <TableCell
           v-if="esVisible('subestado')"
           data-columna="subestado"
-          :class="claseCelda(tarea, TEXTO_AJUSTABLE)"
+          :class="claseCelda(tarea)"
         >
-          <span
-            v-if="tarea.subestado"
-            data-testid="pildora-subestado"
-            :class="`${CLASE_PILDORA} ${colorEtiqueta(tarea.subestado)}`"
-            ><NombreRelacionado tipo="subestado" :nombre="tarea.subestado"
-          /></span>
-          <template v-else>—</template>
+          <plantillaSubestado.reuse :tarea="tarea" />
         </TableCell>
-        <TableCell v-if="esVisible('fechaCreacion')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">{{
-          formatearFechaHora(tarea.fecha_creacion)
-        }}</TableCell>
+        <TableCell v-if="esVisible('fechaCreacion')" :class="claseCelda(tarea)">
+          <!-- Como el vencimiento: corta a la vista, completa al pasar el ratón
+               y para el lector de pantalla. -->
+          <time
+            data-fecha-creacion
+            class="whitespace-nowrap"
+            :datetime="tarea.fecha_creacion"
+            :title="formatearFechaHora(tarea.fecha_creacion)"
+            ><span aria-hidden="true">{{ formatearFechaCorta(tarea.fecha_creacion) }}</span
+            ><span class="sr-only">{{ formatearFechaHora(tarea.fecha_creacion) }}</span></time
+          >
+        </TableCell>
         <TableCell v-if="esVisible('fechaVencimiento')" :class="claseCelda(tarea, TEXTO_AJUSTABLE)">
           <template v-if="tarea.fecha_vencimiento">
             <VencimientoCorto
@@ -1315,55 +1366,163 @@ async function guardar(): Promise<void> {
           <template v-else>—</template>
         </TableCell>
         <TableCell v-if="esVisible('tipo')" :class="claseCelda(tarea)">
-          <span
-            v-if="tarea.tipo !== null"
-            data-testid="pildora-tipo"
-            :class="`${CLASE_PILDORA} ${PILDORA_TIPO}`"
-            >{{ textoTipoEnTabla(tarea) }}</span
-          >
-          <template v-else>—</template>
+          <plantillaTipo.reuse :tarea="tarea" />
         </TableCell>
         <TableCell v-if="esVisible('estado')" :class="claseCelda(tarea)">
-          <span
-            v-if="tarea.estado"
-            data-testid="pildora-estado"
-            :class="clasePildoraEstado(tarea)"
-            >{{ tarea.estado.nombre }}</span
-          >
-          <template v-else>—</template>
+          <plantillaEstado.reuse :tarea="tarea" />
         </TableCell>
-        <TableCell class="w-0">
-          <MenuAccionesTarea
-            :nombre="tarea.nombre"
-            :id-disparador="idBotonAcciones(tarea.id)"
-            :tarea-id="tarea.id"
-            @editar="abrirParaEditar(tarea)"
-            @detalle="idEnDetalle = tarea.id"
-            :hibernada="estaHibernada(tarea)"
-            @eliminar="pedirEliminar(tarea, true)"
-            @hibernar="tareaAHibernar = tarea"
-            @reanudar="tienda.reanudar(tarea.id)"
-          />
+        <TableCell :class="`w-0 bg-inherit ${CLASE_ACCIONES_FIJAS}`">
+          <plantillaAcciones.reuse :tarea="tarea" />
         </TableCell>
       </TableRow>
     </plantillaFila.define>
+
+    <!-- Nombre con su casilla. Las insignias van debajo para no estrechar el
+         nombre, que si no se partía letra a letra. -->
+    <plantillaNombre.define v-slot="{ tarea }">
+      <div class="flex items-start gap-2">
+        <Checkbox
+          class="mt-0.5"
+          :model-value="tarea.completada"
+          :aria-label="`Marcar como completada la tarea ${tarea.nombre}`"
+          :title="tarea.completada ? 'Completada' : 'Pendiente'"
+          @update:model-value="tienda.alternarCompletada(tarea.id)"
+        />
+        <div class="min-w-0 flex-1">
+          <span data-nombre-tarea class="block break-words">{{ tarea.nombre }}</span>
+          <span
+            v-if="tiendaFoco.esTareaEnFoco(tarea.id) || estaHibernada(tarea)"
+            data-insignias-tarea
+            class="mt-1 flex flex-wrap gap-1"
+          >
+            <InsigniaFoco v-if="tiendaFoco.esTareaEnFoco(tarea.id)" />
+            <InsigniaHibernada v-if="estaHibernada(tarea)" />
+          </span>
+        </div>
+        <AvisoVencimiento
+          class="mt-0.5"
+          :vencimiento="tarea.fecha_vencimiento"
+          :completada="tarea.completada"
+          :congelada-en="instanteCongelado(tarea)"
+        />
+      </div>
+    </plantillaNombre.define>
+    <plantillaPrioridad.define v-slot="{ tarea }">
+      <span
+        v-if="tarea.prioridad !== null"
+        data-testid="pildora-prioridad"
+        :class="clasePildoraPrioridad(tarea.prioridad)"
+        ><NombreRelacionado tipo="prioridad" :nombre="String(tarea.prioridad)"
+      /></span>
+      <template v-else>—</template>
+    </plantillaPrioridad.define>
+    <plantillaEstado.define v-slot="{ tarea }">
+      <span v-if="tarea.estado" data-testid="pildora-estado" :class="clasePildoraEstado(tarea)"
+        ><NombreRelacionado tipo="estado" :nombre="tarea.estado.nombre"
+      /></span>
+      <template v-else>—</template>
+    </plantillaEstado.define>
+    <!-- En una línea: si no cabe se trunca y se lee entero al pasar el ratón. -->
+    <plantillaSubestado.define v-slot="{ tarea }">
+      <span
+        v-if="tarea.subestado"
+        data-testid="pildora-subestado"
+        :class="`${CLASE_PILDORA_SUBESTADO} ${colorEtiqueta(tarea.subestado)}`"
+        ><NombreRelacionado
+          tipo="subestado"
+          :nombre="tarea.subestado"
+          class="block min-w-0 truncate"
+          :title="tarea.subestado"
+      /></span>
+      <template v-else>—</template>
+    </plantillaSubestado.define>
+    <plantillaTipo.define v-slot="{ tarea }">
+      <span
+        v-if="tarea.tipo !== null"
+        data-testid="pildora-tipo"
+        :class="`${CLASE_PILDORA} ${PILDORA_TIPO}`"
+        ><NombreRelacionado tipo="tipo" :nombre="etiquetaTipoTarea(tarea.tipo) ?? ''" />{{
+          avanceTipoEnTabla(tarea)
+        }}</span
+      >
+      <template v-else>—</template>
+    </plantillaTipo.define>
+    <plantillaAcciones.define v-slot="{ tarea }">
+      <MenuAccionesTarea
+        :nombre="tarea.nombre"
+        :id-disparador="idBotonAcciones(tarea.id)"
+        :tarea-id="tarea.id"
+        @editar="abrirParaEditar(tarea)"
+        @detalle="idEnDetalle = tarea.id"
+        :hibernada="estaHibernada(tarea)"
+        @eliminar="pedirEliminar(tarea, true)"
+        @hibernar="tareaAHibernar = tarea"
+        @reanudar="tienda.reanudar(tarea.id)"
+      />
+    </plantillaAcciones.define>
+
+    <!-- Tarjeta de una tarea en pantallas estrechas: lo que la tabla reparte
+         en columnas, apilado. Pulsarla abre el detalle, como la fila. -->
+    <plantillaTarjeta.define v-slot="{ tarea }">
+      <article
+        data-tarjeta-tarea
+        :data-en-foco="tiendaFoco.esTareaEnFoco(tarea.id) ? 'true' : undefined"
+        :class="[
+          CLASE_TARJETA_TAREA,
+          tiendaFoco.esTareaEnFoco(tarea.id) && CLASE_FILA_FOCO,
+          tarea.completada && 'text-muted-foreground',
+        ]"
+        @click="alPulsarFila($event, tarea.id)"
+      >
+        <div class="flex items-start gap-1">
+          <div :class="['min-w-0 flex-1 font-medium', tarea.completada && 'line-through']">
+            <plantillaNombre.reuse :tarea="tarea" />
+          </div>
+          <plantillaAcciones.reuse :tarea="tarea" />
+        </div>
+        <div class="mt-2 flex flex-wrap items-center gap-1.5 pl-6">
+          <plantillaPrioridad.reuse v-if="tarea.prioridad !== null" :tarea="tarea" />
+          <plantillaEstado.reuse v-if="tarea.estado" :tarea="tarea" />
+          <plantillaSubestado.reuse v-if="tarea.subestado" :tarea="tarea" />
+          <plantillaTipo.reuse v-if="tarea.tipo !== null" :tarea="tarea" />
+          <span
+            v-for="nombre in tarea.etiquetas"
+            :key="nombre"
+            :class="`${CLASE_PILDORA} ${colorEtiqueta(nombre)}`"
+            ><NombreRelacionado tipo="etiqueta" :nombre="nombre"
+          /></span>
+        </div>
+        <div
+          v-if="tarea.fecha_vencimiento || tarea.asignados.length > 0"
+          class="mt-2 flex items-end justify-between gap-2 pl-6 text-sm"
+        >
+          <div v-if="tarea.fecha_vencimiento">
+            <VencimientoCorto
+              :vencimiento="tarea.fecha_vencimiento"
+              :completada="tarea.completada"
+              :congelada-en="instanteCongelado(tarea)"
+            />
+            <ContadorVencimiento
+              :vencimiento="tarea.fecha_vencimiento"
+              :congelada-en="instanteCongelado(tarea)"
+              :hibernada="estaHibernada(tarea)"
+              class="block text-xs"
+            />
+          </div>
+          <ul v-if="tarea.asignados.length > 0" class="ml-auto flex flex-wrap gap-1">
+            <li v-for="nombre in tarea.asignados" :key="nombre" class="inline-flex">
+              <NombreRelacionado tipo="persona" :nombre="nombre" class="rounded-full">
+                <AvatarPersona :nombre="nombre" />
+              </NombreRelacionado>
+            </li>
+          </ul>
+        </div>
+      </article>
+    </plantillaTarjeta.define>
     <plantillaPieGrupo.define v-slot="{ grupo }">
       <TableRow class="hover:bg-transparent">
         <TableCell :colspan="numeroColumnasTabla" :class="`border-l-4 ${grupo.borde}`">
-          <form class="flex flex-col gap-1" @submit.prevent="crearRapida(grupo.id)">
-            <Input
-              v-model="altaRapida[grupo.id]"
-              data-alta-rapida
-              placeholder="+ Agregar tarea"
-              :aria-label="`Agregar tarea a ${grupo.titulo}`"
-              :disabled="creandoRapida[grupo.id]"
-              class="h-8 max-w-sm border-dashed shadow-none"
-              @keydown.enter.prevent="crearRapida(grupo.id)"
-            />
-            <p v-if="errorAltaRapida[grupo.id]" role="alert" class="text-destructive text-sm">
-              {{ errorAltaRapida[grupo.id] }}
-            </p>
-          </form>
+          <plantillaAltaRapida.reuse :grupo="grupo" />
         </TableCell>
       </TableRow>
       <TableRow
@@ -1381,6 +1540,40 @@ async function guardar(): Promise<void> {
         <TableCell />
       </TableRow>
     </plantillaPieGrupo.define>
+    <plantillaAltaRapida.define v-slot="{ grupo }">
+      <form class="sticky left-4 flex flex-col gap-1" @submit.prevent="crearRapida(grupo.id)">
+        <Input
+          v-model="altaRapida[grupo.id]"
+          data-alta-rapida
+          placeholder="+ Agregar tarea"
+          :aria-label="`Agregar tarea a ${grupo.titulo}`"
+          :disabled="creandoRapida[grupo.id]"
+          class="h-8 max-w-sm border-dashed shadow-none"
+          @keydown.enter.prevent="crearRapida(grupo.id)"
+        />
+        <p v-if="errorAltaRapida[grupo.id]" role="alert" class="text-destructive text-sm">
+          {{ errorAltaRapida[grupo.id] }}
+        </p>
+      </form>
+    </plantillaAltaRapida.define>
+    <plantillaBotonGrupo.define v-slot="{ grupo }">
+      <button
+        type="button"
+        class="hover:text-foreground focus-visible:ring-ring/50 sticky left-4 flex items-center gap-1.5 rounded-sm text-sm font-semibold outline-none focus-visible:ring-[3px]"
+        :aria-expanded="!estaPlegado(grupo.id)"
+        @click="alternarGrupo(grupo.id)"
+      >
+        <ChevronRight
+          class="size-4 transition-transform"
+          :class="estaPlegado(grupo.id) ? '' : 'rotate-90'"
+          aria-hidden="true"
+        />
+        {{ grupo.titulo }}
+        <span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium">{{
+          grupo.filas.length
+        }}</span>
+      </button>
+    </plantillaBotonGrupo.define>
     <div class="flex items-center justify-between">
       <h2 :id="ID_TITULO_LISTA" class="text-xl font-semibold" tabindex="-1">Tareas</h2>
       <div class="flex items-center gap-2">
@@ -1726,13 +1919,58 @@ async function guardar(): Promise<void> {
         data-testid="superficie-tabla"
         class="bg-card text-card-foreground mt-4 overflow-hidden rounded-xl border shadow-xs"
       >
-        <Table>
+        <div v-if="enTarjetas" data-lista-tarjetas>
+          <section
+            v-for="grupo in gruposConFilas"
+            :key="grupo.id"
+            :data-grupo="grupo.id"
+            :class="`border-b-0 border-l-4 ${grupo.borde}`"
+          >
+            <div :class="`${grupo.fondo} px-3 py-2`">
+              <plantillaBotonGrupo.reuse :grupo="grupo" />
+            </div>
+            <div v-if="!estaPlegado(grupo.id)" class="flex flex-col gap-2 p-2">
+              <template v-if="agruparSubestado">
+                <template v-for="seccion in seccionesPorGrupo[grupo.id]" :key="seccion.clave">
+                  <h3 class="flex items-center gap-1.5 px-1 pt-1 text-sm font-medium">
+                    <span
+                      v-if="seccion.subestado !== null"
+                      :class="`${CLASE_PILDORA} ${colorEtiqueta(seccion.subestado)}`"
+                      >{{ seccion.subestado }}</span
+                    >
+                    <template v-else>Sin subestado</template>
+                    <span class="text-muted-foreground">{{ ` · ${seccion.tareas.length}` }}</span>
+                  </h3>
+                  <plantillaTarjeta.reuse
+                    v-for="tarea in seccion.tareas"
+                    :key="tarea.id"
+                    :tarea="tarea"
+                  />
+                </template>
+              </template>
+              <template v-else>
+                <plantillaTarjeta.reuse
+                  v-for="tarea in grupo.filas"
+                  :key="tarea.id"
+                  :tarea="tarea"
+                />
+              </template>
+              <plantillaAltaRapida.reuse :grupo="grupo" />
+            </div>
+          </section>
+        </div>
+        <Table v-else>
           <TableHeader class="bg-muted">
             <TableRow class="bg-muted hover:bg-muted">
               <TableHead
                 v-for="columna in columnasVisibles"
                 :key="columna.campo"
                 :aria-sort="valorAriaSort(campo === columna.campo, direccion)"
+                :class="
+                  columna.campo === COLUMNA_FIJA
+                    ? `bg-muted ${CLASE_COLUMNA_FIJA} ${LINEA_COLUMNA_FIJA}`
+                    : ''
+                "
               >
                 <CabeceraOrdenable
                   :activo="campo === columna.campo"
@@ -1741,30 +1979,16 @@ async function guardar(): Promise<void> {
                   >{{ columna.etiqueta }}</CabeceraOrdenable
                 >
               </TableHead>
-              <TableHead><span class="sr-only">Acciones</span></TableHead>
+              <TableHead :class="`bg-muted ${CLASE_ACCIONES_FIJAS}`"
+                ><span class="sr-only">Acciones</span></TableHead
+              >
             </TableRow>
           </TableHeader>
           <template v-for="grupo in gruposConFilas" :key="grupo.id">
             <TableBody :data-grupo="grupo.id">
               <TableRow :class="grupo.fondo">
                 <TableCell :colspan="numeroColumnasTabla" :class="`border-l-4 ${grupo.borde}`">
-                  <button
-                    type="button"
-                    class="hover:text-foreground focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-sm text-sm font-semibold outline-none focus-visible:ring-[3px]"
-                    :aria-expanded="!estaPlegado(grupo.id)"
-                    @click="alternarGrupo(grupo.id)"
-                  >
-                    <ChevronRight
-                      class="size-4 transition-transform"
-                      :class="estaPlegado(grupo.id) ? '' : 'rotate-90'"
-                      aria-hidden="true"
-                    />
-                    {{ grupo.titulo }}
-                    <span
-                      class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
-                      >{{ grupo.filas.length }}</span
-                    >
-                  </button>
+                  <plantillaBotonGrupo.reuse :grupo="grupo" />
                 </TableCell>
               </TableRow>
               <template v-if="!estaPlegado(grupo.id) && !agruparSubestado">
@@ -1773,7 +1997,7 @@ async function guardar(): Promise<void> {
                   :key="tarea.id"
                   :tarea="tarea"
                   :indice="indice"
-                  :borde="grupo.borde"
+                  :franja="grupo.franja"
                 />
                 <plantillaPieGrupo.reuse :grupo="grupo" />
               </template>
@@ -1830,7 +2054,7 @@ async function guardar(): Promise<void> {
                     :key="tarea.id"
                     :tarea="tarea"
                     :indice="indice"
-                    :borde="grupo.borde"
+                    :franja="grupo.franja"
                   />
                 </template>
               </TableBody>
@@ -1900,6 +2124,7 @@ async function guardar(): Promise<void> {
     <ModalTareasRelacionadas
       :seleccion="tareasRelacionadas.seleccion.value"
       :tareas="tienda.tareas"
+      :grupos="tiendaGrupos.grupos"
       @cerrar="tareasRelacionadas.cerrar"
       @ver-tarea="abrirDesdeRelacionadas"
     />

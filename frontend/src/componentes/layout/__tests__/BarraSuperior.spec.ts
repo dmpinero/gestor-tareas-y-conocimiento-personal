@@ -68,6 +68,17 @@ describe('BarraSuperior', () => {
     expect(router.currentRoute.value.path).toBe('/foco/historial')
   })
 
+  it('en pantallas estrechas el título se oculta a la vista y deja el ancho a la píldora del foco', async () => {
+    const { wrapper } = await montar(FOCO)
+
+    const titulo = wrapper.get('h1')
+    expect(titulo.text()).toBe('Gestor de Tareas y Conocimiento Personal')
+    expect(titulo.classes()).toContain('max-sm:sr-only')
+    expect(wrapper.get('[data-indicador-foco]').element.parentElement?.className).toContain(
+      'max-sm:max-w-full',
+    )
+  })
+
   it('con una tarea en foco muestra su píldora y después el reloj, antes de la ayuda', async () => {
     const { wrapper } = await montar(FOCO)
 
