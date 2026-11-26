@@ -151,6 +151,56 @@ test('una tarea muy vencida aparece en las sugerencias y se sube a la cola', asy
   }
 })
 
+test('el buscador añade varias tareas a la cola desde Inicio y desde la barra superior', async ({
+  page,
+  request,
+  grupoE2e,
+}) => {
+  const marca = Date.now()
+  const nombres = [`Buscar ${marca} uno`, `Buscar ${marca} dos`, `Buscar ${marca} tres`]
+  const ids: number[] = []
+  for (const nombre of nombres) ids.push(await crearTarea(request, nombre, grupoE2e))
+  const previa = await colaEnApi(request)
+  await vaciarCola(request, previa)
+  try {
+    await page.goto('/')
+    await panel(page).getByRole('button', { name: 'Buscar tareas' }).click()
+    const dialogo = page.getByRole('dialog', { name: 'Añadir a siguientes' })
+    await expect(dialogo).toBeVisible()
+    await dialogo.getByRole('searchbox', { name: 'Buscar tarea' }).fill(`búscar ${marca}`)
+    await expect(dialogo.getByRole('checkbox')).toHaveCount(3)
+    // En el orden en que se marcan.
+    await dialogo.getByRole('checkbox', { name: nombres[1] }).check()
+    await dialogo.getByRole('checkbox', { name: nombres[0] }).check()
+    await dialogo.evaluate((elemento) =>
+      Promise.all(elemento.getAnimations({ subtree: true }).map((a) => a.finished)),
+    )
+    const auditoria = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .exclude('.vue-devtools__anchor-btn')
+      .analyze()
+    expect(auditoria.violations).toEqual([])
+    await page.screenshot({ path: 'e2e/capturas/siguientes-03-buscador.png' })
+    await dialogo.getByRole('button', { name: 'Añadir (2)' }).click()
+    await expect(dialogo).toBeHidden()
+    await expect(panel(page).locator('[data-fila-siguiente]')).toHaveCount(2)
+    expect(await colaEnApi(request)).toEqual([ids[1], ids[0]])
+
+    // Desde el desplegable: ya no ofrece las de la cola.
+    await page.locator('[data-siguientes]').click()
+    await page.locator('[data-buscar-siguientes]').last().click()
+    await expect(dialogo).toBeVisible()
+    await dialogo.getByRole('searchbox', { name: 'Buscar tarea' }).fill(`${marca}`)
+    await expect(dialogo.getByRole('checkbox')).toHaveCount(1)
+    await dialogo.getByRole('checkbox', { name: nombres[2] }).check()
+    await dialogo.getByRole('button', { name: 'Añadir (1)' }).click()
+    await expect(dialogo).toBeHidden()
+    expect(await colaEnApi(request)).toEqual([ids[1], ids[0], ids[2]])
+  } finally {
+    await vaciarCola(request, ids)
+  }
+})
+
 const MODOS = [
   { modo: 'claro', preparar: async (_page: Page) => {} },
   { modo: 'oscuro', preparar: activarModoOscuro },

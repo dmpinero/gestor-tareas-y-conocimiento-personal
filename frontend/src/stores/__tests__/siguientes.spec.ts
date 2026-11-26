@@ -81,6 +81,34 @@ describe('useTiendaSiguientes', () => {
     expect(tienda.cola).toEqual([A])
   })
 
+  it('anadirVarias las añade una a una, en el orden dado', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValueOnce([A, C]).mockResolvedValueOnce([A, C, B])
+    const tienda = useTiendaSiguientes()
+    tienda.cola = [A]
+
+    expect(await tienda.anadirVarias([3, 2])).toBe(true)
+
+    expect(vi.mocked(clienteApi.crear).mock.calls).toEqual([
+      ['/siguientes', { tarea_id: 3 }],
+      ['/siguientes', { tarea_id: 2 }],
+    ])
+    expect(tienda.cola).toEqual([A, C, B])
+  })
+
+  it('anadirVarias se detiene en el primer fallo y guarda el error', async () => {
+    vi.mocked(clienteApi.crear)
+      .mockResolvedValueOnce([A, C])
+      .mockRejectedValueOnce(new Error('Tarea completada'))
+    const tienda = useTiendaSiguientes()
+    tienda.cola = [A]
+
+    expect(await tienda.anadirVarias([3, 2, 4])).toBe(false)
+
+    expect(clienteApi.crear).toHaveBeenCalledTimes(2)
+    expect(tienda.cola).toEqual([A, C])
+    expect(tienda.error).toBe('Tarea completada')
+  })
+
   it('reordenar envía PUT /siguientes con los ids', async () => {
     vi.mocked(clienteApi.actualizar).mockResolvedValue([B, A])
     const tienda = useTiendaSiguientes()

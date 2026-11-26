@@ -31,6 +31,7 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - S8 "quiero que en A continuación también expliques el criterio y el contador": la cola muestra contador y prioridad por tarea y una línea con su criterio (orden elegido por el usuario).
 - S9 "haz que en a continuación y en siguientes también pueda ordenar arrastrando las tareas con el ratón".
 - S10 "es bastante fea la tabla de resultados, intenta homogeneizar estilos con el resto de la aplicación" (supuesto: el panel de Inicio): tarjetas como las del tablero, píldora de prioridad, fecha corta + contador, sugerencias en sección propia.
+- S11 "pon un buscador para buscar tareas y poder añadir a A continuación o en siguientes. Ponla con el estilo de ventana que pusiste para relacionar tareas".
 
 ## Tasks
 - T1 S2-S4 backend (migración, dominio, aplicación, repositorio, API, foco saca de la cola, tests) — delegado (writer A, paralelo con T2: superficies disjuntas) — hecho 2d86e4e: unitarios 773; suite completa 1708 ok + 1 contrato arreglado (re-verificado solo contrato/API de siguientes y foco); migración d7f2b9e4a6c1
@@ -39,6 +40,7 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - T5 S8 contador, prioridad y criterio en la cola — inline
 - T6 S9 arrastrar en panel y desplegable — inline — d7c46ce
 - T7 S10 estilos homogéneos en Inicio — inline
+- T8 S11 buscador (DialogoElegirTareas común con Relacionar tareas) — inline
 - T3 integración: e2e, README, vista previa — inline — hecho 7112d17 + arreglo e2e: 4 e2e nuevos ok; suite e2e 96+1, el fallo (historial-foco) era una aserción de URL dependiente del tiempo, corregida (3/3 ok)
 
 ## Log
@@ -51,3 +53,4 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - L7 (2026-11-26) "quiero que en A continuación también expliques el criterio y el contador".
 - L8 (2026-11-26) "haz que en a continuación y en siguientes también pueda ordenar arrastrando las tareas con el ratón".
 - L9 (2026-11-26) "Por cierto, es bastante fea la tabla de resultados, intenta homogeneizar estilos con el resto de la aplicación".
+- L10 (2026-11-26) "pon un buscador para buscar tareas y poder añadir a A continuación o en siguientes. Ponla con el estilo de ventana que pusiste para relacionar tareas". Se extrae DialogoElegirTareas y lo usan ambos selectores.

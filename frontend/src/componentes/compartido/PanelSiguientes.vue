@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronUp, GripVertical, X } from '@lucide/vue'
+import { ChevronDown, ChevronUp, GripVertical, Search, X } from '@lucide/vue'
 import { createReusableTemplate, useMediaQuery } from '@vueuse/core'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
+import SelectorTareasSiguientes from '@/componentes/compartido/SelectorTareasSiguientes.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import { Button } from '@/componentes/ui/button'
 import { useArrastrarCola } from '@/composables/useArrastrarCola'
@@ -42,6 +43,9 @@ const sugerencias = computed(() =>
     tiendaFoco.foco?.tarea_id ?? null,
   ),
 )
+
+// "Buscar tareas" abre el buscador para añadir varias a la cola.
+const buscadorAbierto = ref(false)
 
 // Las filas de la cola también se reordenan arrastrándolas con el ratón.
 const arrastre = useArrastrarCola()
@@ -114,13 +118,28 @@ onMounted(() => {
   </plantillaDatos>
 
   <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-    <section data-panel-siguientes aria-labelledby="titulo-siguientes" class="grid min-w-0 grid-cols-1 gap-3">
+    <section
+      data-panel-siguientes
+      aria-labelledby="titulo-siguientes"
+      class="grid min-w-0 grid-cols-1 gap-3"
+    >
       <div>
-        <h3 id="titulo-siguientes" :class="CLASE_TITULO">A continuación</h3>
+        <div class="flex items-center justify-between gap-2">
+          <h3 id="titulo-siguientes" :class="CLASE_TITULO">A continuación</h3>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-buscar-siguientes
+            @click="buscadorAbierto = true"
+          >
+            <Search aria-hidden="true" />Buscar tareas
+          </Button>
+        </div>
         <p data-criterio-cola :class="CLASE_CRITERIO">
           Las tareas que has elegido, en el orden en que quieres abordarlas: añádelas con «Añadir a
-          siguientes» y ordénalas arrastrándolas o con las flechas. Al ponerlas en foco salen de la
-          cola.
+          siguientes» o «Buscar tareas» y ordénalas arrastrándolas o con las flechas. Al ponerlas en
+          foco salen de la cola.
         </p>
       </div>
       <p v-if="tiendaSiguientes.error" class="text-destructive text-sm" role="alert">
@@ -207,9 +226,14 @@ onMounted(() => {
           </span>
         </li>
       </ol>
+      <SelectorTareasSiguientes v-model:abierto="buscadorAbierto" />
     </section>
 
-    <section data-sugerencias aria-labelledby="titulo-sugerencias" class="grid min-w-0 grid-cols-1 gap-3">
+    <section
+      data-sugerencias
+      aria-labelledby="titulo-sugerencias"
+      class="grid min-w-0 grid-cols-1 gap-3"
+    >
       <div>
         <h3 id="titulo-sugerencias" :class="CLASE_TITULO">Sugerencias</h3>
         <p data-criterio-sugerencias :class="CLASE_CRITERIO">

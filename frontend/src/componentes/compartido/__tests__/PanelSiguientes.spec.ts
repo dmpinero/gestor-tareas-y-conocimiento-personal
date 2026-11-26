@@ -154,11 +154,22 @@ describe('PanelSiguientes', () => {
     expect(sinVencimiento!.get('[data-prioridad-sugerencia]').text()).toBe('Prioridad 2')
   })
 
+  it('«Buscar tareas» abre el buscador para añadir a siguientes', async () => {
+    const wrapper = await montar([], TAREAS)
+
+    await wrapper.get('button[data-buscar-siguientes]').trigger('click')
+    await flushPromises()
+
+    expect(document.body.querySelector('[role="dialog"] h2')?.textContent?.trim()).toBe(
+      'Añadir a siguientes',
+    )
+  })
+
   it('explica el criterio de la cola', async () => {
     const wrapper = await montar([])
 
     expect(wrapper.get('[data-criterio-cola]').text()).toBe(
-      'Las tareas que has elegido, en el orden en que quieres abordarlas: añádelas con «Añadir a siguientes» y ordénalas arrastrándolas o con las flechas. Al ponerlas en foco salen de la cola.',
+      'Las tareas que has elegido, en el orden en que quieres abordarlas: añádelas con «Añadir a siguientes» o «Buscar tareas» y ordénalas arrastrándolas o con las flechas. Al ponerlas en foco salen de la cola.',
     )
   })
 

@@ -44,7 +44,7 @@ let router: Router
 
 async function montar(foco: Foco | null, cola: TareaSiguiente[] = []): Promise<VueWrapper> {
   vi.mocked(clienteApi.obtener).mockImplementation(async (ruta) =>
-    ruta === '/siguientes' ? cola : foco,
+    ruta === '/siguientes' ? cola : ruta === '/tareas' ? [] : foco,
   )
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -227,6 +227,20 @@ describe('IndicadorFoco', () => {
       n.textContent?.trim(),
     )
     expect(nombres.slice(0, 2)).toEqual(['Llamar', 'Informe'])
+  })
+
+  it('desde el desplegable se abre el buscador para añadir a siguientes', async () => {
+    const wrapper = await montar(FOCO_TAREA, COLA)
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+
+    document.body.querySelector<HTMLButtonElement>('[data-buscar-siguientes]')!.click()
+    await flushPromises()
+
+    expect(document.body.querySelector('[data-slot="popover-content"]')).toBeNull()
+    expect(document.body.querySelector('[role="dialog"] h2')?.textContent?.trim()).toBe(
+      'Añadir a siguientes',
+    )
   })
 
   it('sin foco pero con cola se muestra el acceso «Pasar a la siguiente»', async () => {

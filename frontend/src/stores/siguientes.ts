@@ -42,6 +42,15 @@ export const useTiendaSiguientes = defineStore('siguientes', () => {
     })
   }
 
+  // Añade varias, una tras otra y en el orden dado (cada una al final). Se
+  // detiene en el primer fallo, con las anteriores ya añadidas.
+  async function anadirVarias(ids: number[]): Promise<boolean> {
+    for (const id of ids) {
+      if (!(await anadir(id))) return false
+    }
+    return true
+  }
+
   function reordenar(ids: number[]): Promise<boolean> {
     return ejecutar(async () => {
       cola.value = await reordenarSiguientes(ids)
@@ -141,6 +150,7 @@ export const useTiendaSiguientes = defineStore('siguientes', () => {
     error,
     cargar,
     anadir,
+    anadirVarias,
     reordenar,
     moverA,
     subir,

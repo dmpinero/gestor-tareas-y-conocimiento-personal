@@ -371,7 +371,10 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
 - A continuación (cola de siguientes): para saber en qué trabajar después del
   foco. "Añadir a siguientes" (detalle, tablero y menú "⋯" del listado) pone la
-  tarea al final de la cola; si ya está, "Quitar de siguientes". En Inicio, el
+  tarea al final de la cola; si ya está, "Quitar de siguientes". "Buscar tareas"
+  (en Inicio) y "Buscar y añadir tareas" (desplegable «Siguientes») abren un
+  buscador para añadir varias de una vez, en el orden en que se marcan. La cola
+  se reordena con las flechas o arrastrando las tareas. En Inicio, el
   panel «A continuación» muestra la cola en orden, con la cuenta atrás hasta el
   vencimiento y la prioridad de cada tarea, "Trabajar en esta", subir, bajar y
   quitar, y una línea que explica cómo se forma la cola; debajo hasta 5 **Sugerencias**: las tareas pendientes

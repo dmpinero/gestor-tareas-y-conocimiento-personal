@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { GripVertical, ListOrdered, SkipForward, X } from '@lucide/vue'
+import { GripVertical, ListOrdered, Search, SkipForward, X } from '@lucide/vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
+import SelectorTareasSiguientes from '@/componentes/compartido/SelectorTareasSiguientes.vue'
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
 import { useArrastrarCola } from '@/composables/useArrastrarCola'
 import { formatearTiempoFoco, textoFoco } from '@/lib/foco'
@@ -25,6 +26,13 @@ const primeras = computed(() => tiendaSiguientes.cola.slice(0, MAXIMO_SIGUIENTES
 // Las siguientes del desplegable se reordenan arrastrándolas con el ratón.
 const arrastre = useArrastrarCola()
 const siguiente = computed(() => tiendaSiguientes.cola[0] ?? null)
+
+// "Buscar y añadir tareas" cierra el desplegable y abre el buscador.
+const buscadorAbierto = ref(false)
+function abrirBuscador(): void {
+  desplegableAbierto.value = false
+  buscadorAbierto.value = true
+}
 
 async function pasarALaSiguiente(): Promise<void> {
   desplegableAbierto.value = false
@@ -147,10 +155,20 @@ onUnmounted(() => {
           <SkipForward aria-hidden="true" />
           <span class="truncate">Pasar a la siguiente: {{ siguiente.tarea_nombre }}</span>
         </button>
+        <button
+          type="button"
+          data-buscar-siguientes
+          class="hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring/50 flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none focus-visible:ring-[3px] [&_svg]:size-4"
+          @click="abrirBuscador"
+        >
+          <Search aria-hidden="true" />
+          <span class="truncate">Buscar y añadir tareas</span>
+        </button>
         <p v-if="tiendaSiguientes.error" class="text-destructive px-2 pt-1 text-xs" role="alert">
           {{ tiendaSiguientes.error }}
         </p>
       </PopoverContent>
     </Popover>
+    <SelectorTareasSiguientes v-model:abierto="buscadorAbierto" />
   </div>
 </template>
