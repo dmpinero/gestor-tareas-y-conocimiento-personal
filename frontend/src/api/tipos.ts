@@ -318,3 +318,40 @@ export interface EntradaHistorialFoco {
   /** ISO 8601 con zona, o `null` si es el foco actual (en curso). */
   hasta: string | null
 }
+
+/** `GET /conocimiento/estado`: si están las credenciales en el backend y qué hay
+ * en el índice local de Notion. */
+export interface EstadoConocimiento {
+  configurado: { notion: boolean; anthropic: boolean }
+  paginas: number
+  fragmentos: number
+  /** Instante en UTC (`YYYY-MM-DDTHH:MM:SSZ`) de la última sincronización, o
+   * `null` si nunca se ha sincronizado. */
+  ultima_sincronizacion: string | null
+}
+
+/** `POST /conocimiento/sincronizar`: el índice tras sincronizar y qué cambió. */
+export interface ResultadoSincronizacion {
+  paginas: number
+  fragmentos: number
+  nuevas: number
+  actualizadas: number
+  eliminadas: number
+  /** Instante en UTC (`YYYY-MM-DDTHH:MM:SSZ`). */
+  ultima_sincronizacion: string
+}
+
+/** Una página de Notion citada por una respuesta (evento SSE `fuentes`). */
+export interface FuenteConocimiento {
+  pagina_id: string
+  titulo: string
+  url: string
+}
+
+export type RolMensajeConocimiento = 'usuario' | 'asistente'
+
+/** Un mensaje del historial que se envía a `POST /conocimiento/preguntar`. */
+export interface MensajeConocimiento {
+  rol: RolMensajeConocimiento
+  texto: string
+}

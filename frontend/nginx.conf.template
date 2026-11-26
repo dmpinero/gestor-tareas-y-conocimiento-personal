@@ -36,6 +36,23 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 
+    # Chat de Conocimiento: la respuesta llega en streaming (text/event-stream).
+    # Sin bufer ni cache, para que cada trozo llegue al navegador en cuanto sale
+    # del backend, y con un tiempo de lectura largo porque entre trozos puede
+    # haber pausas mientras Claude piensa.
+    location = /api/v1/conocimiento/preguntar {
+        set $backend ${URL_BACKEND};
+        proxy_pass $backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        gzip off;
+    }
+
     location /api/v1/ {
         # Con una variable en proxy_pass, nginx ignora la parte de ruta del
         # destino para el reemplazo del prefijo de location y reenvia la URI
