@@ -1,0 +1,150 @@
+{
+ "object": "list",
+ "results": [
+  {
+   "object": "page",
+   "id": "33333333-3333-3333-3333-333333333333",
+   "created_time": "2026-10-01T08:00:00.000Z",
+   "last_edited_time": "2026-11-21T16:30:00.000Z",
+   "created_by": {
+    "object": "user",
+    "id": "u1"
+   },
+   "last_edited_by": {
+    "object": "user",
+    "id": "u1"
+   },
+   "cover": null,
+   "icon": null,
+   "parent": {
+    "type": "workspace",
+    "workspace": true
+   },
+   "archived": false,
+   "in_trash": false,
+   "properties": {
+    "Nombre": {
+     "id": "title",
+     "type": "title",
+     "title": [
+      {
+       "type": "text",
+       "text": {
+        "content": "Reunión con Ana",
+        "link": null
+       },
+       "annotations": {
+        "bold": false,
+        "italic": false,
+        "strikethrough": false,
+        "underline": false,
+        "code": false,
+        "color": "default"
+       },
+       "plain_text": "Reunión con Ana",
+       "href": null
+      }
+     ]
+    },
+    "Etiquetas": {
+     "id": "abc",
+     "type": "multi_select",
+     "multi_select": [
+      {
+       "id": "x",
+       "name": "trabajo",
+       "color": "blue"
+      }
+     ]
+    }
+   },
+   "url": "https://www.notion.so/Reunion-33333333333333333333333333333333",
+   "public_url": null
+  },
+  {
+   "object": "page",
+   "id": "44444444-4444-4444-4444-444444444444",
+   "created_time": "2026-10-01T08:00:00.000Z",
+   "last_edited_time": "2026-11-22T07:00:00.000Z",
+   "created_by": {
+    "object": "user",
+    "id": "u1"
+   },
+   "last_edited_by": {
+    "object": "user",
+    "id": "u1"
+   },
+   "cover": null,
+   "icon": null,
+   "parent": {
+    "type": "workspace",
+    "workspace": true
+   },
+   "archived": false,
+   "in_trash": false,
+   "properties": {
+    "title": {
+     "id": "title",
+     "type": "title",
+     "title": []
+    }
+   },
+   "url": "https://www.notion.so/44444444444444444444444444444444",
+   "public_url": null
+  },
+  {
+   "object": "page",
+   "id": "55555555-5555-5555-5555-555555555555",
+   "created_time": "2026-10-01T08:00:00.000Z",
+   "last_edited_time": "2026-11-22T07:00:00.000Z",
+   "created_by": {
+    "object": "user",
+    "id": "u1"
+   },
+   "last_edited_by": {
+    "object": "user",
+    "id": "u1"
+   },
+   "cover": null,
+   "icon": null,
+   "parent": {
+    "type": "workspace",
+    "workspace": true
+   },
+   "archived": false,
+   "in_trash": true,
+   "properties": {
+    "title": {
+     "id": "title",
+     "type": "title",
+     "title": [
+      {
+       "type": "text",
+       "text": {
+        "content": "En la papelera",
+        "link": null
+       },
+       "annotations": {
+        "bold": false,
+        "italic": false,
+        "strikethrough": false,
+        "underline": false,
+        "code": false,
+        "color": "default"
+       },
+       "plain_text": "En la papelera",
+       "href": null
+      }
+     ]
+    }
+   },
+   "url": "https://www.notion.so/55555555555555555555555555555555",
+   "public_url": null
+  }
+ ],
+ "next_cursor": null,
+ "has_more": false,
+ "type": "page_or_database",
+ "page_or_database": {},
+ "request_id": "r1"
+}

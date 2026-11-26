@@ -8,8 +8,12 @@ def vaciar_tablas(sesion: Session) -> None:
     de tareas (con sus vínculos, sus subtareas y comentarios, también los de las
     subtareas), catálogos (también los subestados y los códigos de servicio), workflows
     (con los comentarios de sus pasos) y grupos de estados, y las imágenes de los
-    comentarios, respetando el orden de las claves ajenas."""
+    comentarios, y el índice de Notion (con el estado de su sincronización), respetando
+    el orden de las claves ajenas."""
     for tabla in (
+        modelos.FragmentoNotionModelo.__table__,
+        modelos.PaginaNotionModelo.__table__,
+        modelos.SincronizacionNotionModelo.__table__,
         modelos.ColaSiguientesModelo.__table__,
         modelos.HistorialFocoModelo.__table__,
         modelos.FocoTrabajoModelo.__table__,

@@ -6,6 +6,11 @@ from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as HTTPExceptionDeStarlette
 from starlette.routing import compile_path
 
+from gestor_tareas.dominio.conocimiento.errores import (
+    ConocimientoSinConfigurarError,
+    NotionNoDisponibleError,
+    SincronizacionEnCursoError,
+)
 from gestor_tareas.dominio.excepciones import (
     EntidadConDependenciasError,
     EntidadNoEncontradaError,
@@ -110,6 +115,20 @@ def registrar_manejadores_de_errores(aplicacion: FastAPI) -> None:
     @aplicacion.exception_handler(ImagenDemasiadoGrandeError)
     async def _imagen_grande(_: Request, error: ImagenDemasiadoGrandeError) -> JSONResponse:
         return _respuesta(status.HTTP_413_CONTENT_TOO_LARGE, error)
+
+    @aplicacion.exception_handler(SincronizacionEnCursoError)
+    async def _sincronizacion_en_curso(
+        _: Request, error: SincronizacionEnCursoError
+    ) -> JSONResponse:
+        return _respuesta(status.HTTP_409_CONFLICT, error)
+
+    @aplicacion.exception_handler(NotionNoDisponibleError)
+    async def _notion_no_disponible(_: Request, error: NotionNoDisponibleError) -> JSONResponse:
+        return _respuesta(status.HTTP_502_BAD_GATEWAY, error)
+
+    @aplicacion.exception_handler(ConocimientoSinConfigurarError)
+    async def _sin_configurar(_: Request, error: ConocimientoSinConfigurarError) -> JSONResponse:
+        return _respuesta(status.HTTP_503_SERVICE_UNAVAILABLE, error)
 
     @aplicacion.exception_handler(Exception)
     async def _error_no_controlado(_: Request, error: Exception) -> JSONResponse:
