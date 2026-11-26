@@ -372,8 +372,9 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
 - A continuación (cola de siguientes): para saber en qué trabajar después del
   foco. "Añadir a siguientes" (detalle, tablero y menú "⋯" del listado) pone la
   tarea al final de la cola; si ya está, "Quitar de siguientes". En Inicio, el
-  panel «A continuación» muestra la cola en orden, con "Trabajar en esta",
-  subir, bajar y quitar, y debajo hasta 5 **Sugerencias**: las tareas pendientes
+  panel «A continuación» muestra la cola en orden, con la cuenta atrás hasta el
+  vencimiento y la prioridad de cada tarea, "Trabajar en esta", subir, bajar y
+  quitar, y una línea que explica cómo se forma la cola; debajo hasta 5 **Sugerencias**: las tareas pendientes
   que vencen antes (las sin vencimiento al final), después por prioridad y por
   antigüedad, sin las hibernadas, las que están en DONE, las de la cola ni la del
   foco. Cada sugerencia muestra la cuenta atrás hasta su vencimiento y su

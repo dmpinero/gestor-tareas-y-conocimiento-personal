@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronUp, X } from '@lucide/vue'
-import { useMediaQuery } from '@vueuse/core'
+import { createReusableTemplate, useMediaQuery } from '@vueuse/core'
 import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 
@@ -8,6 +8,8 @@ import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import { Button } from '@/componentes/ui/button'
+import type { Tarea } from '@/api/tipos'
+import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
 import { sugerenciasSiguientes } from '@/lib/sugerenciasSiguientes'
 import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaSiguientes } from '@/stores/siguientes'
@@ -31,6 +33,13 @@ const sugerencias = computed(() =>
   ),
 )
 
+// Cuenta atrás (parada si la tarea está hibernada o en DONE) y prioridad, en
+// las filas de la cola y en las sugerencias.
+const [plantillaDatos, usarDatos] = createReusableTemplate<{ tarea: Tarea }>()
+
+// Datos de cada tarea de la cola (las tareas pueden no haberse cargado aún).
+const tareaPorId = computed(() => new Map(tiendaTareas.tareas.map((t) => [t.id, t])))
+
 // En pantallas estrechas «Añadir a siguientes» queda en solo icono, para que
 // quepa el nombre.
 const ancha = useMediaQuery('(min-width: 640px)')
@@ -49,8 +58,26 @@ onMounted(() => {
 </script>
 
 <template>
+  <plantillaDatos v-slot="{ tarea }">
+    <span class="flex flex-wrap items-center gap-x-3 text-sm">
+      <ContadorVencimiento
+        v-if="tarea.fecha_vencimiento"
+        :vencimiento="tarea.fecha_vencimiento"
+        :congelada-en="instanteCongelado(tarea)"
+        :hibernada="estaHibernada(tarea)"
+      />
+      <span v-else data-sin-vencimiento class="text-muted-foreground">Sin vencimiento</span>
+      <span v-if="tarea.prioridad !== null" data-prioridad-sugerencia class="text-muted-foreground"
+        >Prioridad {{ tarea.prioridad }}</span
+      >
+    </span>
+  </plantillaDatos>
   <section data-panel-siguientes aria-labelledby="titulo-siguientes" class="rounded-lg border p-4">
     <h3 id="titulo-siguientes" class="text-lg font-semibold">A continuación</h3>
+    <p data-criterio-cola class="text-muted-foreground mt-1 text-xs">
+      Las tareas que has elegido, en el orden en que quieres abordarlas: añádelas con «Añadir a
+      siguientes» y ordénalas con las flechas. Al ponerlas en foco salen de la cola.
+    </p>
     <p v-if="tiendaSiguientes.error" class="text-destructive mt-2 text-sm" role="alert">
       {{ tiendaSiguientes.error }}
     </p>
@@ -63,15 +90,27 @@ onMounted(() => {
         v-for="(entrada, indice) in tiendaSiguientes.cola"
         :key="entrada.tarea_id"
         data-fila-siguiente
-        class="flex items-center gap-1 py-1"
+        class="flex flex-wrap items-center gap-1 py-1.5"
       >
         <span class="text-muted-foreground w-6 shrink-0 text-right text-sm tabular-nums"
           >{{ indice + 1 }}.</span
         >
-        <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE">{{
-          entrada.tarea_nombre
-        }}</RouterLink>
-        <BotonFoco :tarea-id="entrada.tarea_id" :nombre="entrada.tarea_nombre" compacto />
+        <!-- En pantallas estrechas los botones bajan a una segunda línea. -->
+        <div class="flex min-w-0 flex-1 flex-col max-sm:basis-[calc(100%-2rem)]">
+          <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE">{{
+            entrada.tarea_nombre
+          }}</RouterLink>
+          <usarDatos
+            v-if="tareaPorId.get(entrada.tarea_id)"
+            :tarea="tareaPorId.get(entrada.tarea_id)!"
+          />
+        </div>
+        <BotonFoco
+          class="max-sm:ml-auto"
+          :tarea-id="entrada.tarea_id"
+          :nombre="entrada.tarea_nombre"
+          compacto
+        />
         <Button
           type="button"
           variant="ghost"
@@ -128,19 +167,7 @@ onMounted(() => {
       >
         <div class="flex min-w-0 flex-1 flex-col">
           <RouterLink :to="enlace(tarea.id)" :class="CLASE_ENLACE">{{ tarea.nombre }}</RouterLink>
-          <span class="flex flex-wrap items-center gap-x-3 text-sm">
-            <ContadorVencimiento
-              v-if="tarea.fecha_vencimiento"
-              :vencimiento="tarea.fecha_vencimiento"
-            />
-            <span v-else data-sin-vencimiento class="text-muted-foreground">Sin vencimiento</span>
-            <span
-              v-if="tarea.prioridad !== null"
-              data-prioridad-sugerencia
-              class="text-muted-foreground"
-              >Prioridad {{ tarea.prioridad }}</span
-            >
-          </span>
+          <usarDatos :tarea="tarea" />
         </div>
         <BotonSiguientes
           class="shrink-0"

@@ -28,11 +28,13 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - Texto visible en español, como el resto de la app. AA de contraste en claro y oscuro.
 
 - S7 "además del nombre de la tarea quiero que muestres el contador para ver cuánto queda para entregar la tarea sugerida (en la opción de Inicio)" / "o que especifiques el criterio por el que propones esas tareas y no otras". Se hacen ambas: contador + prioridad en cada sugerencia y una línea con el criterio.
+- S8 "quiero que en A continuación también expliques el criterio y el contador": la cola muestra contador y prioridad por tarea y una línea con su criterio (orden elegido por el usuario).
 
 ## Tasks
 - T1 S2-S4 backend (migración, dominio, aplicación, repositorio, API, foco saca de la cola, tests) — delegado (writer A, paralelo con T2: superficies disjuntas) — hecho 2d86e4e: unitarios 773; suite completa 1708 ok + 1 contrato arreglado (re-verificado solo contrato/API de siguientes y foco); migración d7f2b9e4a6c1
 - T2 S2-S3,S5-S6 frontend (api, tienda, lib de sugerencias, botón, panel, indicador, tests unitarios) — delegado (writer B, paralelo con T1) — hecho 4788bf7 (+ opción en MenuAccionesTarea inline): vitest 1223, vue-tsc limpio
 - T4 S7 contador, prioridad y criterio en las sugerencias; excluir DONE — inline
+- T5 S8 contador, prioridad y criterio en la cola — inline
 - T3 integración: e2e, README, vista previa — inline — hecho 7112d17 + arreglo e2e: 4 e2e nuevos ok; suite e2e 96+1, el fallo (historial-foco) era una aserción de URL dependiente del tiempo, corregida (3/3 ok)
 
 ## Log
@@ -42,3 +44,4 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - L4 E2E historial-foco: Inicio ahora carga las tareas, así que /tareas?tarea=<id> abre el detalle y quita el parámetro al instante; el test comprobaba la URL intermedia. Se comprueba el diálogo y la URL final.
 - L5 (2026-11-26) "además del nombre de la tarea quiero que muestres el contador para ver cuánto queda para entregar la tarea sugerida (en la opción de Inicio)" + "o que especifiques el criterio por el que propones esas tareas y no otras".
 - L6 En la vista previa una tarea en DONE (no completada, contador congelado) salía sugerida; se excluyen las que tienen congelada_en.
+- L7 (2026-11-26) "quiero que en A continuación también expliques el criterio y el contador".

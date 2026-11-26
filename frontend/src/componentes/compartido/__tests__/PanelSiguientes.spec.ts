@@ -113,6 +113,26 @@ describe('PanelSiguientes', () => {
     expect(router.currentRoute.value.query).toEqual({ tarea: '2' })
   })
 
+  it('cada tarea de la cola muestra su contador, o «Sin vencimiento», y su prioridad', async () => {
+    const tareas = [tarea(1, 'Informe', { prioridad: 2 }), TAREAS[2]!]
+    const wrapper = await montar([sig(tareas[1]!), sig(tareas[0]!)], tareas)
+
+    const [conVencimiento, sinVencimiento] = wrapper.findAll('[data-fila-siguiente]')
+    expect(conVencimiento!.find('[role="timer"]').exists()).toBe(true)
+    expect(conVencimiento!.find('[data-prioridad-sugerencia]').exists()).toBe(false)
+    expect(sinVencimiento!.find('[role="timer"]').exists()).toBe(false)
+    expect(sinVencimiento!.get('[data-sin-vencimiento]').text()).toBe('Sin vencimiento')
+    expect(sinVencimiento!.get('[data-prioridad-sugerencia]').text()).toBe('Prioridad 2')
+  })
+
+  it('explica el criterio de la cola', async () => {
+    const wrapper = await montar([])
+
+    expect(wrapper.get('[data-criterio-cola]').text()).toBe(
+      'Las tareas que has elegido, en el orden en que quieres abordarlas: añádelas con «Añadir a siguientes» y ordénalas con las flechas. Al ponerlas en foco salen de la cola.',
+    )
+  })
+
   it('subir y bajar reordenan con PUT /siguientes; los extremos están desactivados', async () => {
     const cola = [sig(TAREAS[0]!), sig(TAREAS[1]!)]
     vi.mocked(clienteApi.actualizar).mockResolvedValue([cola[1], cola[0]])
