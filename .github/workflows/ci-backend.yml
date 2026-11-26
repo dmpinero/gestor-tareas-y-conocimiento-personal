@@ -35,6 +35,8 @@ jobs:
 
     env:
       URL_BASE_DATOS: mysql+pymysql://gestor:gestor@localhost:3306/gestor_tareas?charset=utf8mb4
+      # Base del servicio mysql del job: desechable, los tests de integración la vacían.
+      GESTOR_TESTS_BD_DESECHABLE: "1"
       # En producción es un volumen montado en /datos (ver docker-compose.yml);
       # el runner de CI no tiene permisos para crear /datos en la raíz, así
       # que aquí se usa un directorio normal y escribible.

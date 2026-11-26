@@ -260,8 +260,21 @@ uv run ruff check .                              # lint
 uv run ruff format .                             # formato
 uv run bandit -r src                             # análisis de seguridad estático
 uv run lint-imports                              # contrato de capas (arquitectura hexagonal)
-uv run pytest --cov=src/gestor_tareas --cov-report=term-missing
+uv run pytest tests/unitarios                    # tests unitarios (no tocan la base)
 ```
+
+> **Cuidado:** los tests de integración, BDD y contrato vacían **todas** las
+> tablas de la base de `URL_BASE_DATOS`, que por defecto es la de
+> `docker compose`, con los datos reales. Por eso solo arrancan si
+> `GESTOR_TESTS_BD_DESECHABLE=1`; sin esa variable, pytest se niega a ejecutarlos.
+> El CI la define porque usa su propia base. En local, defínela solo con
+> `URL_BASE_DATOS` apuntando a un MySQL aislado:
+>
+> ```bash
+> URL_BASE_DATOS="mysql+pymysql://gestor:gestor@127.0.0.1:3330/gestor_tareas?charset=utf8mb4" \
+>   GESTOR_TESTS_BD_DESECHABLE=1 \
+>   uv run pytest --cov=src/gestor_tareas --cov-report=term-missing
+> ```
 
 **Frontend:**
 
