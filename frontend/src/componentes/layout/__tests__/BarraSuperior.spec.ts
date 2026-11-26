@@ -27,7 +27,9 @@ import { clienteApi } from '@/api/cliente'
 import BarraSuperior from '../BarraSuperior.vue'
 
 async function montar(foco: unknown) {
-  vi.mocked(clienteApi.obtener).mockResolvedValue(foco)
+  vi.mocked(clienteApi.obtener).mockImplementation(async (ruta) =>
+    ruta === '/siguientes' ? [] : foco,
+  )
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/:ruta(.*)*', component: { render: () => null } }],
@@ -74,9 +76,9 @@ describe('BarraSuperior', () => {
     const titulo = wrapper.get('h1')
     expect(titulo.text()).toBe('Gestor de Tareas y Conocimiento Personal')
     expect(titulo.classes()).toContain('max-sm:sr-only')
-    expect(wrapper.get('[data-indicador-foco]').element.parentElement?.className).toContain(
-      'max-sm:max-w-full',
-    )
+    const contenedor = wrapper.get('button[aria-label="Historial de foco"]').element.parentElement
+    expect(contenedor?.className).toContain('max-sm:max-w-full')
+    expect(contenedor?.contains(wrapper.get('[data-indicador-foco]').element)).toBe(true)
   })
 
   it('con una tarea en foco muestra su píldora y después el reloj, antes de la ayuda', async () => {

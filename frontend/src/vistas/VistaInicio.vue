@@ -1,8 +1,12 @@
+<script setup lang="ts">
+import PanelSiguientes from '@/componentes/compartido/PanelSiguientes.vue'
+</script>
+
 <template>
   <section>
     <h2 class="text-xl font-semibold">Inicio</h2>
-    <p class="text-muted-foreground mt-2 text-sm">
-      Todavía no hay nada que mostrar. Aquí aparecerá un resumen de tus tareas y de tu conocimiento.
-    </p>
+    <div class="mt-4 max-w-2xl">
+      <PanelSiguientes />
+    </div>
   </section>
 </template>

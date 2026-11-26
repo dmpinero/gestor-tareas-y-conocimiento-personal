@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 
 import { clienteApi } from '@/api/cliente'
-import type { Foco } from '@/api/tipos'
+import type { Foco, TareaSiguiente } from '@/api/tipos'
 import { useTiendaFoco } from '@/stores/foco'
+import { useTiendaSiguientes } from '@/stores/siguientes'
 import IndicadorFoco from '../IndicadorFoco.vue'
 
 vi.mock('@/api/cliente', async (original) => ({
@@ -25,6 +26,13 @@ const FOCO_TAREA: Foco = {
   desde: '2026-11-24T10:00:00',
 }
 
+const COLA: TareaSiguiente[] = [
+  { tarea_id: 1, tarea_nombre: 'Informe' },
+  { tarea_id: 2, tarea_nombre: 'Llamar' },
+  { tarea_id: 3, tarea_nombre: 'Revisar oferta' },
+  { tarea_id: 4, tarea_nombre: 'Cuarta' },
+]
+
 const FOCO_SUBTAREA: Foco = {
   ...FOCO_TAREA,
   subtarea_id: 70,
@@ -34,8 +42,10 @@ const FOCO_SUBTAREA: Foco = {
 let envoltorio: VueWrapper | null = null
 let router: Router
 
-async function montar(foco: Foco | null): Promise<VueWrapper> {
-  vi.mocked(clienteApi.obtener).mockResolvedValue(foco)
+async function montar(foco: Foco | null, cola: TareaSiguiente[] = []): Promise<VueWrapper> {
+  vi.mocked(clienteApi.obtener).mockImplementation(async (ruta) =>
+    ruta === '/siguientes' ? cola : foco,
+  )
   const pinia = createPinia()
   setActivePinia(pinia)
   router = createRouter({
@@ -43,7 +53,10 @@ async function montar(foco: Foco | null): Promise<VueWrapper> {
     routes: [{ path: '/:ruta(.*)*', component: { render: () => null } }],
   })
   await router.push('/')
-  envoltorio = mount(IndicadorFoco, { global: { plugins: [pinia, router] } })
+  envoltorio = mount(IndicadorFoco, {
+    attachTo: document.body,
+    global: { plugins: [pinia, router] },
+  })
   await flushPromises()
   return envoltorio
 }
@@ -57,6 +70,7 @@ beforeEach(() => {
 afterEach(() => {
   envoltorio?.unmount()
   envoltorio = null
+  document.body.innerHTML = ''
   vi.useRealTimers()
 })
 
@@ -136,5 +150,59 @@ describe('IndicadorFoco', () => {
     envoltorio = null
 
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('carga la cola con GET /siguientes al montarse', async () => {
+    await montar(null)
+
+    expect(clienteApi.obtener).toHaveBeenCalledWith('/siguientes')
+  })
+
+  it('sin cola no ofrece el desplegable de siguientes', async () => {
+    const wrapper = await montar(FOCO_TAREA)
+
+    expect(wrapper.find('[data-siguientes]').exists()).toBe(false)
+  })
+
+  it('con cola, el desplegable «Siguientes» muestra las 3 primeras y «Pasar a la siguiente»', async () => {
+    const wrapper = await montar(FOCO_TAREA, COLA)
+
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+
+    const contenido = document.body.querySelector('[data-slot="popover-content"]')!
+    const nombres = [...contenido.querySelectorAll('[data-siguiente] [data-nombre-siguiente]')].map(
+      (a) => a.textContent?.trim(),
+    )
+    expect(nombres).toEqual(['Informe', 'Llamar', 'Revisar oferta'])
+    expect(contenido.querySelector('[data-pasar-siguiente]')?.textContent?.trim()).toBe(
+      'Pasar a la siguiente: Informe',
+    )
+  })
+
+  it('sin foco pero con cola se muestra el acceso «Pasar a la siguiente»', async () => {
+    const wrapper = await montar(null, COLA)
+
+    expect(wrapper.find('[data-indicador-foco]').exists()).toBe(false)
+    expect(wrapper.find('[data-siguientes]').exists()).toBe(true)
+  })
+
+  it('«Pasar a la siguiente» fija el foco en la primera y recarga la cola', async () => {
+    vi.mocked(clienteApi.actualizar).mockResolvedValue({
+      ...FOCO_TAREA,
+      tarea_id: 1,
+      tarea_nombre: 'Informe',
+    })
+    const wrapper = await montar(FOCO_TAREA, COLA)
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+    vi.mocked(clienteApi.obtener).mockResolvedValue(COLA.slice(1))
+
+    document.body.querySelector<HTMLButtonElement>('[data-pasar-siguiente]')!.click()
+    await flushPromises()
+
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/foco', { tarea_id: 1, subtarea_id: null })
+    expect(useTiendaFoco().foco?.tarea_nombre).toBe('Informe')
+    expect(useTiendaSiguientes().cola.map((t) => t.tarea_id)).toEqual([2, 3, 4])
   })
 })

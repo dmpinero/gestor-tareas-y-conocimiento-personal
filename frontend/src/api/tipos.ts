@@ -286,6 +286,18 @@ export interface Foco {
   desde: string
 }
 
+/** Una tarea de la cola de siguientes ("A continuación"), con su nombre
+ * actual. `GET /siguientes` la devuelve en el orden de la cola y sin las
+ * tareas completadas (siguen en la cola: si se reabren, vuelven a su sitio).
+ * `POST /siguientes` (`{ tarea_id }`) la añade al final, `PUT /siguientes`
+ * (`{ ids }`) reordena la cola visible y `DELETE /siguientes/{tarea_id}` la
+ * quita; todas devuelven la cola completa. Poner una tarea (o una subtarea
+ * suya) en foco o borrarla la saca de la cola. */
+export interface TareaSiguiente {
+  tarea_id: number
+  tarea_nombre: string
+}
+
 /** Cuerpo de `PUT /foco`. */
 export interface DatosFoco {
   tarea_id: number
