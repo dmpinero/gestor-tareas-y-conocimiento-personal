@@ -13,6 +13,12 @@ from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.foco.entidades import Foco, PeriodoDeFoco
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
+from gestor_tareas.dominio.siguientes.entidades import TareaSiguiente
+from gestor_tareas.dominio.siguientes.reglas import (
+    EntradaDeLaCola,
+    comprobar_que_se_puede_anadir,
+    nuevo_orden_de_la_cola,
+)
 from gestor_tareas.dominio.tarea.entidades import (
     ComentarioInicial,
     ReferenciaEstado,
@@ -455,12 +461,67 @@ class RepositorioPersonasFalso(_RepositorioCatalogoFalso[Persona]):
         super().__init__(Persona, nombres_iniciales)
 
 
-class RepositorioFocoFalso:
-    """Doble de RepositorioFoco en memoria: guarda como mucho un foco y lee los
-    nombres de la tarea y la subtarea del repositorio de tareas, como el real."""
+class RepositorioSiguientesFalso:
+    """Doble de RepositorioSiguientes en memoria: la cola son ids de tareas del
+    repositorio de tareas, con las mismas reglas que el real (las completadas no se
+    ven, y las borradas desaparecen)."""
 
     def __init__(self, tareas: RepositorioTareasFalso) -> None:
         self._tareas = tareas
+        self.ids: list[int] = []
+
+    def _existentes(self) -> list[Tarea]:
+        """Las tareas de la cola en su orden; las borradas salen de ella."""
+        tareas = [self._tareas.obtener_por_id(i) for i in self.ids]
+        existentes = [t for t in tareas if t is not None and t.id is not None]
+        self.ids = [t.id for t in existentes if t.id is not None]
+        return existentes
+
+    def _entradas(self) -> list[EntradaDeLaCola]:
+        return [
+            EntradaDeLaCola(tarea_id=t.id, completada=t.completada)
+            for t in self._existentes()
+            if t.id is not None
+        ]
+
+    def listar(self) -> list[TareaSiguiente]:
+        return [
+            TareaSiguiente(tarea_id=t.id, tarea_nombre=t.nombre)
+            for t in self._existentes()
+            if t.id is not None and not t.completada
+        ]
+
+    def anadir(self, id_tarea: int) -> list[TareaSiguiente]:
+        tarea = self._tareas.obtener_por_id(id_tarea)
+        if tarea is None:
+            raise EntidadNoEncontradaError(f"No existe la tarea con id {id_tarea}")
+        comprobar_que_se_puede_anadir(tarea.completada)
+        if id_tarea not in self.ids:
+            self.ids.append(id_tarea)
+        return self.listar()
+
+    def reordenar(self, ids: Sequence[int]) -> list[TareaSiguiente]:
+        self.ids = nuevo_orden_de_la_cola(self._entradas(), ids)
+        return self.listar()
+
+    def quitar(self, id_tarea: int) -> list[TareaSiguiente]:
+        self.ids = [i for i in self.ids if i != id_tarea]
+        return self.listar()
+
+
+class RepositorioFocoFalso:
+    """Doble de RepositorioFoco en memoria: guarda como mucho un foco y lee los
+    nombres de la tarea y la subtarea del repositorio de tareas, como el real. Si se
+    le da la cola de siguientes, al fijar el foco saca de ella la tarea, como el
+    real."""
+
+    def __init__(
+        self,
+        tareas: RepositorioTareasFalso,
+        siguientes: RepositorioSiguientesFalso | None = None,
+    ) -> None:
+        self._tareas = tareas
+        self._siguientes = siguientes
         self._fila: tuple[int, int | None, datetime] | None = None
         self.veces_fijado = 0
         self.historial: list[PeriodoDeFoco] = []
@@ -487,6 +548,8 @@ class RepositorioFocoFalso:
     def fijar(self, id_tarea: int, id_subtarea: int | None, desde: datetime) -> Foco:
         self._fila = (id_tarea, id_subtarea, desde)
         self.veces_fijado += 1
+        if self._siguientes is not None:
+            self._siguientes.quitar(id_tarea)
         foco = self.obtener()
         assert foco is not None
         # Como el real: cierra el periodo en curso y abre otro con los nombres.

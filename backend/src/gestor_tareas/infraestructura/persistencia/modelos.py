@@ -504,6 +504,26 @@ class FocoTrabajoModelo(Base):
     desde: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
 
+class ColaSiguientesModelo(Base):
+    """Cola de siguientes tareas: las elegidas para trabajar en ellas después del
+    foco, cada una como mucho una vez, por ``posicion`` (y ``tarea_id`` a igual
+    posición).
+
+    Las completadas se conservan en su sitio (la aplicación no las muestra), para
+    que al reabrirlas vuelvan a él. Borrar la tarea borra su fila (ON DELETE
+    CASCADE); fijar el foco en ella también la borra.
+    """
+
+    __tablename__ = "cola_siguientes"
+
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", name="fk_cola_siguientes_tarea", ondelete="CASCADE"),
+        primary_key=True,
+        autoincrement=False,
+    )
+    posicion: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 class HistorialFocoModelo(Base):
     """Historial del foco: un periodo por cada vez que se fijó el foco, con los
     nombres de la tarea y la subtarea de ese momento.

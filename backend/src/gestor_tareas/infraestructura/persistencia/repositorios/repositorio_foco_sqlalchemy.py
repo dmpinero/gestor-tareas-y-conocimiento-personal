@@ -9,6 +9,7 @@ from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.foco.entidades import Foco, PeriodoDeFoco
 from gestor_tareas.dominio.foco.errores import subtarea_no_encontrada, tarea_no_encontrada
 from gestor_tareas.infraestructura.persistencia.modelos import (
+    ColaSiguientesModelo,
     FocoTrabajoModelo,
     HistorialFocoModelo,
     SubtareaModelo,
@@ -40,7 +41,8 @@ def _es_clave_ajena_sin_fila(error: IntegrityError) -> bool:
 
 class RepositorioFocoSqlAlchemy:
     """Adaptador de ``RepositorioFoco`` sobre MySQL: una sola fila con ``id = 1`` y
-    el historial, que cambia en la misma transacción que el foco."""
+    el historial y la cola de siguientes, que cambian en la misma transacción que el
+    foco."""
 
     def __init__(self, sesion: Session) -> None:
         self._sesion = sesion
@@ -90,6 +92,10 @@ class RepositorioFocoSqlAlchemy:
             # el periodo en curso que cierra es siempre el último.
             self._cerrar_en_curso(desde)
             self._abrir_periodo(id_tarea, id_subtarea, desde)
+            # La tarea en foco (o la de la subtarea) sale de la cola de siguientes.
+            self._sesion.execute(
+                delete(ColaSiguientesModelo).where(ColaSiguientesModelo.tarea_id == id_tarea)
+            )
             foco = self.obtener()
             self._sesion.commit()
         if foco is None:  # La fila se acaba de escribir en la misma transacción.

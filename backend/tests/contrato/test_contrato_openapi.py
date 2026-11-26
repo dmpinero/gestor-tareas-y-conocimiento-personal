@@ -10,6 +10,9 @@ from gestor_tareas.dominio.grupo_estados.entidades import GrupoEstados
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
     RepositorioGruposEstadosSqlAlchemy,
 )
+from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_siguientes_sqlalchemy import (  # noqa: E501
+    RepositorioSiguientesSqlAlchemy,
+)
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflows_sqlalchemy import (  # noqa: E501
     RepositorioWorkflowsSqlAlchemy,
 )
@@ -87,6 +90,23 @@ def _reordenar_los_pasos_que_existen(case: schemathesis.Case) -> None:
     ids = _ids_de_los_pasos_actuales((case.path_parameters or {}).get("id_workflow"))
     if ids is not None:
         case.body["ids"] = ids[::-1]
+
+
+def _reordenar_la_cola_que_existe(case: schemathesis.Case) -> None:
+    """JSON Schema no puede exigir que `ids` sea justo la cola visible guardada (si
+    no, 422). En los casos que el contrato da por válidos se envía la cola actual en
+    orden inverso, para seguir probando la respuesta 200; los inválidos se envían tal
+    cual."""
+    if not (
+        case.method == "PUT" and case.path == "/api/v1/siguientes" and _es_positivo_con_cuerpo(case)
+    ):
+        return
+    sesion = FabricaSesiones()
+    try:
+        ids = [t.tarea_id for t in RepositorioSiguientesSqlAlchemy(sesion).listar()]
+    finally:
+        sesion.close()
+    case.body["ids"] = ids[::-1]
 
 
 def _es_positivo_con_cuerpo(case: schemathesis.Case) -> bool:
@@ -268,6 +288,7 @@ def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     _respetar_orden_de_las_fechas(case)
     _respetar_el_orden_del_rango_del_historial(case)
     _reordenar_los_pasos_que_existen(case)
+    _reordenar_la_cola_que_existe(case)
     _asignar_grupos_que_existen(case)
     _asignar_workflows_que_existen(case)
     _mover_a_un_estado_del_grupo_de_la_tarea(case)
