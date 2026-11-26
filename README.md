@@ -369,6 +369,27 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
   con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
   `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
+- Conocimiento (chat con tus notas de Notion): en **Conocimiento**, «Sincronizar
+  con Notion» copia a la base de datos, en trozos, el texto de las páginas (y
+  entradas de bases de datos) que compartas con tu integración de Notion; las
+  siguientes veces solo trae lo que cambió y quita lo que ya no compartes. Luego
+  preguntas en el chat: el backend busca los trozos más relevantes (búsqueda de
+  texto completo de MySQL) y Claude (`claude-opus-5-5`) responde en español solo
+  con ellos, en streaming y citando las páginas con enlace a Notion; si no
+  encuentra nada lo dice. El contenido de las notas se trata como datos, no
+  como instrucciones. La conversación vive en la pestaña («Nueva conversación»
+  la vacía). Cada pregunta es una llamada de pago a la API de Anthropic.
+  - Configuración: crea una integración interna en
+    <https://www.notion.so/my-integrations>, comparte con ella las páginas que
+    quieras consultar (menú «⋯» de la página → Conexiones) y pon en
+    `backend/.env` `NOTION_TOKEN=<secreto de la integración>` y
+    `ANTHROPIC_API_KEY=<tu clave de la API de Anthropic>`; después
+    `docker compose up -d --build backend`. Sin ellas, Conocimiento indica qué
+    falta. Las claves nunca llegan al navegador.
+  - API: `GET /api/v1/conocimiento/estado`, `POST /api/v1/conocimiento/sincronizar`
+    y `POST /api/v1/conocimiento/preguntar` (respuesta `text/event-stream` con los
+    eventos `fuentes`, `texto`, `fin` o `error`). Tablas `notion_paginas`,
+    `notion_fragmentos` (índice FULLTEXT) y `notion_sincronizacion`.
 - Vista de red (botón «Ver como red» de Tareas): un grafo con las tareas que
   pasan la búsqueda y los filtros. Cada tarea es un círculo con el color de su
   prioridad; cada etiqueta, persona, subestado u oportunidad que comparten dos o

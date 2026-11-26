@@ -19,10 +19,11 @@ Tests: backend pytest (unitarios en local; integración/contrato SOLO contra MyS
 - El proxy del frontend (nginx) no debe almacenar en búfer el SSE de `/api/v1/conocimiento/preguntar`.
 
 ## Tasks
-- T1 S2,S3,S5-S7 backend (config, cliente Notion con httpx, troceado, migración, repositorio con FULLTEXT, casos de uso sincronizar/estado/preguntar, cliente Claude, router SSE, dependencia `anthropic`, tests con dobles) — delegado (writer A, paralelo con T2)
-- T2 S3-S5 frontend (VistaConocimiento: estado, sincronizar, chat con streaming SSE y citas, nueva conversación, tests) + nginx sin búfer para el SSE — delegado (writer B, paralelo con T1)
+- T1 S2,S3,S5-S7 backend (config, cliente Notion con httpx, troceado, migración, repositorio con FULLTEXT, casos de uso sincronizar/estado/preguntar, cliente Claude, router SSE, dependencia `anthropic`, tests con dobles) — delegado (writer A, paralelo con T2) — hecho 4bd6741: unitarios 863, suite completa 1835, migración e9c3a7f1b5d2, anthropic 2.8.0
+- T2 S3-S5 frontend (VistaConocimiento: estado, sincronizar, chat con streaming SSE y citas, nueva conversación, tests) + nginx sin búfer para el SSE — delegado (writer B, paralelo con T1) — hecho a7e4cb7: vitest 1355; nginx validado con nginx:alpine
 - T3 integración: e2e (estado sin configurar + chat con backend simulado), README (cómo configurar Notion y la clave), vista previa — inline
 
 ## Log
 - L1 (2026-11-26) "quiero introducir el concepto de RAG en la aplicación, de forma que se conecte a Notion y, a través de una interfaz tipo chatbot pueda consultar información"
 - L2 (2026-11-26) Pregunta de recuperación → "Índice local (Recomendado)".
+- L3 `backend/.env.example` no se actualiza (regla: no leer ficheros .env); la configuración se documenta en el README.
