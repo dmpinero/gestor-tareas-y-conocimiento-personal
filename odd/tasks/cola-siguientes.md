@@ -28,11 +28,12 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - Texto visible en español, como el resto de la app. AA de contraste en claro y oscuro.
 
 ## Tasks
-- T1 S2-S4 backend (migración, dominio, aplicación, repositorio, API, foco saca de la cola, tests) — delegado (writer A, paralelo con T2: superficies disjuntas)
-- T2 S2-S3,S5-S6 frontend (api, tienda, lib de sugerencias, botón, panel, indicador, tests unitarios) — delegado (writer B, paralelo con T1)
-- T3 integración: e2e, README, vista previa — inline
+- T1 S2-S4 backend (migración, dominio, aplicación, repositorio, API, foco saca de la cola, tests) — delegado (writer A, paralelo con T2: superficies disjuntas) — hecho 2d86e4e: unitarios 773; suite completa 1708 ok + 1 contrato arreglado (re-verificado solo contrato/API de siguientes y foco); migración d7f2b9e4a6c1
+- T2 S2-S3,S5-S6 frontend (api, tienda, lib de sugerencias, botón, panel, indicador, tests unitarios) — delegado (writer B, paralelo con T1) — hecho 4788bf7 (+ opción en MenuAccionesTarea inline): vitest 1223, vue-tsc limpio
+- T3 integración: e2e, README, vista previa — inline — hecho 7112d17 + arreglo e2e: 4 e2e nuevos ok; suite e2e 96+1, el fallo (historial-foco) era una aserción de URL dependiente del tiempo, corregida (3/3 ok)
 
 ## Log
 - L1 (2026-11-26) "dime cómo podemos implementar esto. Ahora tengo claro mi tarea actual, con el foco, pero hecho en falta una opción para poder saber en qué debería trabajar luego. ¿Cómo me sugieres que lo implementemos? Me gustaría tener una visión de las próximas tareas que debo abordar"
 - L2 (2026-11-26) Propuesta: cola manual + sugerencias automáticas. Respuesta: "vamos con las 2 parts".
 - L3 Decisión: completadas se filtran al leer (no se borran) para que reabrir no pierda el sitio; las sugerencias se calculan en el frontend con las tareas ya cargadas.
+- L4 E2E historial-foco: Inicio ahora carga las tareas, así que /tareas?tarea=<id> abre el detalle y quita el parámetro al instante; el test comprobaba la URL intermedia. Se comprueba el diálogo y la URL final.

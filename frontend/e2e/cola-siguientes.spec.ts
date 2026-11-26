@@ -115,6 +115,7 @@ test('una tarea muy vencida aparece en las sugerencias y se sube a la cola', asy
 }) => {
   const nombre = `Cola ${Date.now()} vencida`
   const id = await crearTarea(request, nombre, grupoE2e, {
+    fecha_creacion: '1999-12-01T09:00:00',
     fecha_vencimiento: '2000-01-01T09:00:00',
     prioridad: 1,
   })
