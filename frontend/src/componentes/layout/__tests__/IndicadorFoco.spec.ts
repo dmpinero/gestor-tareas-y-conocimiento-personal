@@ -61,6 +61,35 @@ async function montar(foco: Foco | null, cola: TareaSiguiente[] = []): Promise<V
   return envoltorio
 }
 
+// Arrastre nativo simulado: jsdom no trae DataTransfer.
+function crearDataTransfer() {
+  const datos: Record<string, string> = {}
+  return {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    setData: (tipo: string, valor: string) => {
+      datos[tipo] = valor
+    },
+    getData: (tipo: string) => datos[tipo] ?? '',
+  }
+}
+
+function lanzarEventoArrastre(elemento: Element, tipo: string, dataTransfer: object): void {
+  const evento = new Event(tipo, { bubbles: true, cancelable: true })
+  Object.defineProperty(evento, 'dataTransfer', { value: dataTransfer })
+  elemento.dispatchEvent(evento)
+}
+
+async function arrastrar(origen: Element, destino: Element): Promise<void> {
+  const dataTransfer = crearDataTransfer()
+  lanzarEventoArrastre(origen, 'dragstart', dataTransfer)
+  lanzarEventoArrastre(destino, 'dragover', dataTransfer)
+  await flushPromises()
+  lanzarEventoArrastre(destino, 'drop', dataTransfer)
+  lanzarEventoArrastre(origen, 'dragend', dataTransfer)
+  await flushPromises()
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
@@ -178,6 +207,26 @@ describe('IndicadorFoco', () => {
     expect(contenido.querySelector('[data-pasar-siguiente]')?.textContent?.trim()).toBe(
       'Pasar a la siguiente: Informe',
     )
+  })
+
+  it('en el desplegable se reordenan las siguientes arrastrándolas', async () => {
+    vi.mocked(clienteApi.actualizar).mockResolvedValue([COLA[1]!, COLA[0]!, ...COLA.slice(2)])
+    const wrapper = await montar(FOCO_TAREA, COLA)
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+    const contenido = document.body.querySelector('[data-slot="popover-content"]')!
+    const filas = [...contenido.querySelectorAll('[data-siguiente]')]
+    expect(filas.every((fila) => fila.getAttribute('draggable') === 'true')).toBe(true)
+
+    await arrastrar(filas[1]!, filas[0]!)
+
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', {
+      ids: [COLA[1]!.tarea_id, COLA[0]!.tarea_id, ...COLA.slice(2).map((e) => e.tarea_id)],
+    })
+    const nombres = [...contenido.querySelectorAll('[data-nombre-siguiente]')].map((n) =>
+      n.textContent?.trim(),
+    )
+    expect(nombres.slice(0, 2)).toEqual(['Llamar', 'Informe'])
   })
 
   it('sin foco pero con cola se muestra el acceso «Pasar a la siguiente»', async () => {

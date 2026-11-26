@@ -59,6 +59,19 @@ export const useTiendaSiguientes = defineStore('siguientes', () => {
     return reordenar(ids)
   }
 
+  // Lleva la tarea a la posición `destino` de la cola (al arrastrarla). A su
+  // misma posición, o si no está en la cola, no pide nada.
+  function moverA(tareaId: number, destino: number): Promise<boolean> {
+    const ids = cola.value.map((entrada) => entrada.tarea_id)
+    const indice = ids.indexOf(tareaId)
+    if (indice === -1 || indice === destino || destino < 0 || destino >= ids.length) {
+      return Promise.resolve(true)
+    }
+    ids.splice(indice, 1)
+    ids.splice(destino, 0, tareaId)
+    return reordenar(ids)
+  }
+
   function subir(tareaId: number): Promise<boolean> {
     return mover(tareaId, -1)
   }
@@ -129,6 +142,7 @@ export const useTiendaSiguientes = defineStore('siguientes', () => {
     cargar,
     anadir,
     reordenar,
+    moverA,
     subir,
     bajar,
     quitar,

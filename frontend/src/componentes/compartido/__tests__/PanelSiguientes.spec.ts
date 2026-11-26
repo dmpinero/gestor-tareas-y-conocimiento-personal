@@ -81,6 +81,35 @@ async function montar(
 const filas = (w: VueWrapper) => w.findAll('[data-fila-siguiente]').map((f) => f.get('a').text())
 const sugerencias = (w: VueWrapper) => w.findAll('[data-sugerencia]').map((f) => f.get('a').text())
 
+// Arrastre nativo simulado: jsdom no trae DataTransfer.
+function crearDataTransfer() {
+  const datos: Record<string, string> = {}
+  return {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    setData: (tipo: string, valor: string) => {
+      datos[tipo] = valor
+    },
+    getData: (tipo: string) => datos[tipo] ?? '',
+  }
+}
+
+function lanzarEventoArrastre(elemento: Element, tipo: string, dataTransfer: object): void {
+  const evento = new Event(tipo, { bubbles: true, cancelable: true })
+  Object.defineProperty(evento, 'dataTransfer', { value: dataTransfer })
+  elemento.dispatchEvent(evento)
+}
+
+async function arrastrar(origen: Element, destino: Element): Promise<void> {
+  const dataTransfer = crearDataTransfer()
+  lanzarEventoArrastre(origen, 'dragstart', dataTransfer)
+  lanzarEventoArrastre(destino, 'dragover', dataTransfer)
+  await flushPromises()
+  lanzarEventoArrastre(destino, 'drop', dataTransfer)
+  lanzarEventoArrastre(origen, 'dragend', dataTransfer)
+  await flushPromises()
+}
+
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => {
   envoltorio?.unmount()
@@ -129,7 +158,7 @@ describe('PanelSiguientes', () => {
     const wrapper = await montar([])
 
     expect(wrapper.get('[data-criterio-cola]').text()).toBe(
-      'Las tareas que has elegido, en el orden en que quieres abordarlas: añádelas con «Añadir a siguientes» y ordénalas con las flechas. Al ponerlas en foco salen de la cola.',
+      'Las tareas que has elegido, en el orden en que quieres abordarlas: añádelas con «Añadir a siguientes» y ordénalas arrastrándolas o con las flechas. Al ponerlas en foco salen de la cola.',
     )
   })
 
@@ -146,6 +175,37 @@ describe('PanelSiguientes', () => {
 
     expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { ids: [2, 1] })
     expect(filas(wrapper)).toEqual(['Llamar', 'Informe'])
+  })
+
+  it('arrastrar una tarea de la cola sobre otra la lleva a su posición', async () => {
+    const cola = [sig(TAREAS[0]!), sig(TAREAS[1]!), sig(TAREAS[2]!)]
+    vi.mocked(clienteApi.actualizar).mockResolvedValue([cola[2]!, cola[0]!, cola[1]!])
+    const wrapper = await montar(cola)
+    const filasCola = wrapper.findAll('[data-fila-siguiente]')
+    expect(filasCola.every((fila) => fila.attributes('draggable') === 'true')).toBe(true)
+
+    await arrastrar(filasCola[2]!.element, filasCola[0]!.element)
+
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { ids: [3, 1, 2] })
+    expect(filas(wrapper)).toEqual(['Revisar oferta', 'Informe', 'Llamar'])
+  })
+
+  it('mientras se arrastra marca dónde quedará la tarea', async () => {
+    const cola = [sig(TAREAS[0]!), sig(TAREAS[1]!), sig(TAREAS[2]!)]
+    const wrapper = await montar(cola)
+    const filasCola = wrapper.findAll('[data-fila-siguiente]')
+    const dataTransfer = crearDataTransfer()
+
+    lanzarEventoArrastre(filasCola[0]!.element, 'dragstart', dataTransfer)
+    lanzarEventoArrastre(filasCola[2]!.element, 'dragover', dataTransfer)
+    await flushPromises()
+
+    expect(filasCola[2]!.attributes('data-destino')).toBe('despues')
+    expect(filasCola[0]!.attributes('data-arrastrada')).toBe('true')
+    lanzarEventoArrastre(filasCola[0]!.element, 'dragend', dataTransfer)
+    await flushPromises()
+    expect(filasCola[2]!.attributes('data-destino')).toBeUndefined()
+    expect(clienteApi.actualizar).not.toHaveBeenCalled()
   })
 
   it('bajar mueve la tarea una posición hacia abajo', async () => {

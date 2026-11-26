@@ -86,10 +86,26 @@ test('añade tareas a la cola, la reordena y pasa a la siguiente desde la barra 
       .click()
     await expect(filas.nth(0)).toContainText(segunda)
     expect(await colaEnApi(request)).toEqual([idSegunda, idPrimera])
+    // También arrastrando con el ratón (ida y vuelta).
+    await filas.nth(1).dragTo(filas.nth(0))
+    await expect(filas.nth(0)).toContainText(primera)
+    expect(await colaEnApi(request)).toEqual([idPrimera, idSegunda])
+    await filas.nth(1).dragTo(filas.nth(0))
+    await expect(filas.nth(0)).toContainText(segunda)
+    expect(await colaEnApi(request)).toEqual([idSegunda, idPrimera])
     await page.screenshot({ path: 'e2e/capturas/siguientes-01-inicio.png' })
 
-    // Sin foco, la barra superior ofrece pasar a la siguiente.
+    // En el desplegable de la barra superior también se arrastran.
     await page.locator('[data-siguientes]').click()
+    const enDesplegable = page.locator('[data-siguiente]')
+    await enDesplegable.nth(1).dragTo(enDesplegable.nth(0))
+    await expect(enDesplegable.nth(0)).toContainText(primera)
+    expect(await colaEnApi(request)).toEqual([idPrimera, idSegunda])
+    await enDesplegable.nth(1).dragTo(enDesplegable.nth(0))
+    await expect(enDesplegable.nth(0)).toContainText(segunda)
+    expect(await colaEnApi(request)).toEqual([idSegunda, idPrimera])
+
+    // Sin foco, la barra superior ofrece pasar a la siguiente.
     await page.locator('[data-pasar-siguiente]').click()
     await expect(page.locator('[data-indicador-foco]')).toContainText(segunda)
     await expect(filas).toHaveCount(1)

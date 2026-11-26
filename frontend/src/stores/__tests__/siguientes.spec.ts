@@ -110,6 +110,25 @@ describe('useTiendaSiguientes', () => {
     expect(clienteApi.actualizar).not.toHaveBeenCalled()
   })
 
+  it('moverA lleva la tarea a otra posición con PUT /siguientes; a la misma no pide nada', async () => {
+    vi.mocked(clienteApi.actualizar).mockImplementation(async (_ruta, cuerpo) =>
+      (cuerpo as { ids: number[] }).ids.map((id) => [A, B, C].find((t) => t.tarea_id === id)!),
+    )
+    const tienda = useTiendaSiguientes()
+    tienda.cola = [A, B, C]
+
+    expect(await tienda.moverA(3, 0)).toBe(true)
+    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', { ids: [3, 1, 2] })
+    expect(tienda.cola).toEqual([C, A, B])
+    await tienda.moverA(3, 2)
+    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', { ids: [1, 2, 3] })
+
+    vi.mocked(clienteApi.actualizar).mockClear()
+    expect(await tienda.moverA(2, 1)).toBe(true)
+    expect(await tienda.moverA(9, 0)).toBe(true)
+    expect(clienteApi.actualizar).not.toHaveBeenCalled()
+  })
+
   it('quitar envía DELETE /siguientes/{id} y guarda la cola devuelta', async () => {
     vi.mocked(clienteApi.eliminar).mockResolvedValue([B])
     const tienda = useTiendaSiguientes()

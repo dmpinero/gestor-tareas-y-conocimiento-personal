@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronUp, X } from '@lucide/vue'
+import { ChevronDown, ChevronUp, GripVertical, X } from '@lucide/vue'
 import { createReusableTemplate, useMediaQuery } from '@vueuse/core'
 import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -8,6 +8,7 @@ import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
 import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
 import ContadorVencimiento from '@/componentes/compartido/ContadorVencimiento.vue'
 import { Button } from '@/componentes/ui/button'
+import { useArrastrarCola } from '@/composables/useArrastrarCola'
 import type { Tarea } from '@/api/tipos'
 import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
 import { sugerenciasSiguientes } from '@/lib/sugerenciasSiguientes'
@@ -32,6 +33,9 @@ const sugerencias = computed(() =>
     tiendaFoco.foco?.tarea_id ?? null,
   ),
 )
+
+// Las filas de la cola también se reordenan arrastrándolas con el ratón.
+const arrastre = useArrastrarCola()
 
 // Cuenta atrás (parada si la tarea está hibernada o en DONE) y prioridad, en
 // las filas de la cola y en las sugerencias.
@@ -76,7 +80,8 @@ onMounted(() => {
     <h3 id="titulo-siguientes" class="text-lg font-semibold">A continuación</h3>
     <p data-criterio-cola class="text-muted-foreground mt-1 text-xs">
       Las tareas que has elegido, en el orden en que quieres abordarlas: añádelas con «Añadir a
-      siguientes» y ordénalas con las flechas. Al ponerlas en foco salen de la cola.
+      siguientes» y ordénalas arrastrándolas o con las flechas. Al ponerlas en foco salen de la
+      cola.
     </p>
     <p v-if="tiendaSiguientes.error" class="text-destructive mt-2 text-sm" role="alert">
       {{ tiendaSiguientes.error }}
@@ -90,14 +95,25 @@ onMounted(() => {
         v-for="(entrada, indice) in tiendaSiguientes.cola"
         :key="entrada.tarea_id"
         data-fila-siguiente
-        class="flex flex-wrap items-center gap-1 py-1.5"
+        draggable="true"
+        :data-destino="arrastre.destino(indice)"
+        :data-arrastrada="arrastre.arrastrada(indice) || undefined"
+        :class="[
+          'flex flex-wrap items-center gap-1 border-y-2 border-y-transparent py-1.5',
+          arrastre.arrastrada(indice) && 'opacity-50',
+          arrastre.destino(indice) === 'antes' && 'border-t-primary',
+          arrastre.destino(indice) === 'despues' && 'border-b-primary',
+        ]"
+        v-on="arrastre.eventos(indice)"
       >
-        <span class="text-muted-foreground w-6 shrink-0 text-right text-sm tabular-nums"
-          >{{ indice + 1 }}.</span
+        <span
+          class="text-muted-foreground flex w-8 shrink-0 cursor-grab items-center justify-end text-sm tabular-nums"
+          title="Arrastra para reordenar"
+          ><GripVertical class="size-3.5 shrink-0" aria-hidden="true" />{{ indice + 1 }}.</span
         >
         <!-- En pantallas estrechas los botones bajan a una segunda línea. -->
-        <div class="flex min-w-0 flex-1 flex-col max-sm:basis-[calc(100%-2rem)]">
-          <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE">{{
+        <div class="flex min-w-0 flex-1 flex-col max-sm:basis-[calc(100%-2.5rem)]">
+          <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE" draggable="false">{{
             entrada.tarea_nombre
           }}</RouterLink>
           <usarDatos

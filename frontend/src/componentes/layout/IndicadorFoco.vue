@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ListOrdered, SkipForward, X } from '@lucide/vue'
+import { GripVertical, ListOrdered, SkipForward, X } from '@lucide/vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
+import { useArrastrarCola } from '@/composables/useArrastrarCola'
 import { formatearTiempoFoco, textoFoco } from '@/lib/foco'
 import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaSiguientes } from '@/stores/siguientes'
@@ -21,6 +22,8 @@ const tiendaFoco = useTiendaFoco()
 const tiendaSiguientes = useTiendaSiguientes()
 const desplegableAbierto = ref(false)
 const primeras = computed(() => tiendaSiguientes.cola.slice(0, MAXIMO_SIGUIENTES))
+// Las siguientes del desplegable se reordenan arrastrándolas con el ratón.
+const arrastre = useArrastrarCola()
 const siguiente = computed(() => tiendaSiguientes.cola[0] ?? null)
 
 async function pasarALaSiguiente(): Promise<void> {
@@ -105,14 +108,31 @@ onUnmounted(() => {
       <PopoverContent align="end" class="w-72 max-w-[calc(100vw-2rem)] p-2">
         <p class="text-muted-foreground px-2 pb-1 text-xs font-semibold">Siguientes</p>
         <ol class="text-sm">
-          <li v-for="(entrada, indice) in primeras" :key="entrada.tarea_id" data-siguiente>
+          <li
+            v-for="(entrada, indice) in primeras"
+            :key="entrada.tarea_id"
+            data-siguiente
+            draggable="true"
+            :data-destino="arrastre.destino(indice)"
+            :class="[
+              'border-y-2 border-y-transparent',
+              arrastre.arrastrada(indice) && 'opacity-50',
+              arrastre.destino(indice) === 'antes' && 'border-t-primary',
+              arrastre.destino(indice) === 'despues' && 'border-b-primary',
+            ]"
+            v-on="arrastre.eventos(indice)"
+          >
             <RouterLink
+              draggable="false"
               :to="{ path: '/tareas', query: { tarea: String(entrada.tarea_id) } }"
               class="hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring/50 flex gap-2 rounded-sm px-2 py-1.5 outline-none focus-visible:ring-[3px]"
               @click="desplegableAbierto = false"
             >
-              <span class="text-muted-foreground tabular-nums" aria-hidden="true"
-                >{{ indice + 1 }}.</span
+              <span
+                class="text-muted-foreground flex cursor-grab items-center tabular-nums"
+                aria-hidden="true"
+                title="Arrastra para reordenar"
+                ><GripVertical class="size-3.5 shrink-0" />{{ indice + 1 }}.</span
               >
               <span data-nombre-siguiente class="truncate">{{ entrada.tarea_nombre }}</span>
             </RouterLink>
