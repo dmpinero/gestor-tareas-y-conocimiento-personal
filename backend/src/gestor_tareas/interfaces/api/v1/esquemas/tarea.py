@@ -341,6 +341,20 @@ class TareaHibernarEsquema(BaseModel):
     )
 
 
+class TareaVincularEsquema(BaseModel):
+    """Cuerpo de la vinculación: los ids de una o varias tareas existentes que se
+    vinculan con la tarea, en los dos sentidos."""
+
+    ids: list[IdEntero] = Field(
+        min_length=1,
+        description=(
+            "Ids de las tareas que se vinculan (al menos uno). Los repetidos y los ya "
+            "vinculados se ignoran. Si alguno no existe, 404 sin vincular ninguno; si "
+            "incluye la propia tarea, 422."
+        ),
+    )
+
+
 class SubtareaCrearEsquema(BaseModel):
     """Cuerpo del alta de una subtarea. ``asignado`` sigue las mismas reglas que
     cada elemento de ``asignados`` de una tarea."""
@@ -426,4 +440,11 @@ class TareaSalidaEsquema(BaseModel):
         "hibernarla y vuelve a null al reanudarla, que corre `fecha_vencimiento` el "
         "tiempo que ha estado hibernada. Es independiente de `congelada_en`: completar, "
         "dejar pendiente o cambiar de estado la tarea no la reanuda.",
+    )
+    vinculadas: list[int] = Field(
+        default_factory=list,
+        description="Ids de las tareas vinculadas con esta, en orden ascendente; vacía "
+        "si no tiene. El vínculo es simple y en los dos sentidos: la tarea aparece "
+        "también en las `vinculadas` de cada una de ellas. Al borrar una tarea "
+        "desaparece de las `vinculadas` de las demás.",
     )

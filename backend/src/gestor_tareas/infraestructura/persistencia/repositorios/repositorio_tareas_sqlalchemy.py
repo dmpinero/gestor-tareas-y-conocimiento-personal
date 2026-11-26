@@ -1,7 +1,7 @@
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import ColumnElement, delete, select, update
+from sqlalchemy import ColumnElement, delete, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session
 
 from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
@@ -26,6 +26,7 @@ from gestor_tareas.infraestructura.persistencia.modelos import (
     SubestadoModelo,
     SubtareaModelo,
     TareaModelo,
+    TareaVinculadaModelo,
 )
 from gestor_tareas.infraestructura.persistencia.repositorios.conflictos import traducir_conflictos
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_comentarios_subtarea_sqlalchemy import (  # noqa: E501
@@ -118,6 +119,7 @@ def _a_entidad(modelo: TareaModelo) -> Tarea:
         congelada_en=_instante_de_columna(modelo.congelada_en),
         subestado=modelo.subestado.nombre if modelo.subestado is not None else None,
         hibernada_desde=_instante_de_columna(modelo.hibernada_desde),
+        vinculadas=sorted(v.vinculada_id for v in modelo.vinculos),
     )
 
 
@@ -322,6 +324,73 @@ class RepositorioTareasSqlAlchemy:
             self._sesion.commit()
         return _a_entidad(modelo)
 
+    def _bloquear_tareas(self, ids: Sequence[int]) -> set[int]:
+        """Lee con bloqueo las tareas de ``ids`` y devuelve las que existen.
+
+        Se bloquean en orden de id: dos peticiones que vinculan las mismas tareas
+        desde lados distintos esperan una a otra en lugar de bloquearse entre sí, y
+        ninguna de las tareas puede borrarse hasta confirmar.
+        """
+        consulta = (
+            select(TareaModelo.id)
+            .where(TareaModelo.id.in_(ids))
+            .order_by(TareaModelo.id)
+            .with_for_update()
+        )
+        return set(self._sesion.scalars(consulta).all())
+
+    def _comprobar_tareas(self, id_tarea: int, otras: Sequence[int]) -> bool:
+        """Bloquea la tarea y las ``otras``. Devuelve ``False`` (deshecha la
+        transacción) si la tarea no existe y lanza ``EntidadNoEncontradaError`` (ídem)
+        con la primera de las ``otras`` que no exista."""
+        existentes = self._bloquear_tareas([id_tarea, *otras])
+        if id_tarea not in existentes:
+            self._sesion.rollback()
+            return False
+        faltan = sorted(set(otras) - existentes)
+        if faltan:
+            self._sesion.rollback()
+            raise EntidadNoEncontradaError(f"No existe la tarea con id {faltan[0]}")
+        return True
+
+    def vincular(self, id_tarea: int, ids: Sequence[int]) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            if not self._comprobar_tareas(id_tarea, ids):
+                return None
+            ya_vinculadas = set(
+                self._sesion.scalars(
+                    select(TareaVinculadaModelo.vinculada_id).where(
+                        TareaVinculadaModelo.tarea_id == id_tarea,
+                        TareaVinculadaModelo.vinculada_id.in_(ids),
+                    )
+                ).all()
+            )
+            nuevas = [i for i in ids if i not in ya_vinculadas]
+            if nuevas:
+                # Los dos sentidos de cada vínculo, en la misma sentencia.
+                filas = [{"tarea_id": id_tarea, "vinculada_id": i} for i in nuevas]
+                filas += [{"tarea_id": i, "vinculada_id": id_tarea} for i in nuevas]
+                self._sesion.execute(insert(TareaVinculadaModelo), filas)
+            self._sesion.commit()
+        return self._tarea_tras_confirmar(id_tarea)
+
+    def desvincular(self, id_tarea: int, id_vinculada: int) -> Tarea | None:
+        with traducir_conflictos(self._sesion):
+            if not self._comprobar_tareas(id_tarea, [id_vinculada]):
+                return None
+            self._sesion.execute(
+                delete(TareaVinculadaModelo).where(
+                    or_(
+                        tuple_(TareaVinculadaModelo.tarea_id, TareaVinculadaModelo.vinculada_id)
+                        == (id_tarea, id_vinculada),
+                        tuple_(TareaVinculadaModelo.tarea_id, TareaVinculadaModelo.vinculada_id)
+                        == (id_vinculada, id_tarea),
+                    )
+                )
+            )
+            self._sesion.commit()
+        return self._tarea_tras_confirmar(id_tarea)
+
     def _cambiar_hibernacion(self, modelo: TareaModelo, cambio: Callable[[Tarea], None]) -> Tarea:
         """Aplica el cambio de hibernación a la tarea leída con bloqueo y la devuelve;
         si no se admite, deshace la transacción (y libera el bloqueo) y lanza el
@@ -355,8 +424,9 @@ class RepositorioTareasSqlAlchemy:
         with traducir_conflictos(self._sesion):
             # Un único DELETE: el ON DELETE CASCADE de la base de datos borra en la
             # misma sentencia sus datos de oportunidad, sus enlaces con los
-            # catálogos, sus subtareas, sus comentarios y los de sus subtareas (las
-            # filas de los catálogos no se tocan). Espera a quien tenga la tarea
+            # catálogos, sus vínculos con otras tareas (en los dos sentidos), sus
+            # subtareas, sus comentarios y los de sus subtareas (las filas de los
+            # catálogos no se tocan). Espera a quien tenga la tarea
             # bloqueada (p. ej. un alta de subtarea en curso) y se lleva lo que haya
             # confirmado.
             resultado = self._sesion.execute(delete(TareaModelo).where(TareaModelo.id == id_tarea))

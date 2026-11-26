@@ -49,6 +49,7 @@ function tarea(id: number, nombre: string, hibernadaDesde: string | null): Tarea
     grupo_estados: { id: 1, nombre: 'Desarrollo' },
     estado: { id: 10, nombre: 'Pendiente' },
     workflow: null,
+    vinculadas: [],
     subestado: null,
     congelada_en: null,
     hibernada_desde: hibernadaDesde,

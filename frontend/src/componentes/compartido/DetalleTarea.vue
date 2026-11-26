@@ -30,6 +30,7 @@ import DialogoDescartarCambios from '@/componentes/compartido/DialogoDescartarCa
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import InsigniaHibernada from '@/componentes/compartido/InsigniaHibernada.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
+import SeccionTareasVinculadas from '@/componentes/compartido/SeccionTareasVinculadas.vue'
 import SubtareasTarea from '@/componentes/compartido/SubtareasTarea.vue'
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import { Button } from '@/componentes/ui/button'
@@ -56,7 +57,10 @@ import {
 // tarea (su reloj se para; el comentario se añade a los de la tarea); si ya
 // está hibernada, "Reanudar" la despierta. Estos dos los hace la propia modal
 // con el almacén de tareas, que reemplaza la tarea en la lista.
-// Las zonas (cabecera, tarjetas de campos, subtareas y comentarios)
+// Bajo las subtareas, "Tareas relacionadas" lista las tareas vinculadas: pulsar
+// una emite `verTarea` con su id (abrirla es cosa de quien la usa), pidiendo
+// antes confirmación si hay un comentario o una subtarea a medio escribir.
+// Las zonas (cabecera, tarjetas de campos, subtareas, relacionadas y comentarios)
 // son superficies que destacan sobre el lienzo de la modal. Si al cerrarla hay
 // cambios sin guardar (`hayCambios`, el formulario de quien la usa, o un
 // comentario o una subtarea a medio escribir), pide confirmación antes de
@@ -72,6 +76,7 @@ const emit = defineEmits<{
   eliminar: []
   editar: []
   alternarCompletada: []
+  verTarea: [id: number]
 }>()
 
 // Se conserva la última tarea mostrada para que el contenido no desaparezca
@@ -226,6 +231,11 @@ const { confirmando: confirmandoDescarte } = descarte
 
 function alCambiarApertura(abierta: boolean): void {
   if (!abierta) descarte.pedirCierre(() => emit('cerrar'))
+}
+
+// Pasar a otra tarea descarta los borradores de esta, como cerrarla.
+function verVinculada(id: number): void {
+  descarte.pedirCierre(() => emit('verTarea', id))
 }
 
 // --- Hibernar y reanudar ---
@@ -479,7 +489,11 @@ async function alHibernar(conComentario: boolean): Promise<void> {
           </section>
 
           <div v-if="tareaMostrada" data-testid="seccion-subtareas" :class="CLASE_TARJETA">
-            <SubtareasTarea :tarea="tareaMostrada" />
+            <SubtareasTarea :key="tareaMostrada.id" :tarea="tareaMostrada" />
+          </div>
+
+          <div v-if="tareaMostrada" data-testid="seccion-vinculadas" :class="CLASE_TARJETA">
+            <SeccionTareasVinculadas :tarea="tareaMostrada" @ver-tarea="verVinculada" />
           </div>
         </div>
 
@@ -489,7 +503,12 @@ async function alHibernar(conComentario: boolean): Promise<void> {
           aria-label="Comentarios de la tarea"
           :class="`${CLASE_TARJETA} flex min-h-0 flex-col`"
         >
-          <ComentariosTarea ref="comentarios" :ruta="`/tareas/${tareaMostrada.id}/comentarios`" />
+          <!-- Con clave por tarea: al pasar a una vinculada no se arrastran borradores. -->
+          <ComentariosTarea
+            :key="tareaMostrada.id"
+            ref="comentarios"
+            :ruta="`/tareas/${tareaMostrada.id}/comentarios`"
+          />
         </aside>
       </div>
 

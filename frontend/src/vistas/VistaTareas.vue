@@ -1093,6 +1093,12 @@ const SELECTOR_INTERACTIVO =
 
 // Pulsar cualquier parte de la fila abre el detalle de la tarea, salvo los
 // controles de la fila o cuando se está seleccionando texto.
+// Desde "Tareas relacionadas" del detalle se pasa a la tarea vinculada.
+function abrirVinculada(id: number): void {
+  cerrarDetalle()
+  idEnDetalle.value = id
+}
+
 function alPulsarFila(evento: MouseEvent, id: number): void {
   const objetivo = evento.target
   if (objetivo instanceof Element && objetivo.closest(SELECTOR_INTERACTIVO)) return
@@ -2076,6 +2082,7 @@ async function guardar(): Promise<void> {
       @editar="editarEnDetalle"
       @alternar-completada="tareaEnDetalle && tienda.alternarCompletada(tareaEnDetalle.id)"
       @eliminar="tareaEnDetalle && pedirEliminar(tareaEnDetalle)"
+      @ver-tarea="abrirVinculada"
     >
       <template #edicion>
         <FormularioTarea

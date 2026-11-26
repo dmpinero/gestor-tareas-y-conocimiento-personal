@@ -60,6 +60,7 @@ function tarea(
     grupo_estados: { id: 1, nombre: 'Desarrollo' },
     estado,
     workflow: null,
+    vinculadas: [],
     subestado,
     congelada_en: null,
     hibernada_desde: null,

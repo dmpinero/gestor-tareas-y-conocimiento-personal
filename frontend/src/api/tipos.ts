@@ -116,6 +116,18 @@ export interface Tarea {
    * parado y, al reanudar, `fecha_vencimiento` se retrasa lo que duró. Es
    * independiente de `congelada_en`. */
   hibernada_desde: string | null
+  /** Ids de las tareas vinculadas ("Tareas relacionadas" en el detalle), en
+   * orden ascendente. La relación es simétrica: si A tiene a B, B tiene a A.
+   * Cambia con `POST /tareas/{id}/vinculadas` (`{ ids }`) y
+   * `DELETE /tareas/{id}/vinculadas/{vinculada_id}`, que devuelven solo la
+   * tarea {id}; al borrar una tarea desaparecen sus vínculos. */
+  vinculadas: number[]
+}
+
+/** Cuerpo de `POST /tareas/{id}/vinculadas`: ids de las tareas que se vinculan
+ * con {id} (al menos uno, sin {id}); los ya vinculados se ignoran. */
+export interface DatosVinculacion {
+  ids: number[]
 }
 
 /** Cuerpo de `POST /tareas/{id}/hibernar`. Con `comentario` (HTML, con las

@@ -62,6 +62,7 @@ _OPCIONALES_POR_DEFECTO = {
     "congelada_en": None,
     "subestado": None,
     "hibernada_desde": None,
+    "vinculadas": [],
 }
 
 

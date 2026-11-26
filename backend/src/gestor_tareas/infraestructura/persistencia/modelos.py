@@ -343,6 +343,26 @@ class PasoWorkflowModelo(Base):
     )
 
 
+class TareaVinculadaModelo(Base):
+    """Vínculo simple (sin tipos) entre dos tareas distintas.
+
+    Cada vínculo se guarda en los dos sentidos, (A, B) y (B, A), así que las
+    vinculadas de una tarea son las filas con su ``tarea_id``. Borrar cualquiera de
+    las dos tareas borra las dos filas (ON DELETE CASCADE).
+    """
+
+    __tablename__ = "tareas_vinculadas"
+
+    tarea_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", name="fk_tareas_vinculadas_tarea", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    vinculada_id: Mapped[int] = mapped_column(
+        ForeignKey("tareas.id", name="fk_tareas_vinculadas_vinculada", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
 class TareaModelo(Base):
     """Tarea.
 
@@ -449,6 +469,14 @@ class TareaModelo(Base):
     )
     subestado: Mapped[SubestadoModelo | None] = relationship(
         lazy="selectin", foreign_keys=[subestado_id]
+    )
+    # Solo para leer: el repositorio guarda los vínculos con sentencias propias (los
+    # dos sentidos a la vez). Se cargan las filas, no las tareas vinculadas enteras.
+    vinculos: Mapped[list[TareaVinculadaModelo]] = relationship(
+        lazy="selectin",
+        viewonly=True,
+        foreign_keys=[TareaVinculadaModelo.tarea_id],
+        primaryjoin=lambda: TareaModelo.id == TareaVinculadaModelo.tarea_id,
     )
 
 

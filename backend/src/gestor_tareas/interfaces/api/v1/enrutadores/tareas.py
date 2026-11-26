@@ -10,6 +10,7 @@ from gestor_tareas.aplicacion.tarea.anadir_subtarea import AnadirSubtarea
 from gestor_tareas.aplicacion.tarea.cambiar_estado import CambiarEstadoTarea
 from gestor_tareas.aplicacion.tarea.cambiar_subestado import CambiarSubestadoTarea
 from gestor_tareas.aplicacion.tarea.crear_tarea import CrearTarea
+from gestor_tareas.aplicacion.tarea.desvincular_tarea import DesvincularTarea
 from gestor_tareas.aplicacion.tarea.editar_subtarea import EditarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_subtarea import EliminarSubtarea
 from gestor_tareas.aplicacion.tarea.eliminar_tarea import EliminarTarea
@@ -18,11 +19,13 @@ from gestor_tareas.aplicacion.tarea.listar_tareas import ListarTareas
 from gestor_tareas.aplicacion.tarea.marcar_completada import MarcarCompletada
 from gestor_tareas.aplicacion.tarea.marcar_subtarea_resuelta import MarcarSubtareaResuelta
 from gestor_tareas.aplicacion.tarea.reanudar_tarea import ReanudarTarea
+from gestor_tareas.aplicacion.tarea.vincular_tareas import VincularTareas
 from gestor_tareas.dominio.excepciones import (
     AsignacionDeEstadoInvalidaError,
     AsignacionDeWorkflowInvalidaError,
 )
 from gestor_tareas.dominio.tarea.entidades import Oportunidad, Tarea
+from gestor_tareas.dominio.tarea.vinculos import VinculoInvalidoError
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_foco_sqlalchemy import (
     RepositorioFocoSqlAlchemy,
 )
@@ -56,6 +59,7 @@ from gestor_tareas.interfaces.api.v1.esquemas.tarea import (
     TareaHibernarEsquema,
     TareaSalidaEsquema,
     TareaSubestadoEsquema,
+    TareaVincularEsquema,
 )
 
 enrutador = APIRouter(prefix="/tareas", tags=["Tareas"])
@@ -248,6 +252,41 @@ def reanudar(id_tarea: int, sesion: Session = Depends(obtener_sesion)) -> TareaS
     tiempo que al hibernarla, y `hibernada_desde` vuelve a null. El resto de sus datos
     no cambia. 404 si el id no existe y 409 si no está hibernada."""
     tarea = ReanudarTarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea)
+    return _a_esquema(tarea)
+
+
+@enrutador.post(
+    "/{id_tarea:int}/vinculadas",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO, **RESPUESTA_CUERPO_MALFORMADO},
+)
+def vincular(
+    id_tarea: int, datos: TareaVincularEsquema, sesion: Session = Depends(obtener_sesion)
+) -> TareaSalidaEsquema:
+    """Vincula la tarea con las tareas de `ids`, en los dos sentidos (cada una muestra
+    a la otra en `vinculadas`), y la devuelve con el resto de sus datos sin cambios.
+    Los ids ya vinculados o repetidos se ignoran. 404 si la tarea o alguno de los ids
+    no existe (sin vincular ninguno) y 422 si `ids` está vacío o incluye la propia
+    tarea."""
+    try:
+        tarea = VincularTareas(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea, datos.ids)
+    except VinculoInvalidoError as error:
+        raise _error_de_validacion("ids", datos.ids, error) from error
+    return _a_esquema(tarea)
+
+
+@enrutador.delete(
+    "/{id_tarea:int}/vinculadas/{id_vinculada:int}",
+    response_model=TareaSalidaEsquema,
+    responses={**RESPUESTA_NO_ENCONTRADO},
+)
+def desvincular(
+    id_tarea: int, id_vinculada: int, sesion: Session = Depends(obtener_sesion)
+) -> TareaSalidaEsquema:
+    """Quita el vínculo entre las dos tareas, en los dos sentidos, y devuelve la tarea
+    `id_tarea`. Si no estaban vinculadas, la devuelve sin cambios. 404 si alguna de
+    las dos no existe."""
+    tarea = DesvincularTarea(RepositorioTareasSqlAlchemy(sesion)).ejecutar(id_tarea, id_vinculada)
     return _a_esquema(tarea)
 
 

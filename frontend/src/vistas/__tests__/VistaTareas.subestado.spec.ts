@@ -37,6 +37,7 @@ const BASE = {
   grupo_estados: { id: 50, nombre: 'General' },
   estado: { id: 500, nombre: 'Por hacer' },
   workflow: null,
+  vinculadas: [],
   congelada_en: null,
 }
 

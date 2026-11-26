@@ -7,6 +7,7 @@ import type {
   DatosHibernacion,
   DatosSubtarea,
   DatosTarea,
+  DatosVinculacion,
   ElementoCatalogo,
   Tarea,
 } from '@/api/tipos'
@@ -122,6 +123,47 @@ export const useTiendaTareas = defineStore('tareas', () => {
     error.value = null
     try {
       reemplazarTarea(await clienteApi.crear<Tarea>(`/tareas/${id}/reanudar`, null))
+      return true
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+  }
+
+  // Los vínculos entre tareas son simétricos, pero la API solo devuelve la
+  // tarea {id}: tras reemplazarla, cada una de las demás tiene a {id} entre sus
+  // vinculadas si y solo si {id} la tiene a ella (en orden ascendente).
+  function reflejarVinculadas(tarea: Tarea): void {
+    reemplazarTarea(tarea)
+    for (const otra of tareas.value) {
+      if (otra.id === tarea.id) continue
+      const debeTenerla = tarea.vinculadas.includes(otra.id)
+      if (debeTenerla === otra.vinculadas.includes(tarea.id)) continue
+      otra.vinculadas = debeTenerla
+        ? [...otra.vinculadas, tarea.id].sort((a, b) => a - b)
+        : otra.vinculadas.filter((id) => id !== tarea.id)
+    }
+  }
+
+  // Vincula la tarea con varias a la vez (desde el detalle) o quita un vínculo.
+  // Si la API falla guardan el mensaje en `error`, la lista se queda como estaba
+  // y devuelven `false`.
+  async function vincularTareas(id: number, ids: number[]): Promise<boolean> {
+    error.value = null
+    try {
+      const cuerpo: DatosVinculacion = { ids }
+      reflejarVinculadas(await clienteApi.crear<Tarea>(`/tareas/${id}/vinculadas`, cuerpo))
+      return true
+    } catch (motivo) {
+      error.value = (motivo as Error).message
+      return false
+    }
+  }
+
+  async function desvincularTarea(id: number, otraId: number): Promise<boolean> {
+    error.value = null
+    try {
+      reflejarVinculadas(await clienteApi.eliminar<Tarea>(`/tareas/${id}/vinculadas/${otraId}`))
       return true
     } catch (motivo) {
       error.value = (motivo as Error).message
@@ -276,6 +318,8 @@ export const useTiendaTareas = defineStore('tareas', () => {
     reanudar,
     cambiarEstadoTarea,
     cambiarSubestadoTarea,
+    vincularTareas,
+    desvincularTarea,
     eliminarTarea,
     fijarComentariosSubtarea,
     crearSubtarea,

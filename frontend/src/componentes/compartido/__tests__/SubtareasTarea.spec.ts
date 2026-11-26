@@ -77,6 +77,7 @@ const TAREA: Tarea = {
   grupo_estados: null,
   estado: null,
   workflow: null,
+  vinculadas: [],
   congelada_en: null,
   hibernada_desde: null,
   subestado: null,
