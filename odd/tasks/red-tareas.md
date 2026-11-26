@@ -14,12 +14,13 @@ Tests: frontend vitest + vue-tsc + eslint/prettier + playwright (e2e en pila ais
 - S9 (supuesto) Disposición con d3-force (dependencia nueva `d3-force`), calculada de forma determinista (misma entrada → mismas posiciones) y dibujada en SVG con Vue.
 
 ## Tasks
-- T1 S2,S4 `lib/redTareas.ts`: construir nodos y aristas a partir de las tareas y las uniones elegidas (función pura) + tests — inline
-- T2 S9 `lib/disposicionRed.ts`: posiciones con d3-force, deterministas + tests — inline
-- T3 S3,S5-S8 `RedTareas.vue` + integración en `VistaTareas.vue` + tests — inline
+- T1 S2,S4 `lib/redTareas.ts` — delegado (writer, backstop de contexto) — hecho 2c2bf3e
+- T2 S9 `lib/disposicionRed.ts` — delegado — hecho bbe03f6 (d3-force 3.0.1) + 2c2bf3e
+- T3 S3,S5-S8 `RedTareas.vue` + `VistaTareas.vue` — delegado — hecho 2c2bf3e; vitest 1313
 - T4 S1-S8 e2e (incluye axe claro/oscuro y móvil), README — inline
 
 ## Log
 - L1 (2026-11-26) "quiero tener una opción para ver las tareas en formato nube, a través de un componente gráfico que me permita saber cómo están relacionadas todas las tareas entre sí, sirviéndonos de todas las etiquetas, etc. para verlo de forma gráfica. No sé si me entiendes"
 - L2 (2026-11-26) Pregunta tipo de red → "Nodos propios (Recomendado)".
 - L3 Librería: d3-force en lugar de Cytoscape (mucho más ligera, solo calcula posiciones; el dibujo en SVG con Vue mantiene tokens, modo oscuro y nodos accesibles).
+- L4 Revisión visual: con pocos nodos el viewBox ampliaba el dibujo y los nombres salían enormes (y cortados en móvil); `cajaVisible` limita a 1:1.

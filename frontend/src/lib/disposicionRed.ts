@@ -96,3 +96,20 @@ function cajaDe(puntos: Punto[]): Caja {
     alto: Math.max(...ys) + MARGEN_CAJA - y,
   }
 }
+
+/**
+ * Parte del lienzo que se enseña (el `viewBox`): la caja de los nodos, agrandada
+ * y centrada hasta el tamaño del lienzo en píxeles. Así, con pocos nodos, el
+ * dibujo no se amplía por encima de 1:1 (los nombres conservan su tamaño); si no
+ * caben, la caja se queda como está y el navegador la reduce para que entre.
+ */
+export function cajaVisible(caja: Caja, anchoPx: number, altoPx: number): Caja {
+  const ancho = Math.max(caja.ancho, anchoPx)
+  const alto = Math.max(caja.alto, altoPx)
+  return {
+    x: caja.x - (ancho - caja.ancho) / 2,
+    y: caja.y - (alto - caja.alto) / 2,
+    ancho,
+    alto,
+  }
+}

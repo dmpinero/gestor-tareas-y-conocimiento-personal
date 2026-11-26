@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Maximize, ZoomIn, ZoomOut } from '@lucide/vue'
+import { useElementSize } from '@vueuse/core'
 import { computed, ref, useTemplateRef, watch } from 'vue'
 
 import type { Tarea } from '@/api/tipos'
 import { Button } from '@/componentes/ui/button'
 import { CLAVES_PRIORIDAD, clavePrioridad, type ClavePrioridad } from '@/lib/coloresTarea'
-import { disponerRed } from '@/lib/disposicionRed'
+import { cajaVisible, disponerRed } from '@/lib/disposicionRed'
 import {
   TIPOS_NODO_PROPIO,
   TIPOS_UNION,
@@ -207,8 +208,15 @@ const transformacion = computed(() => {
   return `translate(${redondear(tx)} ${redondear(ty)}) translate(${cx} ${cy}) scale(${escala.value}) translate(${-cx} ${-cy})`
 })
 
+const lienzo = useTemplateRef<SVGSVGElement>('lienzo')
+const { width: anchoLienzo, height: altoLienzo } = useElementSize(lienzo)
+
+// Lo que se ve del lienzo: la caja de los nodos sin ampliarla por encima de
+// 1:1 (ver `cajaVisible`).
+const visible = computed(() => cajaVisible(caja.value, anchoLienzo.value, altoLienzo.value))
+
 const viewBox = computed(() => {
-  const { x, y, ancho, alto } = caja.value
+  const { x, y, ancho, alto } = visible.value
   return `${redondear(x)} ${redondear(y)} ${redondear(ancho)} ${redondear(alto)}`
 })
 
@@ -217,14 +225,13 @@ function alRodar(evento: WheelEvent): void {
   zoom(evento.deltaY < 0 ? FACTOR_ZOOM : 1 / FACTOR_ZOOM)
 }
 
-const lienzo = useTemplateRef<SVGSVGElement>('lienzo')
 let arrastre: { x: number; y: number; inicio: { x: number; y: number } } | null = null
 
 // Unidades del lienzo por píxel de pantalla (el `viewBox` se encaja entero).
 function unidadesPorPixel(): number {
   const rect = lienzo.value?.getBoundingClientRect()
   if (!rect || rect.width === 0 || rect.height === 0) return 1
-  return Math.max(caja.value.ancho / rect.width, caja.value.alto / rect.height)
+  return Math.max(visible.value.ancho / rect.width, visible.value.alto / rect.height)
 }
 
 function alPulsarFondo(evento: PointerEvent): void {

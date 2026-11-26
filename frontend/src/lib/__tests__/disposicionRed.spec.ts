@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { disponerRed, MARGEN_CAJA } from '../disposicionRed'
+import { cajaVisible, disponerRed, MARGEN_CAJA } from '../disposicionRed'
 import type { Red } from '../redTareas'
 
 function redDe(idsTareas: number[], aristas: [string, string][] = []): Red {
@@ -71,5 +71,25 @@ describe('disponerRed', () => {
     const copia = structuredClone(RED)
     disponerRed(RED)
     expect(RED).toEqual(copia)
+  })
+})
+
+describe('cajaVisible', () => {
+  const CAJA = { x: 100, y: 50, ancho: 200, alto: 100 }
+
+  it('con pocos nodos no amplía: la caja crece hasta el tamaño del lienzo, centrada', () => {
+    expect(cajaVisible(CAJA, 800, 400)).toEqual({ x: -200, y: -100, ancho: 800, alto: 400 })
+  })
+
+  it('si los nodos no caben, deja la caja tal cual (el navegador la reduce)', () => {
+    expect(cajaVisible(CAJA, 120, 60)).toEqual(CAJA)
+  })
+
+  it('crece solo en la dimensión que falta', () => {
+    expect(cajaVisible(CAJA, 150, 300)).toEqual({ x: 100, y: -50, ancho: 200, alto: 300 })
+  })
+
+  it('sin medida del lienzo (0) devuelve la caja', () => {
+    expect(cajaVisible(CAJA, 0, 0)).toEqual(CAJA)
   })
 })
