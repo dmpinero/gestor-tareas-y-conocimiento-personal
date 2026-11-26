@@ -81,7 +81,7 @@ SOLICITUD_MS3 = {
     "importe": 10000,
     "coste": 8500,
 }
-NOMBRE_MS3 = "AXAS-MS3-EV-24-Migración portal"
+NOMBRE_MS3 = "AXAS-MS3-EV24-Migración portal"
 
 
 @dataclass

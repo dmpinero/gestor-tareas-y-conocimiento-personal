@@ -209,8 +209,8 @@ diferencias:
   Un código tiene de 2 a 20 caracteres, sin espacios.
 - La **descripción es obligatoria** (no se busca en Notion).
 - El nombre de la oportunidad (y sus observaciones) es
-  `AXAS-MS3-EV-` + los 2 últimos caracteres del código + `-` + la descripción:
-  `AXAS0024` y «Migración portal» dan `AXAS-MS3-EV-24-Migración portal`.
+  `AXAS-MS3-EV` + los 2 últimos caracteres del código (sin guion entre medias) + `-` + la descripción:
+  `AXAS0024` y «Migración portal» dan `AXAS-MS3-EV24-Migración portal`.
   Antes de rellenar se busca entre las oportunidades del cliente si ya existe
   una con ese nombre.
 - Sus valores fijos van en el bloque opcional `axas_ms3` del mismo archivo de

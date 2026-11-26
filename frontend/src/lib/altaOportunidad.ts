@@ -92,10 +92,10 @@ export function validarCamposAxasMs3(campos: CamposAltaAxasMs3): ErroresAltaAxas
   return { ...errores, ...validarCamposComunes(campos) }
 }
 
-/** Nombre de la oportunidad: "AXAS-MS3-EV-" + 2 últimos caracteres del código + "-" + descripción. */
+/** Nombre de la oportunidad: "AXAS-MS3-EV" + 2 últimos caracteres del código + "-" + descripción. */
 export function nombrePrevistoAxasMs3(codigo: string, descripcion: string): string {
   const sufijo = codigo.trim().slice(-2) || 'XX'
-  return `AXAS-MS3-EV-${sufijo}-${descripcion.trim() || 'descripción'}`
+  return `AXAS-MS3-EV${sufijo}-${descripcion.trim() || 'descripción'}`
 }
 
 export function aSolicitudAltaAxasMs3(campos: CamposAltaAxasMs3): SolicitudAltaAxasMs3 {

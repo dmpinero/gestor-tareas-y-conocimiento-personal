@@ -76,15 +76,15 @@ describe('alta AXAS MS3', () => {
     coste: '8000',
   }
 
-  it('el nombre es AXAS-MS3-EV- con los 2 últimos caracteres del código, un guion y la descripción', () => {
+  it('el nombre es AXAS-MS3-EV pegado a los 2 últimos caracteres del código, un guion y la descripción', () => {
     expect(nombrePrevistoAxasMs3('AXAS0024', '  Migración portal ')).toBe(
-      'AXAS-MS3-EV-24-Migración portal',
+      'AXAS-MS3-EV24-Migración portal',
     )
-    expect(nombrePrevistoAxasMs3('SERV-AB', 'Algo')).toBe('AXAS-MS3-EV-AB-Algo')
+    expect(nombrePrevistoAxasMs3('SERV-AB', 'Algo')).toBe('AXAS-MS3-EVAB-Algo')
   })
 
   it('sin código ni descripción el nombre muestra marcadores', () => {
-    expect(nombrePrevistoAxasMs3('', '')).toBe('AXAS-MS3-EV-XX-descripción')
+    expect(nombrePrevistoAxasMs3('', '')).toBe('AXAS-MS3-EVXX-descripción')
   })
 
   it('el código y la descripción son obligatorios; duración, importe y coste como en ANES', () => {

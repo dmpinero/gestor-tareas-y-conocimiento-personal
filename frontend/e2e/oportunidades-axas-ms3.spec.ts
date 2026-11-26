@@ -64,7 +64,7 @@ async function simularApi(page: Page): Promise<Simulacion> {
       status: 201,
       json: {
         id: 'e2e',
-        prj: 'AXAS-MS3-EV-25-Portal de clientes',
+        prj: 'AXAS-MS3-EV25-Portal de clientes',
         estado: 'en_curso',
         terminada: false,
         pasos: ['Abriendo el navegador'],
@@ -109,11 +109,11 @@ test('crea un código de servicio desde el combobox y lanza el alta con el nombr
   await page.getByLabel('Duración (meses)').fill('6')
   await page.getByLabel('Importe total previsto (EUR)').fill('1000')
   await page.getByLabel('Coste total previsto (EUR)').fill('800')
-  await expect(page.getByText('AXAS-MS3-EV-25-Portal de clientes')).toBeVisible()
+  await expect(page.getByText('AXAS-MS3-EV25-Portal de clientes')).toBeVisible()
 
   await page.getByRole('button', { name: 'Crear oportunidad' }).click()
 
-  await expect(page.getByText('Avance del alta de AXAS-MS3-EV-25-Portal de clientes')).toBeVisible()
+  await expect(page.getByText('Avance del alta de AXAS-MS3-EV25-Portal de clientes')).toBeVisible()
   expect(simulacion.codigosCreados).toEqual([{ nombre: 'AXAS0025' }])
   expect(simulacion.altas).toEqual([
     {
