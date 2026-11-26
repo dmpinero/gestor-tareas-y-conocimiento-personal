@@ -385,6 +385,14 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   todas las tareas que lo comparten y cuántas son. Las personas y la prioridad
   también listan las subtareas que coinciden. Al pulsar una tarea de la
   ventana, se abre su detalle.
+- Tareas relacionadas: en la sección «Tareas relacionadas» del detalle, el botón
+  «Relacionar tareas» abre un buscador para elegir una o varias tareas
+  existentes. La relación va en ambos sentidos: cada tarea ve a la otra. Pulsar
+  una tarea relacionada abre su detalle, y el botón de quitar deshace la
+  relación en las dos. Al borrar una tarea desaparece de las relaciones de las
+  demás. API: `POST /api/v1/tareas/{id}/vinculadas` (cuerpo `{"ids": [...]}`)
+  y `DELETE /api/v1/tareas/{id}/vinculadas/{vinculada_id}`. Cada tarea devuelve
+  sus relaciones en `vinculadas`, una lista de ids.
 - Vistas legibles:
   - **Listado:** las insignias van bajo el nombre y la columna "Nombre" se
     queda fija al desplazar la tabla en horizontal. La descripción se corta en
