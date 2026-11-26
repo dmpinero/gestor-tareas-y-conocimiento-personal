@@ -369,6 +369,18 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
   con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
   `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
+- A continuación (cola de siguientes): para saber en qué trabajar después del
+  foco. "Añadir a siguientes" (detalle, tablero y menú "⋯" del listado) pone la
+  tarea al final de la cola; si ya está, "Quitar de siguientes". En Inicio, el
+  panel «A continuación» muestra la cola en orden, con "Trabajar en esta",
+  subir, bajar y quitar, y debajo hasta 5 **Sugerencias**: las tareas pendientes
+  que vencen antes (las sin vencimiento al final), después por prioridad y por
+  antigüedad, sin las hibernadas, las de la cola ni la del foco. El desplegable
+  «Siguientes» de la barra superior enseña las 3 primeras y "Pasar a la
+  siguiente: X", que la pone en foco. Poner en foco una tarea la saca de la
+  cola; las completadas no se ven (si se reabren vuelven a su sitio) y borrarla
+  la quita. Se guarda en la tabla `cola_siguientes`. API: `GET`/`POST`/`PUT
+  /api/v1/siguientes` y `DELETE /api/v1/siguientes/{tarea_id}`.
 - Hibernar una tarea: el botón "Hibernar" (en el detalle, en la tarjeta del
   tablero y en el menú "⋯" del listado) detiene su cuenta atrás
   hasta el vencimiento y pide un comentario opcional, que se guarda como un
