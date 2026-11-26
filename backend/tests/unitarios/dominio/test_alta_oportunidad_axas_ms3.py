@@ -52,8 +52,7 @@ def _solicitud(**cambios: object) -> SolicitudAltaAxasMs3:
 
 def test_el_nombre_usa_los_dos_ultimos_caracteres_del_codigo_y_la_descripcion() -> None:
     assert (
-        componer_nombre_axas_ms3("AXAS0024", "Migración portal")
-        == "AXAS-MS3-EV24-Migración portal"
+        componer_nombre_axas_ms3("AXAS0024", "Migración portal") == "AXAS-MS3-EV24-Migración portal"
     )
     assert componer_nombre_axas_ms3("XYZ9AB", "Otra cosa") == "AXAS-MS3-EVAB-Otra cosa"
 
