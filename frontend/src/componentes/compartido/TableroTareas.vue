@@ -5,6 +5,7 @@ import {
   ChevronDown,
   CircleDot,
   ChevronRight,
+  Layers,
   Link2,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -815,14 +816,14 @@ function terminarArrastre(): void {
             <option value="manual">Manual</option>
           </select>
         </div>
+        <!-- Como en la lista: relleno cuando está activo y el mismo icono. -->
         <Button
           type="button"
-          variant="outline"
+          :variant="agrupar ? 'default' : 'outline'"
           :aria-pressed="agrupar"
-          :class="agrupar ? 'bg-accent text-accent-foreground' : ''"
           @click="agrupar = !agrupar"
         >
-          <ListTree aria-hidden="true" />
+          <Layers aria-hidden="true" />
           Agrupar por subestado
         </Button>
         <div class="flex flex-col gap-1.5">

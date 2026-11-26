@@ -280,6 +280,21 @@ describe('TableroTareas: agrupar por subestado', () => {
     expect(localStorage.getItem(CLAVE_AGRUPAR)).toBe('false')
   })
 
+  it('activo se marca relleno (variante principal), como en la lista, y con el mismo icono', async () => {
+    await montar()
+    const clases = () => botonAgrupar().className.split(' ')
+    expect(clases()).toContain('bg-background')
+    expect(clases()).not.toContain('bg-primary')
+    expect(botonAgrupar().querySelector('svg')?.getAttribute('class')).toContain('lucide-layers')
+
+    botonAgrupar().click()
+    await flushPromises()
+
+    expect(clases()).toContain('bg-primary')
+    expect(clases()).toContain('text-primary-foreground')
+    expect(clases()).not.toContain('bg-accent')
+  })
+
   it('una línea horizontal separa cada grupo del anterior, sin línea antes del primero ni sin agrupar', async () => {
     await montar()
     expect(document.body.querySelector('[data-separador-subestado]')).toBeNull()
