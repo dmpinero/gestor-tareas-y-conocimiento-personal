@@ -343,7 +343,7 @@ describe('VistaTareas', () => {
         'Informe trimestral',
         'Backend | Urgente',
         'Ana',
-        '10/11/2026 09:30:00',
+        '10 nov10/11/2026 09:30:00',
         '20 nov20/11/2026 18:00:00Vence en 10 d 23 h 14 min 30 s',
         '—',
         '—',
@@ -355,7 +355,7 @@ describe('VistaTareas', () => {
         'Artículo sobre Vue',
         '—',
         '—',
-        '01/12/2026 17:05:09',
+        '1 dic01/12/2026 17:05:09',
         '—',
         '—',
         '—',
@@ -547,7 +547,7 @@ describe('VistaTareas', () => {
       ...SIN_EXTRAS,
     })
     expect(filasTabla(envoltorio)).toEqual([
-      ['Con fecha', '—', 'Detalle', '—', '—', '02/01/2027 03:04:05', '—', '—', '—', ''],
+      ['Con fecha', '—', 'Detalle', '—', '—', '2 ene02/01/2027 03:04:05', '—', '—', '—', ''],
     ])
   })
 
@@ -615,7 +615,7 @@ describe('VistaTareas', () => {
         'Detalle',
         'Frontend | Urgente',
         'Luis',
-        AHORA_TEXTO,
+        `9 nov${AHORA_TEXTO}`,
         '30 nov30/11/2026 12:00:00Vence en 20 d 17 h 14 min 30 s',
         '—',
         '—',
@@ -735,7 +735,7 @@ describe('VistaTareas', () => {
         'Informe trimestral',
         'Urgente',
         'Ana',
-        '11/11/2026 08:00:00',
+        '11 nov11/11/2026 08:00:00',
         '—',
         '—',
         '—',
@@ -747,7 +747,7 @@ describe('VistaTareas', () => {
         'Artículo sobre Vue',
         '—',
         '—',
-        '01/12/2026 17:05:09',
+        '1 dic01/12/2026 17:05:09',
         '—',
         '—',
         '—',
@@ -815,7 +815,7 @@ describe('VistaTareas', () => {
     })
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(filasTabla(envoltorio)).toEqual([
-      ['Nueva', '1', 'Detalle', '—', '—', AHORA_TEXTO, '—', '—', '—', ''],
+      ['Nueva', '1', 'Detalle', '—', '—', `9 nov${AHORA_TEXTO}`, '—', '—', '—', ''],
     ])
 
     const panelReabierto = await abrirPanel(envoltorio)
@@ -950,7 +950,7 @@ describe('VistaTareas', () => {
         oportunidad: { codigo: 'OP-7', descripcion: null, observaciones: null },
       })
       expect(filasTabla(envoltorio)).toEqual([
-        ['Venta', '—', 'Detalle', '—', '—', AHORA_TEXTO, '—', 'Oportunidad', '—', ''],
+        ['Venta', '—', 'Detalle', '—', '—', `9 nov${AHORA_TEXTO}`, '—', 'Oportunidad', '—', ''],
       ])
     })
 
@@ -1530,24 +1530,33 @@ describe('VistaTareas', () => {
 
     it('cada grupo tiene su color en el borde izquierdo de todas sus filas', async () => {
       const envoltorio = await montar([COMPLETADA, ...TAREAS])
+      // Cabeceras y pies llevan borde; la celda fija del nombre, una franja
+      // (sombra interior) del mismo color, que se desplaza con ella.
+      const colorDe = (celda: { classes: () => string[] }) => {
+        const clases = celda.classes()
+        const borde = clases.find((clase) => /^border-l-[a-z]+-\d+$/.test(clase))
+        if (borde) {
+          expect(clases).toContain('border-l-4')
+          return borde.replace('border-l-', '')
+        }
+        const franja = clases.find((clase) =>
+          clase.startsWith('shadow-[inset_4px_0_0_var(--color-'),
+        )
+        return franja?.match(/--color-([a-z]+-\d+)/)?.[1]
+      }
 
       for (const id of ['pendientes', 'completadas'] as const) {
-        const filas = grupo(envoltorio, id).findAll('tr')
         const colores = new Set(
-          filas.map((fila) => {
-            const clases = fila.findAll('td')[0]!.classes()
-            expect(clases).toContain('border-l-4')
-            return clases.find((clase) => clase.startsWith('border-l-') && clase !== 'border-l-4')
-          }),
+          grupo(envoltorio, id)
+            .findAll('tr')
+            .map((fila) => colorDe(fila.findAll('td')[0]!)),
         )
         expect(colores.size).toBe(1)
+        expect([...colores][0]).toBeDefined()
       }
-      const colorDe = (id: 'pendientes' | 'completadas') =>
-        grupo(envoltorio, id)
-          .findAll('td')[0]!
-          .classes()
-          .find((clase) => clase.startsWith('border-l-') && clase !== 'border-l-4')
-      expect(colorDe('pendientes')).not.toBe(colorDe('completadas'))
+      expect(colorDe(grupo(envoltorio, 'pendientes').findAll('td')[0]!)).not.toBe(
+        colorDe(grupo(envoltorio, 'completadas').findAll('td')[0]!),
+      )
     })
 
     it('las filas de tareas de cada grupo alternan el fondo (cebra) para distinguirlas', async () => {
@@ -1556,11 +1565,13 @@ describe('VistaTareas', () => {
 
       const fondos = grupo(envoltorio, 'pendientes')
         .findAll('tr[data-fila-tarea]')
-        .map((fila) => fila.classes().includes('bg-muted/40'))
+        .map((fila) =>
+          fila.classes().includes('bg-[color-mix(in_oklab,var(--muted)_40%,var(--card))]'),
+        )
       expect(fondos).toEqual([false, true, false])
       // Cada grupo empieza de nuevo por una fila sin fondo.
       expect(grupo(envoltorio, 'completadas').get('tr[data-fila-tarea]').classes()).not.toContain(
-        'bg-muted/40',
+        'bg-[color-mix(in_oklab,var(--muted)_40%,var(--card))]',
       )
     })
 
