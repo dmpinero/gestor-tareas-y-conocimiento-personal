@@ -88,6 +88,13 @@ const TAREAS = [
   }),
 ]
 
+// Texto que lee el lector de pantalla: sin lo marcado aria-hidden.
+function textoAccesible(elemento: Element | null | undefined): string {
+  const copia = elemento?.cloneNode(true) as Element | undefined
+  copia?.querySelectorAll('[aria-hidden="true"]').forEach((nodo) => nodo.remove())
+  return copia?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+}
+
 let contenedor: VueWrapper | null = null
 
 async function montar(ruta = '/tareas'): Promise<VueWrapper> {
@@ -202,7 +209,7 @@ describe('VistaTareas: píldoras pulsables', () => {
       await pulsar(filaDe('Preparar demo'), boton)
 
       const modal = dialogoTitulado(titulo)
-      expect(modal.querySelector('h3')?.textContent?.trim()).toBe(`Tareas (${tareas.length})`)
+      expect(textoAccesible(modal.querySelector('h3'))).toBe(`Tareas (${tareas.length})`)
       expect(tareasDe(modal)).toEqual(tareas)
       expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1)
     },

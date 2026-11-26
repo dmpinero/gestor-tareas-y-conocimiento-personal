@@ -4456,6 +4456,86 @@ describe('VistaTareas', () => {
       expect(document.body.querySelector('[data-testid="calendario-tareas"] table')).not.toBeNull()
       expect(document.body.querySelector('[data-agenda]')).toBeNull()
     })
+
+    describe('legibilidad', () => {
+      const CLAVE_OCULTAR = 'gestor-tareas:ocultar-completadas-calendario'
+      afterEach(() => localStorage.removeItem(CLAVE_OCULTAR))
+
+      it('"Ocultar completadas" quita las completadas del mes y lo recuerda', async () => {
+        const envoltorio = await montarCalendario()
+        const boton = botonPorTexto('Ocultar completadas')
+        expect(boton.getAttribute('aria-pressed')).toBe('false')
+        expect(tareasDe('jueves, 12 de noviembre de 2026')).toEqual(['00:30 Copia de seguridad'])
+
+        boton.click()
+        await flushPromises()
+        expect(boton.getAttribute('aria-pressed')).toBe('true')
+        expect(
+          dia('jueves, 12 de noviembre de 2026').querySelector('[data-tarea-calendario]'),
+        ).toBeNull()
+        expect(tareasDe('miércoles, 11 de noviembre de 2026')).toEqual(['23:59 Cerrar caja'])
+        expect(localStorage.getItem(CLAVE_OCULTAR)).toBe('true')
+
+        envoltorio.unmount()
+        document.body.innerHTML = ''
+        await montarCalendario()
+        expect(botonPorTexto('Ocultar completadas').getAttribute('aria-pressed')).toBe('true')
+      })
+
+      it('las semanas sin tareas son más bajas que las que tienen', async () => {
+        await montarCalendario()
+        const semanas = [
+          ...document.body.querySelectorAll('[data-testid="calendario-tareas"] tbody tr'),
+        ]
+        // Semana del 1 de noviembre (vacía) y la del 9 al 15 (con tareas).
+        expect(semanas[0]!.querySelector('td')!.className).toContain('h-14')
+        expect(semanas[2]!.querySelector('td')!.className).toContain('h-28')
+      })
+
+      it('pulsar el aviso de tareas sin vencimiento las lista en una ventana', async () => {
+        await montarCalendario()
+        const aviso = botonPorEtiqueta('Ver 1 tarea sin fecha de vencimiento')
+        expect(aviso.textContent?.trim()).toBe('1 tarea sin fecha de vencimiento')
+        aviso.click()
+        await flushPromises()
+        const ventana = [...document.body.querySelectorAll('[role="dialog"]')].find(
+          (d) => d.querySelector('h2')?.textContent?.trim() === 'Tareas sin fecha de vencimiento',
+        )
+        expect(ventana).toBeDefined()
+        expect(
+          [...ventana!.querySelectorAll('[data-tabla="Tareas"] tbody button')].map((b) =>
+            b.textContent?.trim(),
+          ),
+        ).toEqual([TAREAS[1]!.nombre])
+      })
+
+      it('cada tarea lleva a la izquierda el color de su prioridad', async () => {
+        await montarCalendario()
+        const informe = dia('viernes, 20 de noviembre de 2026').querySelector(
+          '[data-tarea-calendario]',
+        )
+        expect(informe?.className).toContain('border-l-4')
+        expect(informe?.className).toContain('border-l-orange-500')
+      })
+
+      it('en la agenda estrecha la navegación usa flechas sin texto', async () => {
+        fijarAncho(500)
+        await montarCalendario()
+        for (const etiqueta of ['Mes anterior', 'Mes siguiente']) {
+          const boton = botonPorEtiqueta(etiqueta)
+          expect(boton.textContent?.trim()).toBe('')
+          expect(boton.getAttribute('title')).toBe(etiqueta)
+        }
+        expect(botonPorTexto('Hoy')).toBeDefined()
+      })
+
+      it('con ancho suficiente la navegación conserva su texto', async () => {
+        fijarAncho(900)
+        await montarCalendario()
+        expect(botonPorTexto('Mes anterior')).toBeDefined()
+        expect(botonPorTexto('Mes siguiente')).toBeDefined()
+      })
+    })
   })
 
   describe('editar desde el detalle', () => {

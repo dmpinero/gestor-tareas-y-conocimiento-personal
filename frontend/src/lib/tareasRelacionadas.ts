@@ -11,6 +11,7 @@ export type TipoRelacion =
   | 'tipo'
   | 'completado'
   | 'hibernada'
+  | 'sinVencimiento'
 
 /** Texto de la píldora "Completada"/"Pendiente" de una tarea. */
 export function textoCompletado(tarea: Pick<Tarea, 'completada'>): 'Completada' | 'Pendiente' {
@@ -102,6 +103,14 @@ export const RELACIONES: Record<TipoRelacion, Relacion> = {
     descripcion: 'Tareas con el reloj de vencimiento parado hasta reanudarlas.',
     vacio: 'No hay tareas hibernadas.',
     coincide: (tarea) => estaHibernada(tarea),
+  },
+  // `nombre` es el aviso del calendario ("3 tareas sin fecha de vencimiento").
+  sinVencimiento: {
+    accesible: (nombre) => `Ver ${nombre}`,
+    titulo: () => 'Tareas sin fecha de vencimiento',
+    descripcion: 'Tareas que no tienen fecha de vencimiento y no salen en el calendario.',
+    vacio: 'No hay tareas sin fecha de vencimiento.',
+    coincide: (tarea) => !tarea.fecha_vencimiento,
   },
 }
 

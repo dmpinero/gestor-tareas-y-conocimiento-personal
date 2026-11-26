@@ -188,6 +188,19 @@ describe('lista: legibilidad de las filas', () => {
     expect(filaDe('Preparar demo').className).not.toContain('/40')
   })
 
+  it('la columna de acciones queda fija a la derecha para que la fija del nombre no la tape', async () => {
+    await montar()
+    const cabeceras = document.body.querySelectorAll('thead th')
+    const cabecera = cabeceras[cabeceras.length - 1]
+    expect(cabecera?.className).toMatch(/\bsticky\b/)
+    expect(cabecera?.className).toContain('right-0')
+    const celdas = filaDe('Preparar demo').querySelectorAll('td')
+    const acciones = celdas[celdas.length - 1]
+    expect(acciones?.className).toMatch(/\bsticky\b/)
+    expect(acciones?.className).toContain('right-0')
+    expect(acciones?.className).toContain('bg-inherit')
+  })
+
   it('la fecha de creación es corta y la completa sale al pasar el ratón', async () => {
     await montar()
     const fecha = filaDe('Preparar demo').querySelector('[data-fecha-creacion]')

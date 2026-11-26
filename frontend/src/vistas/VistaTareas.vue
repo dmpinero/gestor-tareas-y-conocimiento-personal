@@ -741,6 +741,8 @@ const CLASE_FILA_TAREA =
 // derecha la separa de lo que pasa por debajo.
 const CLASE_COLUMNA_FIJA = 'sticky left-0 z-10'
 const LINEA_COLUMNA_FIJA = 'shadow-[inset_-1px_0_0_var(--border)]'
+// Las acciones, fijas a la derecha: siempre al alcance y nunca bajo el nombre.
+const CLASE_ACCIONES_FIJAS = 'sticky right-0 z-10 shadow-[inset_1px_0_0_var(--border)]'
 // La tarea en foco, con el borde violeta de la tarea en foco del tablero.
 const CLASE_FILA_FOCO = 'ring-2 ring-violet-500 ring-inset dark:ring-violet-400'
 function claseFilaTarea(indice: number): string {
@@ -1369,7 +1371,7 @@ async function guardar(): Promise<void> {
         <TableCell v-if="esVisible('estado')" :class="claseCelda(tarea)">
           <plantillaEstado.reuse :tarea="tarea" />
         </TableCell>
-        <TableCell class="w-0">
+        <TableCell :class="`w-0 bg-inherit ${CLASE_ACCIONES_FIJAS}`">
           <plantillaAcciones.reuse :tarea="tarea" />
         </TableCell>
       </TableRow>
@@ -1977,7 +1979,9 @@ async function guardar(): Promise<void> {
                   >{{ columna.etiqueta }}</CabeceraOrdenable
                 >
               </TableHead>
-              <TableHead><span class="sr-only">Acciones</span></TableHead>
+              <TableHead :class="`bg-muted ${CLASE_ACCIONES_FIJAS}`"
+                ><span class="sr-only">Acciones</span></TableHead
+              >
             </TableRow>
           </TableHeader>
           <template v-for="grupo in gruposConFilas" :key="grupo.id">

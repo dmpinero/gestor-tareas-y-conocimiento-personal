@@ -124,9 +124,10 @@ const CLASE_MARCO = 'bg-card text-card-foreground overflow-hidden rounded-xl bor
       <section class="grid gap-3">
         <h3 class="flex items-center gap-2 text-sm font-semibold">
           Tareas
+          <!-- Un solo texto oculto: varios trozos se leían "( 5 )". -->
           <span :class="CLASE_CONTADOR"
-            ><span class="sr-only">(</span>{{ tareasRelacionadas.length
-            }}<span class="sr-only">)</span></span
+            ><span aria-hidden="true">{{ tareasRelacionadas.length }}</span
+            ><span class="sr-only">{{ ` (${tareasRelacionadas.length})` }}</span></span
           >
         </h3>
         <div v-if="tareasRelacionadas.length > 0" :class="CLASE_MARCO">
@@ -206,9 +207,10 @@ const CLASE_MARCO = 'bg-card text-card-foreground overflow-hidden rounded-xl bor
       <section v-if="relacionSubtareas" class="grid gap-3">
         <h3 class="flex items-center gap-2 text-sm font-semibold">
           Subtareas
+          <!-- Un solo texto oculto: varios trozos se leían "( 5 )". -->
           <span :class="CLASE_CONTADOR"
-            ><span class="sr-only">(</span>{{ subtareasRelacionadas.length
-            }}<span class="sr-only">)</span></span
+            ><span aria-hidden="true">{{ subtareasRelacionadas.length }}</span
+            ><span class="sr-only">{{ ` (${subtareasRelacionadas.length})` }}</span></span
           >
         </h3>
         <div v-if="subtareasRelacionadas.length > 0" :class="CLASE_MARCO">

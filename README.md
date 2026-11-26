@@ -372,6 +372,24 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   todas las tareas que lo comparten y cuántas son. Las personas y la prioridad
   también listan las subtareas que coinciden. Al pulsar una tarea de la
   ventana, se abre su detalle.
+- Vistas legibles:
+  - **Listado:** las insignias van bajo el nombre y la columna "Nombre" se
+    queda fija al desplazar la tabla en horizontal. La descripción se corta en
+    dos líneas, la fecha de creación se ve corta ("16 nov") y el subestado no
+    parte línea; el texto completo sale al pasar el ratón. En pantallas de
+    menos de 640 px el listado se muestra en tarjetas.
+  - **Tablero:** las tarjetas completadas se atenúan y no muestran la cuenta
+    atrás. Comentarios, foco e hibernar aparecen al pasar el ratón o al
+    enfocar la tarjeta, salvo con la tarea en foco o hibernada. El subestado
+    lleva contorno e icono, y la barra de colores, el título "Tareas por
+    estado".
+  - **Calendario:** el botón "Ocultar completadas" se recuerda entre visitas.
+    Las semanas sin tareas son más bajas y cada tarea lleva el color de su
+    prioridad a la izquierda. Pulsar "N tareas sin fecha de vencimiento" las
+    lista en una ventana. En la agenda de pantallas estrechas, la navegación
+    usa flechas.
+  - **Barra superior:** en el móvil, la píldora del foco muestra el nombre de
+    la tarea.
 - Endpoint de salud `GET /api/v1/salud` y métricas Prometheus en `/metricas`.
 - Comentarios de tareas, subtareas y pasos de los workflows con formato
   (negrita, cursiva, subrayado, tachado, color, resaltado, listas y enlaces)

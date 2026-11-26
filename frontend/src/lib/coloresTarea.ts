@@ -23,6 +23,16 @@ export const RELLENO_PRIORIDAD: Record<ClavePrioridad, string> = {
   sin: 'bg-muted-foreground/30',
 }
 
+// Borde izquierdo con el color de la prioridad (p. ej. en el calendario).
+export const BORDE_PRIORIDAD: Record<ClavePrioridad, string> = {
+  1: 'border-l-red-600 dark:border-l-red-500',
+  2: 'border-l-orange-500 dark:border-l-orange-400',
+  3: 'border-l-blue-600 dark:border-l-blue-400',
+  4: 'border-l-teal-600 dark:border-l-teal-400',
+  5: 'border-l-gray-500 dark:border-l-gray-400',
+  sin: 'border-l-muted-foreground/30',
+}
+
 // Píldoras de texto: fondo claro con texto oscuro y, en modo oscuro, fondo
 // oscuro con texto claro, con un contraste por encima de 4,5:1 (WCAG AA).
 export const PILDORA_PRIORIDAD: Record<Exclude<ClavePrioridad, 'sin'>, string> = {

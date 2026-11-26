@@ -22,10 +22,12 @@ Rama: feat/mejoras-visuales-vistas (apilada sobre feat/pulsar-todas-las-pildoras
 - S17 General: en móvil la píldora "Trabajando en" conserva el nombre de la tarea.
 
 ## Tasks
-- T1 S1-S6 lista — inline — pendiente
-- T2 S7-S11 tablero — inline — pendiente
-- T3 S12-S16 calendario — inline — pendiente
-- T4 S17 barra superior — inline — pendiente
+- T1 S1-S6 lista — inline — hecho 1404123 (RED 7/9 → GREEN; S3 por columna fija tras medir 355 px de desborde)
+- T2 S7-S11 tablero — inline — hecho cd8cff9 (RED 6/6 → GREEN)
+- T3 S12-S16 calendario — inline — hecho (RED 5/6 → GREEN)
+- T4 S17 barra superior — inline — hecho (RED 2/2 → GREEN)
 
 ## Log
 - L1 (2026-11-26) "Revisa cómo se visuslizan las tareas en las distintas vistas y proponme mejoras visuales" → propuesta de 17 puntos; usuario: "implementa todos".
+- L2 S3: reordenar columnas rompía el orden del Excel exportado; se optó por fijar la columna Nombre (franja con sombra interior: los bordes colapsados no se desplazan).
+- L3 S9: acciones ocultas (opacity-0) en vez de atenuadas para no bajar el contraste por debajo de AA; visibles en táctil, con foco o con la tarea en foco/hibernada.

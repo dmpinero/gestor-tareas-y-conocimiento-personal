@@ -4,6 +4,13 @@ import type { Subtarea, Tarea } from '@/api/tipos'
 import type { SeleccionRelacionada } from '@/composables/useTareasRelacionadas'
 import ModalTareasRelacionadas from '../ModalTareasRelacionadas.vue'
 
+// Texto que lee el lector de pantalla: sin lo marcado aria-hidden.
+function textoAccesible(elemento: Element | null | undefined): string {
+  const copia = elemento?.cloneNode(true) as Element | undefined
+  copia?.querySelectorAll('[aria-hidden="true"]').forEach((nodo) => nodo.remove())
+  return copia?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+}
+
 function subtarea(datos: Partial<Subtarea> & Pick<Subtarea, 'id' | 'nombre'>): Subtarea {
   return {
     asignado: null,
@@ -172,7 +179,7 @@ describe('ModalTareasRelacionadas', () => {
       await flushPromises()
       expect(dialogo().querySelector('h2')?.textContent).toContain(titulo)
       expect(dialogo().textContent).toContain(descripcion)
-      expect(dialogo().querySelector('h3')?.textContent?.trim()).toBe(`Tareas (${tareas.length})`)
+      expect(textoAccesible(dialogo().querySelector('h3'))).toBe(`Tareas (${tareas.length})`)
       expect(textosDe('Tareas')).toEqual(tareas)
       expect(dialogo().querySelector('[data-tabla="Subtareas"]')).toBeNull()
       envoltorio.unmount()
@@ -211,7 +218,7 @@ describe('ModalTareasRelacionadas', () => {
   it('avisa si no hay tareas hibernadas', async () => {
     const envoltorio = montar({ tipo: 'hibernada', nombre: 'Hibernada' }, [TAREAS[1]!])
     await flushPromises()
-    expect(dialogo().querySelector('h3')?.textContent?.trim()).toBe('Tareas (0)')
+    expect(textoAccesible(dialogo().querySelector('h3'))).toBe('Tareas (0)')
     expect(dialogo().textContent).toContain('No hay tareas hibernadas.')
     envoltorio.unmount()
   })
