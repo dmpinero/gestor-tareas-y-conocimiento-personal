@@ -82,7 +82,40 @@ class RepositorioTareasFalso:
         return deepcopy(tarea)
 
     def eliminar(self, id_tarea: int) -> bool:
-        return self._tareas.pop(id_tarea, None) is not None
+        if self._tareas.pop(id_tarea, None) is None:
+            return False
+        # Como el ON DELETE CASCADE: sus vínculos desaparecen en los dos sentidos.
+        for tarea in self._tareas.values():
+            if id_tarea in tarea.vinculadas:
+                tarea.vinculadas.remove(id_tarea)
+        return True
+
+    def vincular(self, id_tarea: int, ids: Sequence[int]) -> Tarea | None:
+        if id_tarea not in self._tareas:
+            return None
+        for id_vinculada in ids:
+            if id_vinculada not in self._tareas:
+                raise EntidadNoEncontradaError(f"No existe la tarea con id {id_vinculada}")
+        for id_vinculada in ids:
+            self._enlazar(id_tarea, id_vinculada)
+            self._enlazar(id_vinculada, id_tarea)
+        return deepcopy(self._tareas[id_tarea])
+
+    def _enlazar(self, id_tarea: int, id_vinculada: int) -> None:
+        vinculadas = self._tareas[id_tarea].vinculadas
+        if id_vinculada not in vinculadas:
+            vinculadas.append(id_vinculada)
+            vinculadas.sort()
+
+    def desvincular(self, id_tarea: int, id_vinculada: int) -> Tarea | None:
+        if id_tarea not in self._tareas:
+            return None
+        if id_vinculada not in self._tareas:
+            raise EntidadNoEncontradaError(f"No existe la tarea con id {id_vinculada}")
+        for origen, destino in ((id_tarea, id_vinculada), (id_vinculada, id_tarea)):
+            if destino in self._tareas[origen].vinculadas:
+                self._tareas[origen].vinculadas.remove(destino)
+        return deepcopy(self._tareas[id_tarea])
 
     def _nueva_subtarea(self, subtarea: Subtarea, resuelta: bool) -> Subtarea:
         # Como el repositorio real: guarda sus comentarios iniciales (los cuenta y no

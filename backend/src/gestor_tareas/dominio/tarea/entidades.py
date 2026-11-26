@@ -151,6 +151,10 @@ class Tarea:
     la tarea está hibernada, o ``None`` si no lo está (ver
     ``gestor_tareas.dominio.tarea.hibernacion``). Solo lo cambian ``hibernar`` y
     ``reanudar``; es independiente de ``congelada_en``.
+
+    ``vinculadas`` son los ids, en orden ascendente, de las tareas vinculadas con
+    ella (ver ``gestor_tareas.dominio.tarea.vinculos``). Solo los cambian
+    ``vincular`` y ``desvincular`` del repositorio.
     """
 
     nombre: str
@@ -170,6 +174,7 @@ class Tarea:
     congelada_en: datetime | None = None
     subestado: str | None = None
     hibernada_desde: datetime | None = None
+    vinculadas: list[int] = field(default_factory=list)
     id: int | None = None
 
     def ajustar_congelacion(self, ahora: datetime) -> None:

@@ -19,6 +19,8 @@ def test_la_api_expone_salud_tareas_catalogos_workflows_y_grupos_de_estados_bajo
         "/api/v1/tareas/{id_tarea}/subestado",
         "/api/v1/tareas/{id_tarea}/hibernar",
         "/api/v1/tareas/{id_tarea}/reanudar",
+        "/api/v1/tareas/{id_tarea}/vinculadas",
+        "/api/v1/tareas/{id_tarea}/vinculadas/{id_vinculada}",
         "/api/v1/tareas/{id_tarea}/subtareas",
         "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}",
         "/api/v1/tareas/{id_tarea}/subtareas/{id_subtarea}/resuelta",
@@ -69,6 +71,8 @@ def test_la_api_publica_los_metodos_de_cada_ruta_nueva_o_cambiada() -> None:
     assert set(rutas["/api/v1/tareas/{id_tarea}/subestado"]) == {"patch"}
     assert set(rutas["/api/v1/tareas/{id_tarea}/hibernar"]) == {"post"}
     assert set(rutas["/api/v1/tareas/{id_tarea}/reanudar"]) == {"post"}
+    assert set(rutas["/api/v1/tareas/{id_tarea}/vinculadas"]) == {"post"}
+    assert set(rutas["/api/v1/tareas/{id_tarea}/vinculadas/{id_vinculada}"]) == {"delete"}
     workflows = "/api/v1/workflows"
     assert set(rutas[workflows]) == {"get", "post"}
     assert set(rutas[f"{workflows}/{{id_workflow}}"]) == {"put", "delete"}

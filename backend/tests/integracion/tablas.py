@@ -4,9 +4,9 @@ from gestor_tareas.infraestructura.persistencia import modelos
 
 
 def vaciar_tablas(sesion: Session) -> None:
-    """Vacía el foco de trabajo (con su historial) y las tablas de tareas (con sus subtareas y
-    comentarios, también los de las subtareas), catálogos (también los subestados y
-    los códigos de servicio), workflows (con los comentarios de sus pasos) y grupos
+    """Vacía el foco de trabajo (con su historial) y las tablas de tareas (con sus vínculos,
+    sus subtareas y comentarios, también los de las subtareas), catálogos (también los
+    subestados y los códigos de servicio), workflows (con los comentarios de sus pasos) y grupos
     de estados, y las imágenes de los comentarios, respetando el orden de las claves
     ajenas."""
     for tabla in (
@@ -20,6 +20,7 @@ def vaciar_tablas(sesion: Session) -> None:
         modelos.tarea_etiquetas,
         modelos.tarea_personas,
         modelos.OportunidadModelo.__table__,
+        modelos.TareaVinculadaModelo.__table__,
         modelos.TareaModelo.__table__,
         modelos.SubestadoModelo.__table__,
         modelos.CodigoServicioModelo.__table__,

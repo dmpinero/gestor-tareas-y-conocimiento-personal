@@ -45,9 +45,10 @@ class RepositorioTareas(Protocol):
 
     def eliminar(self, id_tarea: int) -> bool:
         """Borra la tarea con sus datos de tipo, sus enlaces con los catálogos, sus
-        subtareas, sus comentarios y los de sus subtareas, todo en una transacción.
-        Las etiquetas y personas del catálogo se conservan. Devuelve ``False`` si la
-        tarea no existe."""
+        subtareas, sus comentarios y los de sus subtareas, y sus vínculos con otras
+        tareas (en los dos sentidos), todo en una transacción. Las etiquetas y
+        personas del catálogo se conservan. Devuelve ``False`` si la tarea no
+        existe."""
         ...
 
     def actualizar(self, tarea: Tarea, subtareas_nuevas: Sequence[Subtarea] = ()) -> Tarea:
@@ -93,6 +94,25 @@ class RepositorioTareas(Protocol):
         el instante ``ahora``, en la misma transacción. Lanza
         ``EstadoDeHibernacionInvalidoError`` si ya estaba hibernada, sin cambiar
         nada. El resto de datos de la tarea no cambia.
+        """
+        ...
+
+    def vincular(self, id_tarea: int, ids: Sequence[int]) -> Tarea | None:
+        """Vincula la tarea con las de ``ids`` (distintas de ella, sin repetir) en los
+        dos sentidos y la devuelve, o ``None`` si no existe.
+
+        Las que ya estaban vinculadas se ignoran. Lanza ``EntidadNoEncontradaError``
+        si alguna de ``ids`` no existe, sin vincular ninguna. El resto de datos de las
+        tareas no cambia.
+        """
+        ...
+
+    def desvincular(self, id_tarea: int, id_vinculada: int) -> Tarea | None:
+        """Quita el vínculo entre las dos tareas, en los dos sentidos, y devuelve la
+        tarea ``id_tarea``, o ``None`` si no existe.
+
+        Si no estaban vinculadas no cambia nada. Lanza ``EntidadNoEncontradaError``
+        si ``id_vinculada`` no existe.
         """
         ...
 

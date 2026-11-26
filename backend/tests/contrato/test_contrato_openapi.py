@@ -232,6 +232,26 @@ def _hibernar_con_comentario_valido(case: schemathesis.Case) -> None:
         case.body["comentario"] = "Comentario del contrato"
 
 
+def _vincular_sin_la_propia_tarea(case: schemathesis.Case) -> None:
+    """JSON Schema no puede exigir que `ids` no incluya el id de la ruta (si no, 422):
+    en los casos que el contrato da por válidos se quita la propia tarea de `ids`, y
+    si no queda ninguno se vincula con otro id."""
+    if not (
+        case.method == "POST"
+        and case.path == "/api/v1/tareas/{id_tarea}/vinculadas"
+        and _es_positivo_con_cuerpo(case)
+        and isinstance(case.body.get("ids"), list)
+    ):
+        return
+    # Los parámetros de la ruta llegan como texto.
+    try:
+        id_tarea = int((case.path_parameters or {}).get("id_tarea"))
+    except (TypeError, ValueError):
+        return
+    ids = [i for i in case.body["ids"] if i != id_tarea]
+    case.body["ids"] = ids or [id_tarea + 1]
+
+
 def _subir_una_imagen_de_verdad(case: schemathesis.Case) -> None:
     """JSON Schema no puede exigir que el archivo sea una imagen PNG, JPEG, GIF o
     WebP por su contenido (si no, 422). En los casos que el contrato da por válidos
@@ -254,6 +274,7 @@ def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     _reordenar_los_estados_que_existen(case)
     _comentar_con_texto_visible_valido(case)
     _hibernar_con_comentario_valido(case)
+    _vincular_sin_la_propia_tarea(case)
     _subir_una_imagen_de_verdad(case)
     excluidos = _CHECKS_EXCLUIDOS_POR_RUTA.get(case.path)
     case.call_and_validate(excluded_checks=excluidos or None)

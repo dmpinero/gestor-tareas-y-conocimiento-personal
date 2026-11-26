@@ -192,6 +192,7 @@ def test_salida_expone_exactamente_los_campos_del_contrato() -> None:
         "congelada_en": None,
         "subestado": None,
         "hibernada_desde": None,
+        "vinculadas": [],
     }
 
 
