@@ -42,6 +42,7 @@ const TAREAS = [
     grupo_estados: null,
     estado: null,
     workflow: null,
+    vinculadas: [],
   },
   {
     id: 2,
@@ -59,6 +60,7 @@ const TAREAS = [
     grupo_estados: null,
     estado: null,
     workflow: null,
+    vinculadas: [],
   },
 ]
 
@@ -930,6 +932,7 @@ describe('VistaTareas', () => {
         grupo_estados: null,
         estado: null,
         workflow: null,
+        vinculadas: [],
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -969,6 +972,7 @@ describe('VistaTareas', () => {
         grupo_estados: null,
         estado: null,
         workflow: null,
+        vinculadas: [],
       })
       const panel = await abrirPanel(envoltorio)
 
@@ -1952,6 +1956,7 @@ describe('VistaTareas', () => {
         grupo_estados: null,
         estado: null,
         workflow: null,
+        vinculadas: [],
       },
       {
         id: 2,
@@ -1969,6 +1974,7 @@ describe('VistaTareas', () => {
         grupo_estados: null,
         estado: null,
         workflow: null,
+        vinculadas: [],
       },
       {
         id: 3,
@@ -1987,6 +1993,7 @@ describe('VistaTareas', () => {
         grupo_estados: null,
         estado: null,
         workflow: null,
+        vinculadas: [],
       },
     ]
 
@@ -2258,6 +2265,7 @@ describe('VistaTareas', () => {
         grupo_estados: null,
         estado: null,
         workflow: null,
+        vinculadas: [],
       },
       {
         id: 2,
@@ -2275,6 +2283,7 @@ describe('VistaTareas', () => {
         grupo_estados: null,
         estado: null,
         workflow: null,
+        vinculadas: [],
       },
       {
         id: 3,
@@ -2292,6 +2301,7 @@ describe('VistaTareas', () => {
         grupo_estados: null,
         estado: null,
         workflow: null,
+        vinculadas: [],
       },
     ]
     const TODAS = ['Preparar reunión', 'Revisar código', 'Comprar café']

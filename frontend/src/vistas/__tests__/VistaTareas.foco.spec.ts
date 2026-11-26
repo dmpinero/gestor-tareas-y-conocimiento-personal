@@ -41,6 +41,7 @@ function tarea(id: number, nombre: string) {
     grupo_estados: null,
     estado: null,
     workflow: null,
+    vinculadas: [],
     subestado: null,
     congelada_en: null,
   }

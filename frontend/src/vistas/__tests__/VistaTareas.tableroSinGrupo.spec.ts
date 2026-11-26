@@ -45,6 +45,7 @@ function tarea(id: number, nombre: string, enGrupo: boolean) {
     grupo_estados: enGrupo ? { id: 1, nombre: 'Desarrollo' } : null,
     estado: enGrupo ? { id: 10, nombre: 'Pendiente' } : null,
     workflow: null,
+    vinculadas: [],
     subestado: null,
     congelada_en: null,
   }

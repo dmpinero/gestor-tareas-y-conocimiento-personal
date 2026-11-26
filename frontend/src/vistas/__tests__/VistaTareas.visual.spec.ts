@@ -52,6 +52,7 @@ function tarea(id: number, nombre: string, cambios: Partial<Tarea> = {}): Tarea 
     grupo_estados: null,
     estado: null,
     workflow: null,
+    vinculadas: [],
     subestado: null,
     congelada_en: null,
     hibernada_desde: null,
