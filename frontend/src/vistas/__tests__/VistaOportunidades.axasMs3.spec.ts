@@ -145,7 +145,7 @@ describe('VistaOportunidades — AXAS MS3', () => {
     await vista.get('#alta-descripcion').setValue('Migración portal')
 
     expect((combobox(vista).element as HTMLInputElement).value).toBe('AXAS0024')
-    expect(nombrePrevisto(vista)).toBe('AXAS-MS3-EV-24-Migración portal')
+    expect(nombrePrevisto(vista)).toBe('AXAS-MS3-EV24-Migración portal')
   })
 
   it('crear un código nuevo lo da de alta en el catálogo y lo deja elegido', async () => {
@@ -184,7 +184,7 @@ describe('VistaOportunidades — AXAS MS3', () => {
   it('con datos válidos lanza el alta de AXAS MS3 con el código elegido', async () => {
     vi.mocked(lanzarAltaAxasMs3).mockResolvedValue({
       id: 'e1',
-      prj: 'AXAS-MS3-EV-24-Migración portal',
+      prj: 'AXAS-MS3-EV24-Migración portal',
       estado: 'en_curso',
       terminada: false,
       pasos: ['Abriendo el navegador'],
@@ -210,7 +210,7 @@ describe('VistaOportunidades — AXAS MS3', () => {
       importe: 1000,
       coste: 800,
     })
-    expect(vista.text()).toContain('Avance del alta de AXAS-MS3-EV-24-Migración portal')
+    expect(vista.text()).toContain('Avance del alta de AXAS-MS3-EV24-Migración portal')
   })
 })
 

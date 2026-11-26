@@ -12,7 +12,7 @@ from gestor_tareas.dominio.oportunidad.entidades import (
     SolicitudAltaOportunidad,
 )
 
-PREFIJO_NOMBRE_AXAS_MS3 = "AXAS-MS3-EV-"
+PREFIJO_NOMBRE_AXAS_MS3 = "AXAS-MS3-EV"
 
 
 def mas_un_mes(dia: date) -> date:
@@ -36,7 +36,7 @@ def componer_nombre(prj: str, descripcion: str) -> str:
 
 
 def componer_nombre_axas_ms3(codigo_servicio: str, descripcion: str) -> str:
-    """Prefijo AXAS-MS3-EV-, los 2 últimos caracteres del código, guion y descripción."""
+    """Prefijo AXAS-MS3-EV pegado a los 2 últimos caracteres del código, guion y descripción."""
     return f"{PREFIJO_NOMBRE_AXAS_MS3}{codigo_servicio[-2:]}-{descripcion}"
 
 

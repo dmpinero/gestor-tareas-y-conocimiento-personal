@@ -209,8 +209,8 @@ diferencias:
   Un código tiene de 2 a 20 caracteres, sin espacios.
 - La **descripción es obligatoria** (no se busca en Notion).
 - El nombre de la oportunidad (y sus observaciones) es
-  `AXAS-MS3-EV-` + los 2 últimos caracteres del código + `-` + la descripción:
-  `AXAS0024` y «Migración portal» dan `AXAS-MS3-EV-24-Migración portal`.
+  `AXAS-MS3-EV` + los 2 últimos caracteres del código (sin guion entre medias) + `-` + la descripción:
+  `AXAS0024` y «Migración portal» dan `AXAS-MS3-EV24-Migración portal`.
   Antes de rellenar se busca entre las oportunidades del cliente si ya existe
   una con ese nombre.
 - Sus valores fijos van en el bloque opcional `axas_ms3` del mismo archivo de
@@ -260,8 +260,21 @@ uv run ruff check .                              # lint
 uv run ruff format .                             # formato
 uv run bandit -r src                             # análisis de seguridad estático
 uv run lint-imports                              # contrato de capas (arquitectura hexagonal)
-uv run pytest --cov=src/gestor_tareas --cov-report=term-missing
+uv run pytest tests/unitarios                    # tests unitarios (no tocan la base)
 ```
+
+> **Cuidado:** los tests de integración, BDD y contrato vacían **todas** las
+> tablas de la base de `URL_BASE_DATOS`, que por defecto es la de
+> `docker compose`, con los datos reales. Por eso solo arrancan si
+> `GESTOR_TESTS_BD_DESECHABLE=1`; sin esa variable, pytest se niega a ejecutarlos.
+> El CI la define porque usa su propia base. En local, defínela solo con
+> `URL_BASE_DATOS` apuntando a un MySQL aislado:
+>
+> ```bash
+> URL_BASE_DATOS="mysql+pymysql://gestor:gestor@127.0.0.1:3330/gestor_tareas?charset=utf8mb4" \
+>   GESTOR_TESTS_BD_DESECHABLE=1 \
+>   uv run pytest --cov=src/gestor_tareas --cov-report=term-missing
+> ```
 
 **Frontend:**
 

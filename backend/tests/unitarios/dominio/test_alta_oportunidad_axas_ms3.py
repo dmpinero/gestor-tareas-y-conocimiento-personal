@@ -52,10 +52,9 @@ def _solicitud(**cambios: object) -> SolicitudAltaAxasMs3:
 
 def test_el_nombre_usa_los_dos_ultimos_caracteres_del_codigo_y_la_descripcion() -> None:
     assert (
-        componer_nombre_axas_ms3("AXAS0024", "Migración portal")
-        == "AXAS-MS3-EV-24-Migración portal"
+        componer_nombre_axas_ms3("AXAS0024", "Migración portal") == "AXAS-MS3-EV24-Migración portal"
     )
-    assert componer_nombre_axas_ms3("XYZ9AB", "Otra cosa") == "AXAS-MS3-EV-AB-Otra cosa"
+    assert componer_nombre_axas_ms3("XYZ9AB", "Otra cosa") == "AXAS-MS3-EVAB-Otra cosa"
 
 
 def test_la_solicitud_limpia_el_codigo_y_la_descripcion() -> None:
@@ -107,7 +106,7 @@ def test_los_datos_del_formulario_reutilizan_fechas_y_formatos_de_anes() -> None
 
     datos = componer_datos_formulario_axas_ms3(solicitud, date(2026, 1, 31), CONFIGURACION_MS3)
 
-    assert datos.nombre == "AXAS-MS3-EV-24-Migración portal"
+    assert datos.nombre == "AXAS-MS3-EV24-Migración portal"
     assert datos.observaciones == datos.nombre
     assert datos.duracion == "3"
     assert datos.importe == "1234,50"
