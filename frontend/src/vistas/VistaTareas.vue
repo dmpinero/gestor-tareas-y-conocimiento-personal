@@ -3,6 +3,8 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Columns3,
   Kanban,
   Layers,
@@ -851,6 +853,27 @@ function alternarSeccion(idGrupo: IdGrupoTabla, claveSubestado: string): void {
     : [...seccionesPlegadas.value, clave]
 }
 
+// El botón de la cabecera del grupo contrae todas sus secciones si alguna está
+// desplegada y, si están todas contraídas, las expande todas.
+function grupoContraido(idGrupo: IdGrupoTabla): boolean {
+  return seccionesPorGrupo.value[idGrupo].every((seccion) =>
+    estaPlegadaSeccion(idGrupo, seccion.clave),
+  )
+}
+
+function alternarSeccionesDeGrupo(idGrupo: IdGrupoTabla): void {
+  const claves = seccionesPorGrupo.value[idGrupo].map((seccion) =>
+    claveSeccion(idGrupo, seccion.clave),
+  )
+  seccionesPlegadas.value = grupoContraido(idGrupo)
+    ? seccionesPlegadas.value.filter((plegada) => !claves.includes(plegada))
+    : [...new Set([...seccionesPlegadas.value, ...claves])]
+}
+
+function etiquetaSeccionesDeGrupo(idGrupo: IdGrupoTabla, titulo: string): string {
+  return `${grupoContraido(idGrupo) ? 'Expandir' : 'Contraer'} todos los subestados de ${titulo}`
+}
+
 // Las secciones de cada grupo, con un id para el `aria-controls` de su cabecera.
 const seccionesPorGrupo = computed<
   Record<IdGrupoTabla, (GrupoSubestado<Tarea> & { idCuerpo: string })[]>
@@ -1564,22 +1587,40 @@ async function guardar(): Promise<void> {
       </form>
     </plantillaAltaRapida.define>
     <plantillaBotonGrupo.define v-slot="{ grupo }">
-      <button
-        type="button"
-        class="hover:text-foreground focus-visible:ring-ring/50 sticky left-4 flex items-center gap-1.5 rounded-sm text-sm font-semibold outline-none focus-visible:ring-[3px]"
-        :aria-expanded="!estaPlegado(grupo.id)"
-        @click="alternarGrupo(grupo.id)"
-      >
-        <ChevronRight
-          class="size-4 transition-transform"
-          :class="estaPlegado(grupo.id) ? '' : 'rotate-90'"
-          aria-hidden="true"
-        />
-        {{ grupo.titulo }}
-        <span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium">{{
-          grupo.filas.length
-        }}</span>
-      </button>
+      <div class="sticky left-4 flex w-fit items-center gap-2">
+        <button
+          type="button"
+          class="hover:text-foreground focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-sm text-sm font-semibold outline-none focus-visible:ring-[3px]"
+          :aria-expanded="!estaPlegado(grupo.id)"
+          @click="alternarGrupo(grupo.id)"
+        >
+          <ChevronRight
+            class="size-4 transition-transform"
+            :class="estaPlegado(grupo.id) ? '' : 'rotate-90'"
+            aria-hidden="true"
+          />
+          {{ grupo.titulo }}
+          <span
+            class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
+            >{{ grupo.filas.length }}</span
+          >
+        </button>
+        <!-- Con secciones por subestado: contraerlas o expandirlas todas. -->
+        <button
+          v-if="
+            agruparSubestado && !estaPlegado(grupo.id) && seccionesPorGrupo[grupo.id].length > 0
+          "
+          type="button"
+          data-plegar-secciones
+          class="text-muted-foreground hover:text-foreground hover:bg-background/60 focus-visible:ring-ring/50 rounded-sm p-1 outline-none focus-visible:ring-[3px] [&_svg]:size-4"
+          :aria-label="etiquetaSeccionesDeGrupo(grupo.id, grupo.titulo)"
+          :title="etiquetaSeccionesDeGrupo(grupo.id, grupo.titulo)"
+          @click="alternarSeccionesDeGrupo(grupo.id)"
+        >
+          <ChevronsUpDown v-if="grupoContraido(grupo.id)" aria-hidden="true" />
+          <ChevronsDownUp v-else aria-hidden="true" />
+        </button>
+      </div>
     </plantillaBotonGrupo.define>
     <div class="flex items-center justify-between">
       <h2 :id="ID_TITULO_LISTA" class="text-xl font-semibold" tabindex="-1">Tareas</h2>

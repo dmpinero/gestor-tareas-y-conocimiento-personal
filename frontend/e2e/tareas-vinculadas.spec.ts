@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import type { APIRequestContext } from '@playwright/test'
-import { test, expect, type Page } from './base'
+import { test, expect, NOMBRE_GRUPO_E2E, type Page } from './base'
 import { activarModoOscuro } from './utilidades'
 
 // Fecha y hora local sin zona ("YYYY-MM-DDTHH:MM:SS"), como las recibe la API.
@@ -99,6 +99,49 @@ test('relaciona una tarea con dos a la vez, se ve en ambos sentidos y se quita',
   await expect(seccionSegunda).toContainText('Esta tarea no tiene tareas relacionadas.')
   expect(await vinculadasEnApi(request, idPrincipal)).toEqual([idPrimera])
   expect(await vinculadasEnApi(request, idSegunda)).toEqual([])
+})
+
+test('en el tablero, el botón de relacionadas despliega su árbol y abre cada una', async ({
+  page,
+  request,
+  grupoE2e,
+}) => {
+  const marca = Date.now()
+  const principal = `Arbol ${marca} principal`
+  const otra = `Arbol ${marca} otra`
+  const idPrincipal = await crearTarea(request, principal, grupoE2e)
+  const idOtra = await crearTarea(request, otra, grupoE2e)
+  const vinculada = await request.post(`/api/v1/tareas/${idPrincipal}/vinculadas`, {
+    data: { ids: [idOtra] },
+  })
+  expect(vinculada.status()).toBe(200)
+
+  await page.goto('/tareas')
+  await page.getByRole('button', { name: 'Ver como tablero' }).click()
+  await page.getByRole('combobox', { name: 'Grupo del tablero' }).selectOption({
+    label: NOMBRE_GRUPO_E2E,
+  })
+  await page.getByLabel('Buscar').fill(`${marca}`)
+  const tarjeta = page.locator('[data-tarjeta]', { hasText: principal })
+  const boton = tarjeta.getByRole('button', { name: `1 tareas relacionadas de ${principal}` })
+  await expect(boton).toHaveAttribute('aria-expanded', 'false')
+
+  await boton.click()
+  const arbol = page.getByRole('list', { name: `Tareas relacionadas de ${principal}` })
+  await expect(arbol.locator('[data-relacionada]')).toHaveText([otra])
+  await expect(boton).toHaveAttribute('aria-expanded', 'true')
+  await page.screenshot({ path: 'e2e/capturas/vinculadas-03-arbol-tablero.png' })
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .exclude('.vue-devtools__anchor-btn')
+        .analyze()
+    ).violations,
+  ).toEqual([])
+
+  await arbol.getByRole('button', { name: otra }).click()
+  await expect(detalleDe(page, otra)).toBeVisible()
 })
 
 const MODOS = [
