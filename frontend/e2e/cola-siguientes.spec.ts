@@ -157,7 +157,8 @@ test('el buscador añade varias tareas a la cola desde Inicio y desde la barra s
   grupoE2e,
 }) => {
   const marca = Date.now()
-  const nombres = [`Buscar ${marca} uno`, `Buscar ${marca} dos`, `Buscar ${marca} tres`]
+  // Sin «Buscar» en el nombre: otros tests localizan el buscador por esa etiqueta.
+  const nombres = [`Hallar ${marca} uno`, `Hallar ${marca} dos`, `Hallar ${marca} tres`]
   const ids: number[] = []
   for (const nombre of nombres) ids.push(await crearTarea(request, nombre, grupoE2e))
   const previa = await colaEnApi(request)
@@ -167,7 +168,7 @@ test('el buscador añade varias tareas a la cola desde Inicio y desde la barra s
     await panel(page).getByRole('button', { name: 'Buscar tareas' }).click()
     const dialogo = page.getByRole('dialog', { name: 'Añadir a siguientes' })
     await expect(dialogo).toBeVisible()
-    await dialogo.getByRole('searchbox', { name: 'Buscar tarea' }).fill(`búscar ${marca}`)
+    await dialogo.getByRole('searchbox', { name: 'Buscar tarea' }).fill(`hállar ${marca}`)
     await expect(dialogo.getByRole('checkbox')).toHaveCount(3)
     // En el orden en que se marcan.
     await dialogo.getByRole('checkbox', { name: nombres[1] }).check()
@@ -198,6 +199,7 @@ test('el buscador añade varias tareas a la cola desde Inicio y desde la barra s
     expect(await colaEnApi(request)).toEqual([ids[1], ids[0], ids[2]])
   } finally {
     await vaciarCola(request, ids)
+    for (const id of ids) await request.delete(`/api/v1/tareas/${id}`)
   }
 })
 
