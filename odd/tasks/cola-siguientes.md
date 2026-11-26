@@ -33,6 +33,21 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - S10 "es bastante fea la tabla de resultados, intenta homogeneizar estilos con el resto de la aplicación" (supuesto: el panel de Inicio): tarjetas como las del tablero, píldora de prioridad, fecha corta + contador, sugerencias en sección propia.
 - S11 "pon un buscador para buscar tareas y poder añadir a A continuación o en siguientes. Ponla con el estilo de ventana que pusiste para relacionar tareas".
 
+- S12 "cuando busco una tarea quiero poder pasarla a A continuación o a Sugerencias. Si la añado a A continuación y le doy a la x, que pase a Sugerencias".
+  - Sugerencias = primero las **elegidas** por el usuario (en el orden en que se añadieron, sin límite, marcadas «Elegida por ti», cada una con ✕ «Quitar de sugerencias»), después las automáticas de S5 (hasta 5, excluyendo también las elegidas). (supuesto: orden y límite)
+  - El buscador tiene dos acciones: «A continuación (n)» y «Sugerencias (n)»; añade al final de la lista elegida, en el orden en que se marcaron. No ofrece completadas ni las que ya están en esa lista de destino (sí las de la otra lista: añadirlas las mueve).
+  - La ✕ de una fila de «A continuación» en el panel de Inicio la pasa a las elegidas de Sugerencias (al final). «Quitar de siguientes» del detalle/tablero/menú sigue sacándola del todo.
+  - Una tarea está como mucho en una lista: añadirla a una la quita de la otra. Poner en foco la saca de ambas; borrarla también; completadas no se ven en ninguna.
+
+### Contrato API S12 (amplía el v1; nada está publicado aún)
+- Tabla `cola_siguientes` gana `lista VARCHAR(20) NOT NULL` con valores `'siguientes'` | `'sugerencias'` (se modifica la migración no publicada `d7f2b9e4a6c1`, sin revisión nueva). `posicion` es por lista. PK sigue siendo `tarea_id` (una lista por tarea).
+- `GET /api/v1/siguientes`, `PUT /api/v1/siguientes`, `DELETE /api/v1/siguientes/{tarea_id}`: solo la lista `siguientes` (el PUT valida contra la cola visible de esa lista; DELETE no toca una tarea que está en sugerencias: 200 sin cambios).
+- `POST /api/v1/siguientes {"tarea_id"}`: si la tarea está en sugerencias, la mueve al final de siguientes. Respuesta: la cola de siguientes (sin cambios de forma).
+- `GET /api/v1/sugerencias` → 200 `TareaSiguiente[]` (elegidas, en orden, sin completadas).
+- `POST /api/v1/sugerencias {"tarea_id"}` → 200 con la lista de sugerencias elegidas; al final; si estaba en siguientes la mueve; si ya estaba en sugerencias no cambia. 404 si no existe; 422 si está completada.
+- `DELETE /api/v1/sugerencias/{tarea_id}` → 200 con la lista; idempotente; no toca una tarea que está en siguientes.
+- `PUT /api/v1/foco`: saca la tarea de la tabla (de cualquiera de las dos listas).
+
 ## Tasks
 - T1 S2-S4 backend (migración, dominio, aplicación, repositorio, API, foco saca de la cola, tests) — delegado (writer A, paralelo con T2: superficies disjuntas) — hecho 2d86e4e: unitarios 773; suite completa 1708 ok + 1 contrato arreglado (re-verificado solo contrato/API de siguientes y foco); migración d7f2b9e4a6c1
 - T2 S2-S3,S5-S6 frontend (api, tienda, lib de sugerencias, botón, panel, indicador, tests unitarios) — delegado (writer B, paralelo con T1) — hecho 4788bf7 (+ opción en MenuAccionesTarea inline): vitest 1223, vue-tsc limpio
@@ -41,6 +56,8 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - T6 S9 arrastrar en panel y desplegable — inline — d7c46ce
 - T7 S10 estilos homogéneos en Inicio — inline
 - T8 S11 buscador (DialogoElegirTareas común con Relacionar tareas) — inline
+- T9 S12 backend (lista en cola_siguientes, /sugerencias, mover entre listas) — delegado (writer C, paralelo con T10)
+- T10 S12 frontend (tienda, buscador con dos destinos, ✕ pasa a sugerencias, elegidas en Sugerencias) — delegado (writer D, paralelo con T9)
 - T3 integración: e2e, README, vista previa — inline — hecho 7112d17 + arreglo e2e: 4 e2e nuevos ok; suite e2e 96+1, el fallo (historial-foco) era una aserción de URL dependiente del tiempo, corregida (3/3 ok)
 
 ## Log
@@ -54,3 +71,4 @@ Tests: backend pytest (unitarios en local; integración/contrato/bdd SOLO contra
 - L8 (2026-11-26) "haz que en a continuación y en siguientes también pueda ordenar arrastrando las tareas con el ratón".
 - L9 (2026-11-26) "Por cierto, es bastante fea la tabla de resultados, intenta homogeneizar estilos con el resto de la aplicación".
 - L10 (2026-11-26) "pon un buscador para buscar tareas y poder añadir a A continuación o en siguientes. Ponla con el estilo de ventana que pusiste para relacionar tareas". Se extrae DialogoElegirTareas y lo usan ambos selectores.
+- L11 (2026-11-26) "cuando busco una tarea quiero poder pasarla a A continuación o a Sugerencias. Si la añado a A continuación y le doy a la x, que pase a Sugerencias".
