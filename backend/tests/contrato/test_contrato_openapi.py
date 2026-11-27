@@ -1,10 +1,11 @@
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 
 import schemathesis
 from pydantic import ValidationError
 from sqlalchemy import text
 
+from gestor_tareas.dominio.conocimiento.entidades import PaginaNotion
 from gestor_tareas.dominio.excepciones import NombreDuplicadoError
 from gestor_tareas.dominio.grupo_estados.entidades import GrupoEstados
 from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_grupos_estados_sqlalchemy import (  # noqa: E501
@@ -17,12 +18,33 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_workflo
     RepositorioWorkflowsSqlAlchemy,
 )
 from gestor_tareas.infraestructura.persistencia.sesion import FabricaSesiones
+from gestor_tareas.interfaces.api.v1.enrutadores.conocimiento import (
+    obtener_fuente_notion,
+    obtener_modelo_lenguaje,
+)
 from gestor_tareas.interfaces.api.v1.esquemas.comentario import ComentarioCrearEsquema
 from gestor_tareas.interfaces.api.v1.esquemas.tarea import PATRON_FECHA_HORA
 from gestor_tareas.main import crear_aplicacion
 from tests import imagenes_de_prueba
+from tests.unitarios.aplicacion.dobles_conocimiento import FuenteNotionFalsa, ModeloLenguajeFalso
 
-esquema = schemathesis.openapi.from_asgi("/openapi.json", crear_aplicacion())
+
+def _notion_del_contrato() -> FuenteNotionFalsa:
+    pagina = PaginaNotion(
+        "pagina-del-contrato",
+        "Página del contrato",
+        "https://n.so/contrato",
+        datetime(2026, 11, 20, 9, 0, tzinfo=UTC),
+    )
+    return FuenteNotionFalsa(paginas=[pagina], textos={pagina.id: "Texto del contrato"})
+
+
+# Conocimiento nunca sale a la red en el contrato: Notion y Claude son dobles, así que
+# se prueban las respuestas 200 (y nunca el 503 sin credenciales, que sería un 5xx).
+_aplicacion = crear_aplicacion()
+_aplicacion.dependency_overrides[obtener_fuente_notion] = _notion_del_contrato
+_aplicacion.dependency_overrides[obtener_modelo_lenguaje] = lambda: ModeloLenguajeFalso()
+esquema = schemathesis.openapi.from_asgi("/openapi.json", _aplicacion)
 
 # Cuando OpenAPI/JSON Schema no pueda expresar una restricción de negocio que
 # sí se valida en Pydantic, añade aquí la ruta y el check a excluir, con un
@@ -282,6 +304,17 @@ def _subir_una_imagen_de_verdad(case: schemathesis.Case) -> None:
         case.headers = {**(case.headers or {}), "X-Requested-With": "gestor-tareas"}
 
 
+def _preguntar_terminando_en_el_usuario(case: schemathesis.Case) -> None:
+    """JSON Schema no puede exigir que el último mensaje de la conversación sea del
+    `usuario` (si no, 422): en los casos que el contrato da por válidos se le pone ese
+    rol al último; el resto de la conversación se sigue probando entera."""
+    if not (case.path == "/api/v1/conocimiento/preguntar" and _es_positivo_con_cuerpo(case)):
+        return
+    mensajes = case.body.get("mensajes")
+    if isinstance(mensajes, list) and mensajes and isinstance(mensajes[-1], dict):
+        mensajes[-1]["rol"] = "usuario"
+
+
 @esquema.parametrize()
 def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     """Genera peticiones a partir del OpenAPI y valida que las respuestas cumplen el esquema."""
@@ -297,5 +330,6 @@ def test_la_api_cumple_su_contrato_openapi(case: schemathesis.Case) -> None:
     _hibernar_con_comentario_valido(case)
     _vincular_sin_la_propia_tarea(case)
     _subir_una_imagen_de_verdad(case)
+    _preguntar_terminando_en_el_usuario(case)
     excluidos = _CHECKS_EXCLUIDOS_POR_RUTA.get(case.path)
     case.call_and_validate(excluded_checks=excluidos or None)

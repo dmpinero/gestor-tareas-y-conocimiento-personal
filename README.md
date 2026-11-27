@@ -369,6 +369,29 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
   periodo actual aparece "en curso" y las tareas borradas se conservan en gris,
   con el último nombre que tuvieron. API: `GET /api/v1/foco/historial`, con
   `desde` y `hasta` opcionales (instantes ISO con zona; `[desde, hasta)`).
+- Conocimiento (buscador de tus notas de Notion): en **Conocimiento**, «Sincronizar
+  con Notion» copia a la base de datos, en trozos, el texto de las páginas (y
+  entradas de bases de datos) que compartas con tu integración de Notion; las
+  siguientes veces solo trae lo que cambió y quita lo que ya no compartes.
+  «Buscar en tus notas» encuentra los trozos que coinciden (búsqueda de texto
+  completo de MySQL, sin distinguir mayúsculas ni acentos) y los agrupa por
+  página, con el título enlazado a Notion y las palabras buscadas resaltadas. Es
+  gratis: solo necesita el token de Notion. Opcional: con `ANTHROPIC_API_KEY`
+  aparece además un chat en el que Claude (`claude-opus-5-5`) responde en
+  español solo con tus notas, en streaming y citando las páginas (cada pregunta
+  es una llamada de pago a la API de Anthropic; el contenido de las notas se
+  trata como datos, no como instrucciones).
+  - Configuración: crea una integración interna en
+    <https://www.notion.so/my-integrations>, comparte con ella las páginas que
+    quieras consultar (menú «⋯» de la página → Conexiones) y pon en
+    `backend/.env` `NOTION_TOKEN=<secreto de la integración>` (y, solo si quieres
+    el chat, `ANTHROPIC_API_KEY=<tu clave de la API de Anthropic>`); después
+    `docker compose up -d --build backend`. Sin el token, Conocimiento indica qué
+    falta. Las claves nunca llegan al navegador.
+  - API: `GET /api/v1/conocimiento/estado`, `POST /api/v1/conocimiento/sincronizar`,
+    `GET /api/v1/conocimiento/buscar?q=…&limite=…` y `POST /api/v1/conocimiento/preguntar` (respuesta `text/event-stream` con los
+    eventos `fuentes`, `texto`, `fin` o `error`). Tablas `notion_paginas`,
+    `notion_fragmentos` (índice FULLTEXT) y `notion_sincronizacion`.
 - Vista de red (botón «Ver como red» de Tareas): un grafo con las tareas que
   pasan la búsqueda y los filtros. Cada tarea es un círculo con el color de su
   prioridad; cada etiqueta, persona, subestado u oportunidad que comparten dos o

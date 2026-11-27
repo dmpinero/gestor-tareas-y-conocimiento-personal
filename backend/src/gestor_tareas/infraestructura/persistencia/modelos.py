@@ -568,6 +568,56 @@ class HistorialFocoModelo(Base):
     )
 
 
+class PaginaNotionModelo(Base):
+    """Una página de Notion del índice de Conocimiento. ``id`` es el de Notion;
+    ``editada_en`` es su ``last_edited_time`` y ``sincronizada_en``, cuándo se bajó
+    su texto (los dos en UTC, sin zona). Borrarla borra sus trozos (ON DELETE
+    CASCADE)."""
+
+    __tablename__ = "notion_paginas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    titulo: Mapped[str] = mapped_column(String(500), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    editada_en: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    sincronizada_en: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+
+
+class FragmentoNotionModelo(Base):
+    """Un trozo del texto de una página de Notion, en su ``orden`` dentro de ella. El
+    índice FULLTEXT de ``texto`` es el de la búsqueda de Conocimiento."""
+
+    __tablename__ = "notion_fragmentos"
+    __table_args__ = (
+        UniqueConstraint("pagina_id", "orden", name="uq_notion_fragmentos_pagina_orden"),
+        Index("ft_notion_fragmentos_texto", "texto", mysql_prefix="FULLTEXT"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pagina_id: Mapped[str] = mapped_column(
+        ForeignKey("notion_paginas.id", name="fk_notion_fragmentos_pagina", ondelete="CASCADE"),
+        nullable=False,
+    )
+    orden: Mapped[int] = mapped_column(Integer, nullable=False)
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class SincronizacionNotionModelo(Base):
+    """Estado de la sincronización con Notion: una sola fila, con ``id = 1``.
+    ``ultima_sincronizacion`` es cuándo terminó la última completa y
+    ``en_curso_desde``, cuándo empezó la que está en curso (NULL si no hay
+    ninguna). Los dos en UTC, sin zona."""
+
+    __tablename__ = "notion_sincronizacion"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_notion_sincronizacion_una_fila"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    ultima_sincronizacion: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True
+    )
+    en_curso_desde: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+
 __all__ = [
     "Base",
     "ComentarioModelo",
@@ -576,11 +626,14 @@ __all__ = [
     "EstadoGrupoModelo",
     "EtiquetaModelo",
     "FocoTrabajoModelo",
+    "FragmentoNotionModelo",
     "GrupoEstadosModelo",
     "HistorialFocoModelo",
     "OportunidadModelo",
+    "PaginaNotionModelo",
     "PasoWorkflowModelo",
     "PersonaModelo",
+    "SincronizacionNotionModelo",
     "SubestadoModelo",
     "SubtareaModelo",
     "TareaModelo",

@@ -21,7 +21,7 @@ from tests.integracion.tablas import vaciar_tablas
 _RAIZ = Path(__file__).resolve().parents[2]
 # Revisión más reciente (la columna `texto` es MEDIUMTEXT desde la de los
 # comentarios de 5000 caracteres, posterior a esta).
-_ULTIMA = "d7f2b9e4a6c1"
+_ULTIMA = "e9c3a7f1b5d2"
 _ANTERIOR = "d2a8e5c3f7b1"
 _TABLAS = ("comentarios", "comentarios_subtarea", "comentarios_paso_workflow")
 _CREADO = "2026-11-10 16:30:05"

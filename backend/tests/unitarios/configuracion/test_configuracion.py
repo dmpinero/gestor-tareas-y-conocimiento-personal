@@ -36,3 +36,39 @@ def test_no_existe_configuracion_de_adjuntos() -> None:
 
 def test_obtener_configuracion_devuelve_siempre_la_misma_instancia() -> None:
     assert obtener_configuracion() is obtener_configuracion()
+
+
+def test_sin_credenciales_de_conocimiento_no_hay_ni_token_de_notion_ni_clave_de_claude(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("NOTION_TOKEN", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    configuracion = Configuracion(_env_file=None)
+
+    assert configuracion.notion_token is None
+    assert configuracion.anthropic_api_key is None
+
+
+def test_las_credenciales_de_conocimiento_se_leen_del_entorno_y_no_se_muestran(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NOTION_TOKEN", "ntn_secreto")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secreto")
+
+    configuracion = Configuracion(_env_file=None)
+
+    assert configuracion.notion_token.get_secret_value() == "ntn_secreto"
+    assert configuracion.anthropic_api_key.get_secret_value() == "sk-ant-secreto"
+    assert "secreto" not in repr(configuracion)
+    assert "secreto" not in str(configuracion.model_dump())
+
+
+def test_una_credencial_vacia_cuenta_como_sin_configurar(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NOTION_TOKEN", "  ")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+
+    configuracion = Configuracion(_env_file=None)
+
+    assert configuracion.notion_token is None
+    assert configuracion.anthropic_api_key is None

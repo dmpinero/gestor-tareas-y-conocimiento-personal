@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +28,18 @@ class Configuracion(BaseSettings):
     # datos corporativos es un JSON local que nunca se versiona, montado aquí.
     ruta_configuracion_alta_oportunidad: str = "/config/alta_oportunidad.json"
     directorio_perfil_navegador: str = "/perfil-navegador"
+
+    # Conocimiento (chat con las notas de Notion). Sin ellas, la sección lo explica y
+    # no sincroniza ni responde. Son secretos: nunca se registran ni se devuelven.
+    notion_token: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
+
+    @field_validator("notion_token", "anthropic_api_key", mode="before")
+    @classmethod
+    def _vacia_es_sin_configurar(cls, valor: object) -> object:
+        if isinstance(valor, str) and not valor.strip():
+            return None
+        return valor.strip() if isinstance(valor, str) else valor
 
 
 @lru_cache
