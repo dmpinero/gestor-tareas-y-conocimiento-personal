@@ -16,12 +16,14 @@ class PaginaNotion:
 
 @dataclass(frozen=True)
 class FragmentoEncontrado:
-    """Un trozo del texto de una página del índice, con los datos de su página."""
+    """Un trozo del texto de una página del índice, con los datos de su página.
+    ``orden`` es su posición dentro de la página (0 el primero)."""
 
     pagina_id: str
     titulo: str
     url: str
     texto: str
+    orden: int
 
 
 @dataclass(frozen=True)

@@ -15,6 +15,7 @@ vi.mock('@/api/conocimiento', async (original) => ({
   obtenerEstado: vi.fn(),
   sincronizar: vi.fn(),
   preguntar: vi.fn(),
+  buscar: vi.fn(),
 }))
 
 const ESTADO: EstadoConocimiento = {
@@ -223,5 +224,68 @@ describe('useTiendaConocimiento', () => {
     opcionesRecibidas.onTexto('tarde')
     opcionesRecibidas.onFuentes([FUENTE])
     expect(tienda.conversacion).toEqual([])
+  })
+
+  describe('buscar', () => {
+    const RESULTADO_BUSQUEDA = {
+      pagina_id: 'p1',
+      titulo: 'Recetas',
+      url: 'https://www.notion.so/p1',
+      fragmento: 'La paella lleva arroz.',
+      orden: 0,
+    }
+
+    it('guarda los resultados y la búsqueda recortada que los dio', async () => {
+      vi.mocked(api.buscar).mockResolvedValue([RESULTADO_BUSQUEDA])
+      const tienda = useTiendaConocimiento()
+
+      const promesa = tienda.buscar('  paella  ')
+      expect(tienda.buscando).toBe(true)
+      expect(await promesa).toBe(true)
+
+      expect(api.buscar).toHaveBeenCalledWith('paella')
+      expect(tienda.buscando).toBe(false)
+      expect(tienda.resultados).toEqual([RESULTADO_BUSQUEDA])
+      expect(tienda.consultaBuscada).toBe('paella')
+      expect(tienda.errorBusqueda).toBeNull()
+    })
+
+    it('no busca con el texto vacío', async () => {
+      const tienda = useTiendaConocimiento()
+      expect(await tienda.buscar('   ')).toBe(false)
+      expect(api.buscar).not.toHaveBeenCalled()
+      expect(tienda.resultados).toBeNull()
+    })
+
+    it('si falla guarda el error sin borrar los resultados anteriores', async () => {
+      vi.mocked(api.buscar).mockResolvedValueOnce([RESULTADO_BUSQUEDA])
+      const tienda = useTiendaConocimiento()
+      await tienda.buscar('paella')
+
+      vi.mocked(api.buscar).mockRejectedValueOnce(new Error('La API no responde'))
+      expect(await tienda.buscar('arroz')).toBe(false)
+
+      expect(tienda.errorBusqueda).toBe('La API no responde')
+      expect(tienda.resultados).toEqual([RESULTADO_BUSQUEDA])
+      expect(tienda.consultaBuscada).toBe('paella')
+      expect(tienda.buscando).toBe(false)
+    })
+
+    it('una respuesta vieja que llega tarde no pisa la de la última búsqueda', async () => {
+      let resolverVieja!: (r: (typeof RESULTADO_BUSQUEDA)[]) => void
+      vi.mocked(api.buscar)
+        .mockReturnValueOnce(new Promise((r) => (resolverVieja = r)))
+        .mockResolvedValueOnce([])
+      const tienda = useTiendaConocimiento()
+
+      const vieja = tienda.buscar('paella')
+      await tienda.buscar('dentista')
+      resolverVieja([RESULTADO_BUSQUEDA])
+      await vieja
+
+      expect(tienda.resultados).toEqual([])
+      expect(tienda.consultaBuscada).toBe('dentista')
+      expect(tienda.buscando).toBe(false)
+    })
   })
 })

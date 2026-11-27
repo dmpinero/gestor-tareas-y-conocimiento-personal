@@ -68,6 +68,19 @@ class ObtenerEstado:
         return self._repositorio.estado()
 
 
+class BuscarEnConocimiento:
+    """Busca en el índice local, sin IA: los ``limite`` trozos más relevantes para
+    ``consulta`` (recortada), del más al menos relevante, con su página. Solo usa el
+    índice, así que funciona sin credenciales de Notion ni de Anthropic (sin nada
+    sincronizado, no encuentra nada)."""
+
+    def __init__(self, repositorio: RepositorioConocimiento) -> None:
+        self._repositorio = repositorio
+
+    def ejecutar(self, consulta: str, limite: int) -> list[FragmentoEncontrado]:
+        return self._repositorio.buscar(consulta.strip(), limite)
+
+
 class Sincronizar:
     """Pone el índice al día con las páginas compartidas en Notion.
 

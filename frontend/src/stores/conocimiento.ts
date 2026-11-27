@@ -6,6 +6,7 @@ import type {
   EstadoConocimiento,
   FuenteConocimiento,
   MensajeConocimiento,
+  ResultadoBusquedaConocimiento,
   ResultadoSincronizacion,
 } from '@/api/conocimiento'
 import type { RolMensajeConocimiento } from '@/api/tipos'
@@ -14,6 +15,8 @@ import type { RolMensajeConocimiento } from '@/api/tipos'
 export const MAXIMO_MENSAJES_HISTORIAL = 20
 /** Máximo de caracteres por mensaje que admite la API. */
 export const LONGITUD_MAXIMA_MENSAJE = 4000
+/** Máximo de caracteres de una búsqueda que admite `GET /conocimiento/buscar`. */
+export const LONGITUD_MAXIMA_BUSQUEDA = 200
 
 /** Un mensaje de la conversación tal como se muestra. */
 export interface MensajeConversacion {
@@ -27,9 +30,10 @@ function esCancelacion(motivo: unknown): boolean {
   return motivo instanceof DOMException && motivo.name === 'AbortError'
 }
 
-// Conocimiento (chat con las notas de Notion). Como las demás tiendas, las
-// acciones devuelven `true` si la API respondió bien; si falla, guardan el
-// mensaje en `error` (estado y sincronización) o `errorChat` (preguntas).
+// Conocimiento (buscador y chat con las notas de Notion). Como las demás
+// tiendas, las acciones devuelven `true` si la API respondió bien; si falla,
+// guardan el mensaje en `error` (estado y sincronización), `errorBusqueda`
+// (búsquedas) o `errorChat` (preguntas).
 //
 // La conversación vive solo en la pestaña: no se guarda en la BD. A la API se
 // le manda el historial reciente (como mucho 20 mensajes, sin respuestas
@@ -43,6 +47,13 @@ export const useTiendaConocimiento = defineStore('conocimiento', () => {
   const enviando = ref(false)
   const errorChat = ref<string | null>(null)
   let controlador: AbortController | null = null
+  /** Resultados de la última búsqueda (`null` si aún no se ha buscado). */
+  const resultados = ref<ResultadoBusquedaConocimiento[] | null>(null)
+  /** La búsqueda (recortada) que dio `resultados`, para resaltar sus palabras. */
+  const consultaBuscada = ref('')
+  const buscando = ref(false)
+  const errorBusqueda = ref<string | null>(null)
+  let ultimaBusqueda = 0
 
   async function ejecutar(accion: () => Promise<void>): Promise<boolean> {
     error.value = null
@@ -80,6 +91,29 @@ export const useTiendaConocimiento = defineStore('conocimiento', () => {
       })
     } finally {
       sincronizando.value = false
+    }
+  }
+
+  /** Busca en las notas sin IA. Si se lanza otra búsqueda antes de que esta
+   * responda, solo cuenta la última. */
+  async function buscar(texto: string): Promise<boolean> {
+    const consulta = texto.trim()
+    if (consulta === '') return false
+    const propia = ++ultimaBusqueda
+    buscando.value = true
+    errorBusqueda.value = null
+    try {
+      const encontrados = await api.buscar(consulta)
+      if (propia !== ultimaBusqueda) return false
+      resultados.value = encontrados
+      consultaBuscada.value = consulta
+      return true
+    } catch (motivo) {
+      if (propia !== ultimaBusqueda) return false
+      errorBusqueda.value = (motivo as Error).message
+      return false
+    } finally {
+      if (propia === ultimaBusqueda) buscando.value = false
     }
   }
 
@@ -146,8 +180,13 @@ export const useTiendaConocimiento = defineStore('conocimiento', () => {
     conversacion,
     enviando,
     errorChat,
+    resultados,
+    consultaBuscada,
+    buscando,
+    errorBusqueda,
     cargarEstado,
     sincronizar,
+    buscar,
     preguntar,
     nuevaConversacion,
   }

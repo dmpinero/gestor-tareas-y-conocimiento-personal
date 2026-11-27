@@ -348,6 +348,16 @@ export interface FuenteConocimiento {
   url: string
 }
 
+/** Un trozo de una página de Notion que coincide con `GET /conocimiento/buscar`. */
+export interface ResultadoBusquedaConocimiento {
+  pagina_id: string
+  titulo: string
+  url: string
+  fragmento: string
+  /** Posición del trozo dentro de su página (0 el primero). */
+  orden: number
+}
+
 export type RolMensajeConocimiento = 'usuario' | 'asistente'
 
 /** Un mensaje del historial que se envía a `POST /conocimiento/preguntar`. */

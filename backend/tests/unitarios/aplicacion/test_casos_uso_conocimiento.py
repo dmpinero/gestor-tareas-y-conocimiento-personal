@@ -6,6 +6,7 @@ import pytest
 
 from gestor_tareas.aplicacion.conocimiento.casos_uso import (
     SIN_RESULTADOS,
+    BuscarEnConocimiento,
     ObtenerEstado,
     Preguntar,
     Sincronizar,
@@ -16,6 +17,7 @@ from gestor_tareas.dominio.conocimiento.entidades import (
     EventoFin,
     EventoFuentes,
     EventoTexto,
+    FragmentoEncontrado,
     Fuente,
     MensajeChat,
     PaginaNotion,
@@ -325,3 +327,39 @@ def test_los_mensajes_del_asistente_antes_de_la_primera_pregunta_no_se_envian() 
 
     mensajes = modelo.llamadas[0][1]
     assert [m.rol for m in mensajes] == [Rol.USUARIO]
+
+
+# --- Buscar (sin IA) ------------------------------------------------------------
+
+
+def test_buscar_devuelve_los_trozos_del_indice_por_relevancia_con_su_pagina_y_orden() -> None:
+    repositorio = _indice()
+
+    encontrados = BuscarEnConocimiento(repositorio).ejecutar("  paella de marisco ", 20)
+
+    assert encontrados[0] == FragmentoEncontrado(
+        "reunion",
+        "Reunión con Ana",
+        "https://www.notion.so/reunion",
+        "Reunión con Ana\nAna prefiere la paella de marisco.",
+        0,
+    )
+    assert [f.pagina_id for f in encontrados] == ["reunion", "receta"]
+    # La búsqueda llega recortada al índice.
+    assert repositorio.busquedas == ["paella de marisco"]
+
+
+def test_buscar_respeta_el_limite() -> None:
+    assert len(BuscarEnConocimiento(_indice()).ejecutar("paella", 1)) == 1
+
+
+def test_buscar_sin_coincidencias_o_con_el_indice_vacio_no_devuelve_nada() -> None:
+    assert BuscarEnConocimiento(_indice()).ejecutar("dentista", 20) == []
+    assert BuscarEnConocimiento(RepositorioConocimientoEnMemoria()).ejecutar("paella", 20) == []
+
+
+def test_buscar_no_usa_el_modelo_ni_notion() -> None:
+    # Solo necesita el índice: funciona sin credenciales de Notion ni de Anthropic.
+    encontrados = BuscarEnConocimiento(_indice()).ejecutar("azafrán", 20)
+
+    assert [(f.pagina_id, f.orden) for f in encontrados] == [("receta", 0)]

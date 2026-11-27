@@ -26,7 +26,7 @@ Tests: backend pytest (unitarios en local; integración/contrato SOLO contra MyS
 ## Tasks
 - T1 S2,S3,S5-S7 backend (config, cliente Notion con httpx, troceado, migración, repositorio con FULLTEXT, casos de uso sincronizar/estado/preguntar, cliente Claude, router SSE, dependencia `anthropic`, tests con dobles) — delegado (writer A, paralelo con T2) — hecho 4bd6741: unitarios 863, suite completa 1835, migración e9c3a7f1b5d2, anthropic 2.8.0
 - T2 S3-S5 frontend (VistaConocimiento: estado, sincronizar, chat con streaming SSE y citas, nueva conversación, tests) + nginx sin búfer para el SSE — delegado (writer B, paralelo con T1) — hecho a7e4cb7: vitest 1355; nginx validado con nginx:alpine
-- T4 S8 buscador sin IA (endpoint buscar + UI principal; chat solo con clave) — delegado (writer, backstop de contexto)
+- T4 S8 buscador sin IA (endpoint buscar + UI principal; chat solo con clave) — delegado (writer, backstop de contexto) — hecho: unitarios 881, suite completa 1857, vitest 1395, e2e conocimiento 4/4
 - T3 integración: e2e (estado sin configurar + chat con backend simulado), README (cómo configurar Notion y la clave), vista previa — inline
 
 ## Log

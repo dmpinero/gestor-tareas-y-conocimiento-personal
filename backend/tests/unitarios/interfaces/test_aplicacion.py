@@ -58,6 +58,7 @@ def test_la_api_expone_salud_tareas_catalogos_workflows_y_grupos_de_estados_bajo
         "/api/v1/conocimiento/estado",
         "/api/v1/conocimiento/sincronizar",
         "/api/v1/conocimiento/preguntar",
+        "/api/v1/conocimiento/buscar",
     }
 
 

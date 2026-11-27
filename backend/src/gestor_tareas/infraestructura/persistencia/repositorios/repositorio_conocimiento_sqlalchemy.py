@@ -96,13 +96,17 @@ class RepositorioConocimientoSqlAlchemy:
                 PaginaNotionModelo.titulo,
                 PaginaNotionModelo.url,
                 FragmentoNotionModelo.texto,
+                FragmentoNotionModelo.orden,
             )
             .join(PaginaNotionModelo, PaginaNotionModelo.id == FragmentoNotionModelo.pagina_id)
             .where(relevancia > 0)
             .order_by(relevancia.desc(), FragmentoNotionModelo.id)
             .limit(limite)
         )
-        return [FragmentoEncontrado(pagina_id=p, titulo=t, url=u, texto=x) for p, t, u, x in filas]
+        return [
+            FragmentoEncontrado(pagina_id=p, titulo=t, url=u, texto=x, orden=o)
+            for p, t, u, x, o in filas
+        ]
 
     def estado(self) -> EstadoDelIndice:
         paginas = self._sesion.scalar(select(func.count()).select_from(PaginaNotionModelo))

@@ -6,6 +6,9 @@ from gestor_tareas.interfaces.api.v1.esquemas.texto import PATRON_NO_VACIO, Text
 
 LONGITUD_MAXIMA_MENSAJE = 4000
 MENSAJES_MAXIMOS = 20
+LONGITUD_MAXIMA_BUSQUEDA = 200
+RESULTADOS_POR_DEFECTO = 20
+RESULTADOS_MAXIMOS = 50
 
 
 class ConfiguradoEsquema(BaseModel):
@@ -64,6 +67,16 @@ class PreguntaEsquema(BaseModel):
         if mensajes[-1].rol is not Rol.USUARIO:
             raise ValueError("El último mensaje debe ser del usuario.")
         return mensajes
+
+
+class ResultadoBusquedaEsquema(BaseModel):
+    """Un trozo de una página de Notion que coincide con la búsqueda."""
+
+    pagina_id: str = Field(description="Id de la página en Notion.")
+    titulo: str = Field(description="Título de la página.")
+    url: str = Field(description="Enlace a la página en Notion.")
+    fragmento: str = Field(description="Texto del trozo encontrado.")
+    orden: int = Field(description="Posición del trozo dentro de su página (0 el primero).")
 
 
 class ErrorConocimientoEsquema(BaseModel):

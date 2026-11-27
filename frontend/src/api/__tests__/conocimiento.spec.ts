@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clienteApi, ErrorApi } from '@/api/cliente'
 import {
+  buscar,
   crearLectorSse,
   obtenerEstado,
   preguntar,
@@ -91,6 +92,25 @@ describe('obtenerEstado y sincronizar', () => {
     vi.mocked(clienteApi.crear).mockResolvedValue({ nuevas: 2 })
     await expect(sincronizar()).resolves.toEqual({ nuevas: 2 })
     expect(clienteApi.crear).toHaveBeenCalledWith('/conocimiento/sincronizar', {})
+  })
+})
+
+describe('buscar', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('pide GET /conocimiento/buscar con la búsqueda codificada en la URL', async () => {
+    const resultados = [
+      { pagina_id: 'p', titulo: 'T', url: 'https://n.so/p', fragmento: 'f', orden: 0 },
+    ]
+    vi.mocked(clienteApi.obtener).mockResolvedValue(resultados)
+    await expect(buscar('paella & arroz?')).resolves.toEqual(resultados)
+    expect(clienteApi.obtener).toHaveBeenCalledWith('/conocimiento/buscar?q=paella+%26+arroz%3F')
+  })
+
+  it('envía el límite si se indica', async () => {
+    vi.mocked(clienteApi.obtener).mockResolvedValue([])
+    await buscar('paella', 5)
+    expect(clienteApi.obtener).toHaveBeenCalledWith('/conocimiento/buscar?q=paella&limite=5')
   })
 })
 

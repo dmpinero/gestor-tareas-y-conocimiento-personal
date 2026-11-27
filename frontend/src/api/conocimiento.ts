@@ -3,6 +3,7 @@ import type {
   EstadoConocimiento,
   FuenteConocimiento,
   MensajeConocimiento,
+  ResultadoBusquedaConocimiento,
   ResultadoSincronizacion,
 } from '@/api/tipos'
 
@@ -10,6 +11,7 @@ export type {
   EstadoConocimiento,
   FuenteConocimiento,
   MensajeConocimiento,
+  ResultadoBusquedaConocimiento,
   ResultadoSincronizacion,
 } from '@/api/tipos'
 
@@ -19,6 +21,17 @@ export function obtenerEstado(): Promise<EstadoConocimiento> {
 
 export function sincronizar(): Promise<ResultadoSincronizacion> {
   return clienteApi.crear<ResultadoSincronizacion>('/conocimiento/sincronizar', {})
+}
+
+/**
+ * Busca en las notas de Notion ya sincronizadas, sin IA (`GET /conocimiento/buscar`):
+ * los trozos que coinciden, del más al menos relevante. Sin `limite`, la API
+ * devuelve 20 como mucho.
+ */
+export function buscar(q: string, limite?: number): Promise<ResultadoBusquedaConocimiento[]> {
+  const parametros = new URLSearchParams({ q })
+  if (limite !== undefined) parametros.set('limite', String(limite))
+  return clienteApi.obtener<ResultadoBusquedaConocimiento[]>(`/conocimiento/buscar?${parametros}`)
 }
 
 /** Un evento de un flujo `text/event-stream`: su nombre y sus datos sin analizar. */

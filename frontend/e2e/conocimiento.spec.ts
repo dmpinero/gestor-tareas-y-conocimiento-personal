@@ -10,20 +10,90 @@ async function sinViolaciones(page: Page): Promise<void> {
   expect(resultado.violations).toEqual([])
 }
 
-// El backend de e2e no tiene credenciales: Conocimiento lo explica y no deja
-// sincronizar ni preguntar.
-test('sin credenciales, Conocimiento explica qué falta configurar', async ({ page }) => {
+// El backend de e2e no tiene credenciales: avisa de que falta NOTION_TOKEN, no
+// deja sincronizar, no ofrece el chat (sin clave de Anthropic) y el buscador
+// sigue disponible, invitando a sincronizar.
+test('sin credenciales, Conocimiento explica qué falta y ofrece solo el buscador', async ({
+  page,
+}) => {
   await page.goto('/conocimiento')
   await expect(page.getByTestId('falta-notion')).toContainText(
     'Falta configurar NOTION_TOKEN en backend/.env',
   )
-  await expect(page.getByTestId('falta-anthropic')).toContainText(
-    'Falta configurar ANTHROPIC_API_KEY en backend/.env',
-  )
   await expect(page.getByTestId('boton-sincronizar')).toBeDisabled()
-  await expect(page.getByLabel('Pregunta')).toBeDisabled()
-  await expect(page.getByTestId('boton-enviar')).toBeDisabled()
+  await expect(page.getByTestId('chat-conocimiento')).toHaveCount(0)
+  await expect(page.getByLabel('Pregunta')).toHaveCount(0)
+  await expect(page.getByLabel('Buscar en tus notas')).toBeEnabled()
+  await expect(page.getByTestId('invitar-sincronizar')).toBeVisible()
   await sinViolaciones(page)
+})
+
+// Buscador con la API simulada: resultados por página con las palabras resaltadas.
+test('el buscador agrupa por página, resalta lo buscado y avisa si no hay nada', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/conocimiento/estado', (ruta) =>
+    ruta.fulfill({
+      json: {
+        configurado: { notion: true, anthropic: false },
+        paginas: 2,
+        fragmentos: 5,
+        ultima_sincronizacion: '2026-11-26T10:00:00Z',
+      },
+    }),
+  )
+  await page.route('**/api/v1/conocimiento/buscar*', (ruta) => {
+    const q = new URL(ruta.request().url()).searchParams.get('q')
+    return ruta.fulfill({
+      json:
+        q === 'nada'
+          ? []
+          : [
+              {
+                pagina_id: 'p1',
+                titulo: 'Guía de despliegue',
+                url: 'https://www.notion.so/p1',
+                fragmento: 'Para el despliegue usa make deploy.',
+                orden: 0,
+              },
+              {
+                pagina_id: 'p2',
+                titulo: 'Notas <b>varias</b>',
+                url: 'https://www.notion.so/p2',
+                fragmento: 'Revisar el DESPLIEGUE del viernes.',
+                orden: 1,
+              },
+              {
+                pagina_id: 'p1',
+                titulo: 'Guía de despliegue',
+                url: 'https://www.notion.so/p1',
+                fragmento: 'Después del despliegue, comprueba.',
+                orden: 2,
+              },
+            ],
+    })
+  })
+  await page.goto('/conocimiento')
+  await page.getByLabel('Buscar en tus notas').fill('despliegue')
+  await page.getByLabel('Buscar en tus notas').press('Enter')
+
+  const paginas = page.getByTestId('resultado-pagina')
+  await expect(paginas).toHaveCount(2)
+  await expect(paginas.nth(0).getByRole('link', { name: 'Guía de despliegue' })).toHaveAttribute(
+    'href',
+    'https://www.notion.so/p1',
+  )
+  await expect(paginas.nth(0).getByTestId('fragmento-resultado')).toHaveCount(2)
+  await expect(paginas.nth(1)).toContainText('Notas <b>varias</b>')
+  await expect(paginas.nth(1).locator('mark')).toHaveText('DESPLIEGUE')
+  await page.screenshot({ path: 'e2e/capturas/conocimiento-02-buscador.png' })
+  await sinViolaciones(page)
+
+  await page.getByLabel('Buscar en tus notas').fill('nada')
+  await page.getByLabel('Buscar en tus notas').press('Enter')
+  await expect(page.getByTestId('sin-resultados')).toHaveText(
+    'No he encontrado nada sobre eso en tus notas de Notion.',
+  )
 })
 
 // Con la API simulada en el navegador: estado configurado y una respuesta en

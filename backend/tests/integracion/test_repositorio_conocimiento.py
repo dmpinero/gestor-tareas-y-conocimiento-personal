@@ -86,6 +86,7 @@ def test_busca_por_texto_completo_los_trozos_mas_relevantes_sin_distinguir_tilde
         "Receta de paella",
         "https://www.notion.so/receta",
         "La paella lleva arroz bomba y azafrán.",
+        0,
     )
     assert {f.pagina_id for f in encontrados} == {"receta", "reunion"}
     assert repositorio.buscar("paella", 1) == encontrados[:1]
@@ -93,6 +94,17 @@ def test_busca_por_texto_completo_los_trozos_mas_relevantes_sin_distinguir_tilde
     # Los signos de la búsqueda booleana no rompen la consulta.
     assert repositorio.buscar('+paella -"arroz" *', 5)
     assert repositorio.buscar("* ¿? -", 5) == []
+
+
+def test_cada_trozo_encontrado_lleva_su_orden_dentro_de_la_pagina(sesion_bd: Session) -> None:
+    repositorio = RepositorioConocimientoSqlAlchemy(sesion_bd)
+    repositorio.guardar_pagina(
+        _pagina("a", "Notas"), ["Primero el dentista.", "Luego la compra.", "Y el fontanero."]
+    )
+
+    assert [(f.texto, f.orden) for f in repositorio.buscar("fontanero", 5)] == [
+        ("Y el fontanero.", 2)
+    ]
 
 
 def test_busca_aunque_solo_haya_un_trozo_en_el_indice(sesion_bd: Session) -> None:

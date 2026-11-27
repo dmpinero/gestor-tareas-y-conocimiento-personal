@@ -87,11 +87,12 @@ class RepositorioConocimientoEnMemoria:
         buscadas = _palabras(consulta)
         puntuados = []
         for guardada in self.paginas.values():
-            for texto in guardada.fragmentos:
+            for orden, texto in enumerate(guardada.fragmentos):
                 comunes = len(buscadas & _palabras(texto))
                 if comunes:
                     p = guardada.pagina
-                    puntuados.append((comunes, FragmentoEncontrado(p.id, p.titulo, p.url, texto)))
+                    encontrado = FragmentoEncontrado(p.id, p.titulo, p.url, texto, orden)
+                    puntuados.append((comunes, encontrado))
         puntuados.sort(key=lambda par: -par[0])
         return [f for _, f in puntuados[:limite]]
 

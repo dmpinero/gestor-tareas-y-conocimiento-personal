@@ -5,12 +5,18 @@ import logging
 from collections.abc import Iterator
 from dataclasses import asdict
 from functools import lru_cache
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from gestor_tareas.aplicacion.conocimiento.casos_uso import ObtenerEstado, Preguntar, Sincronizar
+from gestor_tareas.aplicacion.conocimiento.casos_uso import (
+    BuscarEnConocimiento,
+    ObtenerEstado,
+    Preguntar,
+    Sincronizar,
+)
 from gestor_tareas.configuracion import obtener_configuracion
 from gestor_tareas.dominio.conocimiento.entidades import (
     EventoError,
@@ -34,12 +40,17 @@ from gestor_tareas.infraestructura.persistencia.repositorios.repositorio_conocim
 from gestor_tareas.interfaces.api.dependencias import obtener_sesion
 from gestor_tareas.interfaces.api.respuestas_error import RESPUESTA_CUERPO_MALFORMADO
 from gestor_tareas.interfaces.api.v1.esquemas.conocimiento import (
+    LONGITUD_MAXIMA_BUSQUEDA,
+    RESULTADOS_MAXIMOS,
+    RESULTADOS_POR_DEFECTO,
     ConfiguradoEsquema,
     ErrorConocimientoEsquema,
     EstadoConocimientoEsquema,
     PreguntaEsquema,
+    ResultadoBusquedaEsquema,
     ResumenSincronizacionEsquema,
 )
+from gestor_tareas.interfaces.api.v1.esquemas.texto import PATRON_NO_VACIO, TextoObligatorio
 
 enrutador = APIRouter(prefix="/conocimiento", tags=["Conocimiento"])
 
@@ -148,6 +159,43 @@ def sincronizar(
         raise ConocimientoSinConfigurarError(SIN_NOTION)
     resumen = Sincronizar(fuente, repositorio).ejecutar()
     return ResumenSincronizacionEsquema(**asdict(resumen))
+
+
+@enrutador.get("/buscar", response_model=list[ResultadoBusquedaEsquema])
+def buscar(
+    q: Annotated[
+        TextoObligatorio,
+        Query(
+            min_length=1,
+            max_length=LONGITUD_MAXIMA_BUSQUEDA,
+            json_schema_extra=PATRON_NO_VACIO,
+            description=(
+                f"Lo que se busca: de 1 a {LONGITUD_MAXIMA_BUSQUEDA} caracteres sin contar "
+                "los espacios de los extremos (si no, 422)."
+            ),
+        ),
+    ],
+    limite: Annotated[
+        int,
+        Query(
+            ge=1,
+            le=RESULTADOS_MAXIMOS,
+            description=f"Cuántos trozos como mucho, de 1 a {RESULTADOS_MAXIMOS}.",
+        ),
+    ] = RESULTADOS_POR_DEFECTO,
+    repositorio: RepositorioConocimiento = Depends(obtener_repositorio_conocimiento),
+) -> list[ResultadoBusquedaEsquema]:
+    """Busca en las notas de Notion del índice local, sin IA: los trozos que coinciden
+    con `q` (búsqueda de texto completo, sin distinguir tildes ni mayúsculas), del más
+    al menos relevante, con su página. No necesita `NOTION_TOKEN` ni
+    `ANTHROPIC_API_KEY`: busca en lo ya sincronizado (vacío si nunca se sincronizó)."""
+    encontrados = BuscarEnConocimiento(repositorio).ejecutar(q, limite)
+    return [
+        ResultadoBusquedaEsquema(
+            pagina_id=f.pagina_id, titulo=f.titulo, url=f.url, fragmento=f.texto, orden=f.orden
+        )
+        for f in encontrados
+    ]
 
 
 @enrutador.post("/preguntar", response_class=StreamingResponse, responses=_RESPUESTAS_PREGUNTAR)

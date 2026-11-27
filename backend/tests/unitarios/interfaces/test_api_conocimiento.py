@@ -303,3 +303,127 @@ def test_con_clave_hay_un_modelo_de_claude_que_se_reutiliza(
 
     assert isinstance(modelo, ModeloAnthropic)
     assert obtener_modelo_lenguaje() is modelo
+
+
+# --- Buscar (sin IA) ------------------------------------------------------------
+
+
+def _con_notas(entorno: Entorno) -> Entorno:
+    entorno.repositorio.guardar_pagina(
+        PaginaNotion("receta", "Receta de paella", "https://n.so/receta", _EDITADA),
+        ["Receta de paella", "La paella lleva arroz bomba y azafrán."],
+    )
+    entorno.repositorio.guardar_pagina(
+        PaginaNotion("reunion", "Reunión", "https://n.so/reunion", _EDITADA),
+        ["Ana trae la paella y el arroz."],
+    )
+    return entorno
+
+
+def test_buscar_devuelve_los_trozos_por_relevancia_con_su_pagina(configurado: Entorno) -> None:
+    _con_notas(configurado)
+
+    respuesta = configurado.cliente.get(f"{_RUTA}/buscar", params={"q": "  arroz paella  "})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == [
+        {
+            "pagina_id": "receta",
+            "titulo": "Receta de paella",
+            "url": "https://n.so/receta",
+            "fragmento": "La paella lleva arroz bomba y azafrán.",
+            "orden": 1,
+        },
+        {
+            "pagina_id": "reunion",
+            "titulo": "Reunión",
+            "url": "https://n.so/reunion",
+            "fragmento": "Ana trae la paella y el arroz.",
+            "orden": 0,
+        },
+        {
+            "pagina_id": "receta",
+            "titulo": "Receta de paella",
+            "url": "https://n.so/receta",
+            "fragmento": "Receta de paella",
+            "orden": 0,
+        },
+    ]
+    assert configurado.repositorio.busquedas == ["arroz paella"]
+    # Buscar no usa a Claude.
+    assert configurado.modelo.llamadas == []
+
+
+def test_buscar_limita_a_20_por_defecto_y_admite_de_1_a_50(configurado: Entorno) -> None:
+    configurado.repositorio.guardar_pagina(
+        PaginaNotion("larga", "Larga", "https://n.so/larga", _EDITADA),
+        [f"paella {i}" for i in range(60)],
+    )
+
+    def contar(**params: object) -> int:
+        respuesta = configurado.cliente.get(f"{_RUTA}/buscar", params={"q": "paella", **params})
+        assert respuesta.status_code == 200
+        return len(respuesta.json())
+
+    assert contar() == 20
+    assert contar(limite=1) == 1
+    assert contar(limite=50) == 50
+
+
+def test_buscar_funciona_sin_credenciales(sin_configurar: Entorno) -> None:
+    vacio = sin_configurar.cliente.get(f"{_RUTA}/buscar", params={"q": "paella"})
+    assert (vacio.status_code, vacio.json()) == (200, [])
+
+    _con_notas(sin_configurar)
+    respuesta = sin_configurar.cliente.get(f"{_RUTA}/buscar", params={"q": "azafrán"})
+
+    assert respuesta.status_code == 200
+    assert [r["pagina_id"] for r in respuesta.json()] == ["receta"]
+
+
+def test_buscar_sin_coincidencias_devuelve_una_lista_vacia(configurado: Entorno) -> None:
+    _con_notas(configurado)
+
+    respuesta = configurado.cliente.get(f"{_RUTA}/buscar", params={"q": "dentista"})
+
+    assert (respuesta.status_code, respuesta.json()) == (200, [])
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {},
+        {"q": ""},
+        {"q": "   "},
+        {"q": " \t"},
+        {"q": "x" * 201},
+        {"q": "paella", "limite": 0},
+        {"q": "paella", "limite": 51},
+        {"q": "paella", "limite": "muchos"},
+    ],
+)
+def test_buscar_con_parametros_invalidos_da_422(configurado: Entorno, params: dict) -> None:
+    respuesta = configurado.cliente.get(f"{_RUTA}/buscar", params=params)
+
+    assert respuesta.status_code == 422
+    assert configurado.repositorio.busquedas == []
+
+
+def test_buscar_admite_200_caracteres(configurado: Entorno) -> None:
+    respuesta = configurado.cliente.get(f"{_RUTA}/buscar", params={"q": "p" * 200})
+
+    assert respuesta.status_code == 200
+
+
+def test_el_contrato_publica_la_busqueda() -> None:
+    rutas = TestClient(crear_aplicacion()).get("/openapi.json").json()["paths"]
+
+    buscar = rutas[f"{_RUTA}/buscar"]
+    assert set(buscar) == {"get"}
+    parametros = {p["name"]: p for p in buscar["get"]["parameters"]}
+    assert parametros["q"]["required"] is True
+    assert parametros["q"]["schema"]["maxLength"] == 200
+    assert parametros["limite"]["schema"]["minimum"] == 1
+    assert parametros["limite"]["schema"]["maximum"] == 50
+    assert parametros["limite"]["schema"]["default"] == 20
+    assert {"200", "422"} <= set(buscar["get"]["responses"])

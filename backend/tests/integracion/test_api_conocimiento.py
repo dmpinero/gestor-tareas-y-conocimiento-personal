@@ -90,3 +90,41 @@ def test_si_notion_falla_responde_502_y_se_puede_volver_a_sincronizar(entorno) -
 
     fuente.falla_al_listar = False
     assert cliente.post(f"{_RUTA}/sincronizar").status_code == 200
+
+
+def test_busca_sin_ia_en_lo_sincronizado_con_el_texto_completo_de_mysql(entorno) -> None:
+    cliente, _ = entorno
+
+    # Nunca sincronizado: no hay nada que encontrar.
+    assert cliente.get(f"{_RUTA}/buscar", params={"q": "paella"}).json() == []
+
+    cliente.post(f"{_RUTA}/sincronizar")
+    # Sin distinguir tildes ni mayúsculas, y los signos sueltos no rompen la consulta.
+    respuesta = cliente.get(f"{_RUTA}/buscar", params={"q": "AZAFRAN *", "limite": 5})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == [
+        {
+            "pagina_id": "receta",
+            "titulo": "Receta de paella",
+            "url": "https://n.so/receta",
+            "fragmento": "Receta de paella\nLa paella lleva arroz bomba y azafrán.",
+            "orden": 0,
+        }
+    ]
+    assert cliente.get(f"{_RUTA}/buscar", params={"q": "dentista"}).json() == []
+    assert cliente.get(f"{_RUTA}/buscar", params={"q": "   "}).status_code == 422
+
+
+def test_busca_sin_ia_sin_credenciales_en_lo_ya_sincronizado(entorno, sesion_bd) -> None:
+    cliente, _ = entorno
+    cliente.post(f"{_RUTA}/sincronizar")
+    aplicacion = crear_aplicacion()
+    aplicacion.dependency_overrides[obtener_fuente_notion] = lambda: None
+    aplicacion.dependency_overrides[obtener_modelo_lenguaje] = lambda: None
+
+    with TestClient(aplicacion) as sin_credenciales:
+        respuesta = sin_credenciales.get(f"{_RUTA}/buscar", params={"q": "Ana"})
+
+    assert respuesta.status_code == 200
+    assert [r["pagina_id"] for r in respuesta.json()] == ["reunion"]
