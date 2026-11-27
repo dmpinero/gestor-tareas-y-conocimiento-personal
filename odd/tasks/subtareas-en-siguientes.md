@@ -17,9 +17,10 @@ Tests: backend pytest (unitarios local; integración/contrato SOLO contra MySQL 
 - Persistencia: `cola_siguientes` gana `subtarea_id INT NULL` (FK a la tabla de subtareas ON DELETE CASCADE) y deja de tener `tarea_id` como PK: id propio autoincremental + unicidad por (tarea_id, subtarea_id) que funcione con NULL (p. ej. columna generada `COALESCE(subtarea_id, 0)`). Migración nueva tras `e9c3a7f1b5d2`, conservando las filas existentes (como entradas de tarea entera).
 
 ## Tasks
-- T1 S4 backend (migración, dominio, repositorio, API, foco) — delegado (writer A, paralelo con T2)
-- T2 S2-S4 frontend (búsqueda por subtareas en Mi trabajo, diálogo con subtareas, tienda/panel/indicador con entradas de subtarea) — delegado (writer B, paralelo con T1)
+- T1 S4 backend (migración, dominio, repositorio, API, foco) — delegado (writer A, paralelo con T2) — hecho 784b987: unitarios 899, suite completa 1906, migración a3d8f5c2e7b9 (columna generada VIRTUAL)
+- T2 S2-S4 frontend (búsqueda por subtareas en Mi trabajo, diálogo con subtareas, tienda/panel/indicador con entradas de subtarea) — delegado (writer B, paralelo con T1) — hecho 97ca209: vitest 1423
 - T3 integración: e2e, README, vista previa — inline
 
 ## Log
 - L1 (2026-11-27) "en el buscador de Mi trabajo y de Siguientes la subtarea Buscar persona fuera de kmm no la encuentra, quiero poder añader tareas o subtareas"
+- L2 Hallazgo: la lista de Mi trabajo ya encontraba subtareas por nombre (sin mostrarlo); el tablero no. Ahora ambos lo muestran.
