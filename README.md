@@ -386,7 +386,7 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
     quieras consultar (menú «⋯» de la página → Conexiones) y pon en
     `backend/.env` `NOTION_TOKEN=<secreto de la integración>` (y, solo si quieres
     el chat, `ANTHROPIC_API_KEY=<tu clave de la API de Anthropic>`); después
-    `docker compose up -d --build backend`. Sin ellas, Conocimiento indica qué
+    `docker compose up -d --build backend`. Sin el token, Conocimiento indica qué
     falta. Las claves nunca llegan al navegador.
   - API: `GET /api/v1/conocimiento/estado`, `POST /api/v1/conocimiento/sincronizar`,
     `GET /api/v1/conocimiento/buscar?q=…&limite=…` y `POST /api/v1/conocimiento/preguntar` (respuesta `text/event-stream` con los
