@@ -11,6 +11,11 @@ Tests: backend pytest (unitarios en local; integración/contrato SOLO contra MyS
 - S6 (supuesto) Seguridad: el contenido de Notion es dato, no instrucciones (delimitado en el prompt; el sistema le dice a Claude que ignore instrucciones dentro de las notas). Límites: tamaño de pregunta y de historial.
 - S7 Modelo `claude-opus-5-5` con el SDK oficial de Anthropic para Python, streaming, `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`), effort `low` (chat), comprobando `stop_reason` (`refusal` → mensaje claro).
 
+- S8 (2026-11-27) El usuario no quiere pagar la API de Anthropic: elige "2" = "Buscador sin IA, gratis": escribes lo que buscas y te muestra los trozos de tus notas que coinciden, con el enlace a cada página de Notion. No redacta respuestas.
+  - Backend: `GET /api/v1/conocimiento/buscar?q=<texto>&limite=<1-50, por defecto 20>` → 200 `[{"pagina_id": str, "titulo": str, "url": str, "fragmento": str, "orden": int}]` ordenado por relevancia (FULLTEXT ya existente). 422 si `q` vacío (tras recortar) o > 200 caracteres, o `limite` fuera de rango. Sin `NOTION_TOKEN` funciona igual (busca en lo ya sincronizado; vacío si nunca se sincronizó). No requiere Anthropic.
+  - Frontend (Conocimiento): el buscador es lo principal: campo «Buscar en tus notas» + botón «Buscar» (Enter busca); resultados agrupados por página (título enlazado a Notion en pestaña nueva, solo si la URL es http(s)) con sus trozos, resaltando las palabras buscadas con `<mark>` (sin v-html sin sanear: resaltar construyendo nodos/segmentos de texto); sin resultados: «No he encontrado nada sobre eso en tus notas de Notion.»; sin sincronizar nunca: invita a «Sincronizar con Notion».
+  - El chat (S4/S7) se conserva pero solo se muestra si `configurado.anthropic` es true; si no, no se muestra ni su aviso «Falta configurar ANTHROPIC_API_KEY…» (el de NOTION_TOKEN sí).
+
 ### Contrato API (v1)
 - `GET /api/v1/conocimiento/estado` → 200 `{"configurado": {"notion": bool, "anthropic": bool}, "paginas": int, "fragmentos": int, "ultima_sincronizacion": InstanteUtc|null}`.
 - `POST /api/v1/conocimiento/sincronizar` → 200 `{"paginas": int, "fragmentos": int, "nuevas": int, "actualizadas": int, "eliminadas": int, "ultima_sincronizacion": InstanteUtc}`. 503 `{"detalle": "Falta configurar NOTION_TOKEN en backend/.env"}` sin token; 502 `{"detalle": ...}` si Notion falla (sin filtrar el token). Una sola sincronización a la vez (409 si ya hay una en curso).
@@ -21,6 +26,7 @@ Tests: backend pytest (unitarios en local; integración/contrato SOLO contra MyS
 ## Tasks
 - T1 S2,S3,S5-S7 backend (config, cliente Notion con httpx, troceado, migración, repositorio con FULLTEXT, casos de uso sincronizar/estado/preguntar, cliente Claude, router SSE, dependencia `anthropic`, tests con dobles) — delegado (writer A, paralelo con T2) — hecho 4bd6741: unitarios 863, suite completa 1835, migración e9c3a7f1b5d2, anthropic 2.8.0
 - T2 S3-S5 frontend (VistaConocimiento: estado, sincronizar, chat con streaming SSE y citas, nueva conversación, tests) + nginx sin búfer para el SSE — delegado (writer B, paralelo con T1) — hecho a7e4cb7: vitest 1355; nginx validado con nginx:alpine
+- T4 S8 buscador sin IA (endpoint buscar + UI principal; chat solo con clave) — delegado (writer, backstop de contexto)
 - T3 integración: e2e (estado sin configurar + chat con backend simulado), README (cómo configurar Notion y la clave), vista previa — inline
 
 ## Log
@@ -28,3 +34,4 @@ Tests: backend pytest (unitarios en local; integración/contrato SOLO contra MyS
 - L2 (2026-11-26) Pregunta de recuperación → "Índice local (Recomendado)".
 - L3 `backend/.env.example` no se actualiza (regla: no leer ficheros .env); la configuración se documenta en el README.
 - L4 Verificación independiente: S1–S7 PASS; bloqueante en la seguridad del Markdown (DOMPurify por defecto dejaba video/audio/picture/svg image → peticiones a servidores ajenos). Corregido con lista de etiquetas permitidas + fuentes solo http(s); las pruebas del verificador quedan como tests de regresión. Avisos no bloqueantes: APIResponseValidationError no mapeado (va al genérico, que lo registra); manejador global preexistente devuelve str(error)+traza; si la BD falla a mitad de sincronización el bloqueo puede quedar hasta 30 min; variantes unicode de </notas> no se neutralizan (no son etiquetas reales).
+- L5 (2026-11-27) "Me dice Claude que la API KEY exige un cargo extra ¿no puedes integrarte con notion sin API KEY?HAy otro método alternativo?" → opciones → "2" (buscador sin IA).
