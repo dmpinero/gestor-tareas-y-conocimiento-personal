@@ -31,8 +31,9 @@ class FijarFoco:
     segundo. ``EntidadNoEncontradaError`` si la tarea no existe o la subtarea no es
     de ella; entonces el foco no cambia.
 
-    En el historial cierra el periodo anterior (si lo había) y abre otro. La tarea
-    sale de la cola de siguientes, si estaba.
+    En el historial cierra el periodo anterior (si lo había) y abre otro. La entrada
+    de la tarea entera sale de la cola de siguientes (o de las sugerencias), si
+    estaba, y si el foco es una subtarea, también la de esa subtarea.
     """
 
     def __init__(

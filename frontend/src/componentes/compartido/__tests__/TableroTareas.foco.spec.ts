@@ -258,7 +258,12 @@ describe('TableroTareas: tarea en foco', () => {
   it('"Añadir a siguientes" de una tarjeta la añade a la cola; no aparece en las completadas', async () => {
     const { clienteApi } = await import('@/api/cliente')
     vi.mocked(clienteApi.crear).mockResolvedValue([
-      { tarea_id: 2, tarea_nombre: 'Con subtarea de José' },
+      {
+        tarea_id: 2,
+        tarea_nombre: 'Con subtarea de José',
+        subtarea_id: null,
+        subtarea_nombre: null,
+      },
     ])
     await montar([], null, [PROPIA, CON_SUBTAREA, { ...AJENA, completada: true }])
 

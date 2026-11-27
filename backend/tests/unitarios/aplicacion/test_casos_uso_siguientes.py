@@ -1,5 +1,6 @@
 """Casos de uso de la cola de siguientes tareas (S2-S4) y de las sugerencias elegidas
-(S12): dos listas, y una tarea está como mucho en una de ellas."""
+(S12): dos listas, y una entrada está como mucho en una de ellas. Subtareas en
+Siguientes (S4): una entrada es una tarea entera o una subtarea suya."""
 
 from datetime import UTC, datetime
 
@@ -19,9 +20,10 @@ from gestor_tareas.dominio.excepciones import (
     ConflictoDeConcurrenciaError,
     EntidadNoEncontradaError,
 )
-from gestor_tareas.dominio.siguientes.entidades import Lista, TareaSiguiente
+from gestor_tareas.dominio.siguientes.entidades import ClaveDeEntrada, Lista, TareaSiguiente
 from gestor_tareas.dominio.siguientes.reglas import (
     OrdenDeLaColaInvalidoError,
+    SubtareaResueltaEnLaColaError,
     TareaCompletadaEnLaColaError,
 )
 from gestor_tareas.dominio.tarea.entidades import Subtarea, Tarea
@@ -49,6 +51,10 @@ def _repos(*nombres: str) -> tuple[RepositorioTareasFalso, RepositorioSiguientes
         assert tarea.id is not None
         ids.append(tarea.id)
     return tareas, RepositorioSiguientesFalso(tareas), ids
+
+
+def _claves(*ids: int) -> list[ClaveDeEntrada]:
+    return [ClaveDeEntrada(i) for i in ids]
 
 
 def _nombres(cola: list[TareaSiguiente]) -> list[str]:
@@ -114,7 +120,7 @@ def test_reordenar_devuelve_la_cola_en_el_nuevo_orden() -> None:
     for id_tarea in (a, b, c):
         AnadirASiguientes(siguientes).ejecutar(id_tarea)
 
-    assert _nombres(ReordenarSiguientes(siguientes).ejecutar([c, a, b])) == ["C", "A", "B"]
+    assert _nombres(ReordenarSiguientes(siguientes).ejecutar(_claves(c, a, b))) == ["C", "A", "B"]
 
 
 def test_reordenar_con_ids_que_no_son_la_cola_falla_sin_cambiarla() -> None:
@@ -123,7 +129,7 @@ def test_reordenar_con_ids_que_no_son_la_cola_falla_sin_cambiarla() -> None:
     AnadirASiguientes(siguientes).ejecutar(b)
 
     with pytest.raises(OrdenDeLaColaInvalidoError):
-        ReordenarSiguientes(siguientes).ejecutar([b])
+        ReordenarSiguientes(siguientes).ejecutar(_claves(b))
     assert _nombres(ListarSiguientes(siguientes).ejecutar()) == ["A", "B"]
 
 
@@ -161,17 +167,17 @@ class _ConUnConflicto(RepositorioSiguientesFalso):
         if self.conflictos % 2 == 1:
             raise ConflictoDeConcurrenciaError("choque")
 
-    def anadir(self, id_tarea: int, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
+    def anadir(self, id_tarea, lista=Lista.SIGUIENTES, id_subtarea=None) -> list[TareaSiguiente]:
         self._chocar_la_primera_vez()
-        return super().anadir(id_tarea, lista)
+        return super().anadir(id_tarea, lista, id_subtarea)
 
-    def reordenar(self, ids, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
+    def reordenar(self, claves, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
         self._chocar_la_primera_vez()
-        return super().reordenar(ids, lista)
+        return super().reordenar(claves, lista)
 
-    def quitar(self, id_tarea: int, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
+    def quitar(self, id_tarea, lista=Lista.SIGUIENTES, id_subtarea=None) -> list[TareaSiguiente]:
         self._chocar_la_primera_vez()
-        return super().quitar(id_tarea, lista)
+        return super().quitar(id_tarea, lista, id_subtarea)
 
 
 def test_las_escrituras_se_repiten_si_chocan_con_otra_peticion() -> None:
@@ -180,7 +186,7 @@ def test_las_escrituras_se_repiten_si_chocan_con_otra_peticion() -> None:
 
     AnadirASiguientes(siguientes).ejecutar(a)
     AnadirASiguientes(siguientes).ejecutar(b)
-    assert _nombres(ReordenarSiguientes(siguientes).ejecutar([b, a])) == ["B", "A"]
+    assert _nombres(ReordenarSiguientes(siguientes).ejecutar(_claves(b, a))) == ["B", "A"]
     assert _nombres(QuitarDeSiguientes(siguientes).ejecutar(b)) == ["A"]
     assert siguientes.conflictos == 8
 
@@ -289,8 +295,8 @@ def test_reordenar_la_cola_no_admite_las_de_sugerencias() -> None:
     AnadirASugerencias(siguientes).ejecutar(b)
 
     with pytest.raises(OrdenDeLaColaInvalidoError):
-        ReordenarSiguientes(siguientes).ejecutar([b, a])
-    assert _nombres(ReordenarSiguientes(siguientes).ejecutar([a])) == ["A"]
+        ReordenarSiguientes(siguientes).ejecutar(_claves(b, a))
+    assert _nombres(ReordenarSiguientes(siguientes).ejecutar(_claves(a))) == ["A"]
     assert _nombres(ListarSugerencias(siguientes).ejecutar()) == ["B"]
 
 
@@ -307,3 +313,150 @@ def test_fijar_el_foco_saca_la_tarea_de_cualquiera_de_las_dos_listas() -> None:
 
     assert _nombres(ListarSiguientes(siguientes).ejecutar()) == ["A"]
     assert ListarSugerencias(siguientes).ejecutar() == []
+
+
+# Subtareas en Siguientes (S4): una entrada es una tarea entera o una subtarea suya.
+
+
+def _sub(tareas: RepositorioTareasFalso, id_tarea: int) -> int:
+    tarea = tareas.obtener_por_id(id_tarea)
+    assert tarea is not None and tarea.subtareas[0].id is not None
+    return tarea.subtareas[0].id
+
+
+def test_anadir_una_subtarea_a_cada_lista_con_los_nombres() -> None:
+    tareas, siguientes, (a, b) = _repos("A", "B")
+    sa, sb = _sub(tareas, a), _sub(tareas, b)
+
+    cola = AnadirASiguientes(siguientes).ejecutar(a, sa)
+    sugerencias = AnadirASugerencias(siguientes).ejecutar(b, sb)
+
+    assert cola == [TareaSiguiente(a, "A", sa, "Sub de A")]
+    assert sugerencias == [TareaSiguiente(b, "B", sb, "Sub de B")]
+
+
+def test_anadir_una_subtarea_que_no_es_de_la_tarea_falla_sin_cambiar_nada() -> None:
+    tareas, siguientes, (a, b) = _repos("A", "B")
+
+    with pytest.raises(EntidadNoEncontradaError, match="subtarea"):
+        AnadirASiguientes(siguientes).ejecutar(a, _sub(tareas, b))
+    with pytest.raises(EntidadNoEncontradaError, match="subtarea"):
+        AnadirASugerencias(siguientes).ejecutar(a, 999)
+    assert siguientes.listas == {lista: [] for lista in Lista}
+
+
+def test_anadir_una_subtarea_resuelta_o_de_una_tarea_completada_falla() -> None:
+    tareas, siguientes, (a, b) = _repos("A", "B")
+    tareas.cambiar_resuelta_subtarea(a, _sub(tareas, a), True)
+    tareas.cambiar_completada(b, True, datetime.now(UTC))
+
+    with pytest.raises(SubtareaResueltaEnLaColaError):
+        AnadirASiguientes(siguientes).ejecutar(a, _sub(tareas, a))
+    with pytest.raises(TareaCompletadaEnLaColaError):
+        AnadirASugerencias(siguientes).ejecutar(b, _sub(tareas, b))
+    assert siguientes.listas == {lista: [] for lista in Lista}
+
+
+def test_una_tarea_y_su_subtarea_son_entradas_distintas_y_cada_una_esta_una_vez() -> None:
+    tareas, siguientes, (a,) = _repos("A")
+    sa = _sub(tareas, a)
+
+    AnadirASiguientes(siguientes).ejecutar(a)
+    AnadirASiguientes(siguientes).ejecutar(a, sa)
+    cola = AnadirASiguientes(siguientes).ejecutar(a, sa)
+
+    assert cola == [TareaSiguiente(a, "A"), TareaSiguiente(a, "A", sa, "Sub de A")]
+
+
+def test_anadir_una_subtarea_a_la_otra_lista_la_mueve_y_deja_su_tarea() -> None:
+    tareas, siguientes, (a,) = _repos("A")
+    sa = _sub(tareas, a)
+    AnadirASiguientes(siguientes).ejecutar(a)
+    AnadirASiguientes(siguientes).ejecutar(a, sa)
+
+    sugerencias = AnadirASugerencias(siguientes).ejecutar(a, sa)
+
+    assert sugerencias == [TareaSiguiente(a, "A", sa, "Sub de A")]
+    assert ListarSiguientes(siguientes).ejecutar() == [TareaSiguiente(a, "A")]
+
+
+def test_reordenar_con_una_tarea_y_su_subtarea() -> None:
+    tareas, siguientes, (a, b) = _repos("A", "B")
+    sa = _sub(tareas, a)
+    for id_tarea, id_subtarea in ((a, None), (b, None), (a, sa)):
+        AnadirASiguientes(siguientes).ejecutar(id_tarea, id_subtarea)
+
+    cola = ReordenarSiguientes(siguientes).ejecutar(
+        [ClaveDeEntrada(a, sa), ClaveDeEntrada(b), ClaveDeEntrada(a)]
+    )
+
+    assert [(t.tarea_id, t.subtarea_id) for t in cola] == [(a, sa), (b, None), (a, None)]
+    with pytest.raises(OrdenDeLaColaInvalidoError):
+        ReordenarSiguientes(siguientes).ejecutar(_claves(a, b))
+
+
+def test_quitar_con_o_sin_subtarea_saca_solo_esa_entrada() -> None:
+    tareas, siguientes, (a,) = _repos("A")
+    sa = _sub(tareas, a)
+    AnadirASugerencias(siguientes).ejecutar(a)
+    AnadirASugerencias(siguientes).ejecutar(a, sa)
+
+    assert QuitarDeSugerencias(siguientes).ejecutar(a) == [TareaSiguiente(a, "A", sa, "Sub de A")]
+    assert QuitarDeSugerencias(siguientes).ejecutar(a) == [TareaSiguiente(a, "A", sa, "Sub de A")]
+    assert QuitarDeSugerencias(siguientes).ejecutar(a, sa) == []
+
+
+def test_las_subtareas_resueltas_o_de_tareas_completadas_no_se_ven_y_vuelven() -> None:
+    tareas, siguientes, (a, b) = _repos("A", "B")
+    sa, sb = _sub(tareas, a), _sub(tareas, b)
+    for id_tarea, id_subtarea in ((a, sa), (b, sb), (b, None)):
+        AnadirASiguientes(siguientes).ejecutar(id_tarea, id_subtarea)
+
+    tareas.cambiar_resuelta_subtarea(a, sa, True)
+    tareas.cambiar_completada(b, True, datetime.now(UTC))
+    assert ListarSiguientes(siguientes).ejecutar() == []
+
+    tareas.cambiar_resuelta_subtarea(a, sa, False)
+    tareas.cambiar_completada(b, False, datetime.now(UTC))
+    assert [(t.tarea_id, t.subtarea_id) for t in ListarSiguientes(siguientes).ejecutar()] == [
+        (a, sa),
+        (b, sb),
+        (b, None),
+    ]
+
+
+def test_borrar_una_subtarea_quita_su_entrada() -> None:
+    tareas, siguientes, (a,) = _repos("A")
+    sa = _sub(tareas, a)
+    AnadirASiguientes(siguientes).ejecutar(a)
+    AnadirASiguientes(siguientes).ejecutar(a, sa)
+
+    tareas.eliminar_subtarea(a, sa)
+
+    assert ListarSiguientes(siguientes).ejecutar() == [TareaSiguiente(a, "A")]
+
+
+def test_foco_en_una_subtarea_quita_su_entrada_y_la_de_su_tarea() -> None:
+    tareas, siguientes, (a, b) = _repos("A", "B")
+    sa, sb = _sub(tareas, a), _sub(tareas, b)
+    AnadirASiguientes(siguientes).ejecutar(a)
+    AnadirASugerencias(siguientes).ejecutar(a, sa)
+    AnadirASiguientes(siguientes).ejecutar(b, sb)
+    foco = RepositorioFocoFalso(tareas, siguientes)
+
+    FijarFoco(foco, tareas).ejecutar(a, sa)
+
+    assert ListarSiguientes(siguientes).ejecutar() == [TareaSiguiente(b, "B", sb, "Sub de B")]
+    assert ListarSugerencias(siguientes).ejecutar() == []
+
+
+def test_foco_en_una_tarea_entera_quita_solo_su_entrada() -> None:
+    tareas, siguientes, (a,) = _repos("A")
+    sa = _sub(tareas, a)
+    AnadirASiguientes(siguientes).ejecutar(a)
+    AnadirASiguientes(siguientes).ejecutar(a, sa)
+    foco = RepositorioFocoFalso(tareas, siguientes)
+
+    FijarFoco(foco, tareas).ejecutar(a, None)
+
+    assert ListarSiguientes(siguientes).ejecutar() == [TareaSiguiente(a, "A", sa, "Sub de A")]

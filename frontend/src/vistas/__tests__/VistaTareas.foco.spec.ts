@@ -120,6 +120,43 @@ describe('VistaTareas: tarea en foco', () => {
     expect(enrutador.currentRoute.value.query).toEqual({})
   })
 
+  it('/tareas?tarea=<id>&subtarea=<id> abre el detalle con esa subtarea resaltada como «Siguiente»', async () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    const conSubtareas = [
+      {
+        ...tarea(1, 'Escribir informe'),
+        subtareas: [
+          {
+            id: 10,
+            nombre: 'Índice',
+            asignado: null,
+            prioridad: null,
+            resuelta: false,
+            comentarios: 0,
+          },
+          {
+            id: 11,
+            nombre: 'Cifras',
+            asignado: null,
+            prioridad: null,
+            resuelta: false,
+            comentarios: 0,
+          },
+        ],
+      },
+    ]
+    await montar('/tareas?tarea=1&subtarea=11', null, conSubtareas)
+
+    expect(tituloDetalle()).toBe('Escribir informe')
+    const resaltadas = [
+      ...document.body.querySelectorAll('[role="dialog"] [data-siguiente="true"]'),
+    ]
+    expect(resaltadas).toHaveLength(1)
+    expect(resaltadas[0]!.textContent).toContain('Cifras')
+    expect(resaltadas[0]!.querySelector('[data-insignia-siguiente]')?.textContent).toBe('Siguiente')
+    expect(enrutador.currentRoute.value.query).toEqual({})
+  })
+
   it('estando ya en /tareas, navegar a ?tarea=<id> abre su detalle', async () => {
     await montar('/tareas')
     expect(tituloDetalle()).toBeNull()
@@ -191,7 +228,7 @@ describe('VistaTareas: tarea en foco', () => {
 
   it('el menú de la fila ofrece "Añadir a siguientes" y la añade a la cola', async () => {
     vi.mocked(clienteApi.crear).mockResolvedValue([
-      { tarea_id: 1, tarea_nombre: 'Escribir informe' },
+      { tarea_id: 1, tarea_nombre: 'Escribir informe', subtarea_id: null, subtarea_nombre: null },
     ])
     const envoltorio = await montar('/tareas')
 

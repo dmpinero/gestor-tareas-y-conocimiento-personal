@@ -229,6 +229,86 @@ test('el buscador añade varias tareas a la cola desde Inicio y desde la barra s
   }
 })
 
+test('una subtarea se encuentra en Mi trabajo, se añade a la cola y se pone en foco', async ({
+  page,
+  request,
+  grupoE2e,
+}) => {
+  const marca = Date.now()
+  const tarea = `Equipo ${marca}`
+  const subtarea = `Hallar persona fuera de kmm ${marca}`
+  const id = await crearTarea(request, tarea, grupoE2e)
+  const conSubtarea = await request.post(`/api/v1/tareas/${id}/subtareas`, {
+    data: { nombre: subtarea },
+  })
+  expect(conSubtarea.status()).toBe(201)
+  const idSubtarea = (
+    (await conSubtarea.json()) as { subtareas: { id: number; nombre: string }[] }
+  ).subtareas.find((s) => s.nombre === subtarea)!.id
+  await vaciarCola(request, await colaEnApi(request))
+  await request.delete('/api/v1/foco')
+  try {
+    // Mi trabajo: buscar por la subtarea muestra su tarea y la subtarea que coincide.
+    await page.goto('/tareas')
+    await page.getByRole('button', { name: 'Ver como lista' }).click()
+    await page.getByLabel('Buscar').fill(`persona fuera de kmm ${marca}`)
+    const fila = page.locator('tr[data-fila-tarea]', { hasText: tarea })
+    await expect(fila).toBeVisible()
+    await expect(fila.locator('[data-subtarea-coincidente]')).toContainText(`Subtarea: ${subtarea}`)
+    // Desde la línea de la subtarea se añade la subtarea, no su tarea.
+    await fila.getByRole('button', { name: `Añadir a siguientes (${subtarea})` }).click()
+    await expect(
+      fila.getByRole('button', { name: `Quitar de siguientes (${subtarea})` }),
+    ).toBeVisible()
+    const desdeLista = (await (await request.get('/api/v1/siguientes')).json()) as {
+      tarea_id: number
+      subtarea_id: number | null
+    }[]
+    expect(desdeLista).toEqual([expect.objectContaining({ tarea_id: id, subtarea_id: idSubtarea })])
+    await request.delete(`/api/v1/siguientes/${id}?subtarea_id=${idSubtarea}`)
+
+    // Siguientes: el buscador ofrece la subtarea como «Tarea › Subtarea».
+    await page.goto('/')
+    await panel(page).getByRole('button', { name: 'Buscar tareas' }).click()
+    const dialogo = page.getByRole('dialog', { name: 'Añadir a siguientes' })
+    await dialogo.getByRole('searchbox', { name: 'Buscar tarea' }).fill(`kmm ${marca}`)
+    await dialogo.getByRole('checkbox', { name: `${tarea} › ${subtarea}` }).check()
+    await dialogo.getByRole('button', { name: 'A continuación (1)' }).click()
+    await expect(dialogo).toBeHidden()
+    const fila2 = panel(page).locator(`[data-fila-siguiente][data-subtarea-id="${idSubtarea}"]`)
+    // La fila muestra la subtarea (no la tarea padre) y su tarea debajo.
+    await expect(fila2.getByRole('link')).toHaveText(subtarea)
+    await expect(fila2.locator('[data-tarea-padre]')).toHaveText(`Subtarea de: ${tarea}`)
+    const cola = (await (await request.get('/api/v1/siguientes')).json()) as {
+      tarea_id: number
+      subtarea_id: number | null
+    }[]
+    expect(cola).toEqual([expect.objectContaining({ tarea_id: id, subtarea_id: idSubtarea })])
+
+    // Su enlace abre el detalle de la tarea con la subtarea resaltada como «Siguiente».
+    await fila2.getByRole('link').click()
+    const detalle = page.getByRole('dialog', { name: tarea })
+    const resaltada = detalle.locator('[data-siguiente="true"]')
+    await expect(resaltada).toHaveCount(1)
+    await expect(resaltada).toContainText(subtarea)
+    await expect(resaltada.locator('[data-insignia-siguiente]')).toHaveText('Siguiente')
+    await page.keyboard.press('Escape')
+    await expect(detalle).toBeHidden()
+    await page.goto('/')
+
+    // «Pasar a la siguiente» pone en foco la subtarea y la saca de la cola.
+    await page.locator('[data-siguientes]').click()
+    await page.locator('[data-pasar-siguiente]').click()
+    await expect(page.locator('[data-indicador-foco]')).toContainText(`${tarea} › ${subtarea}`)
+    await expect(panel(page)).toContainText('No hay tareas en la cola.')
+    expect(await colaEnApi(request)).toEqual([])
+  } finally {
+    await request.delete('/api/v1/foco')
+    await vaciarCola(request, [id])
+    await request.delete(`/api/v1/tareas/${id}`)
+  }
+})
+
 const MODOS = [
   { modo: 'claro', preparar: async (_page: Page) => {} },
   { modo: 'oscuro', preparar: activarModoOscuro },

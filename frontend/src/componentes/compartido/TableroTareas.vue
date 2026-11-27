@@ -48,6 +48,7 @@ import {
   colorEtiqueta,
   type ColorEstadoTablero,
 } from '@/lib/coloresTarea'
+import { coincideBusqueda } from '@/composables/useBusquedaTabla'
 import { adelantarGrupoDe, agruparPorSubestado } from '@/lib/agruparPorSubestado'
 import { isoAFechaLocal } from '@/lib/fechas'
 import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
@@ -67,7 +68,8 @@ import { useTiendaTareas } from '@/stores/tareas'
 // Las subtareas se despliegan bajo su tarjeta, donde también se añaden.
 // Con el filtro "Asignado a" activo, `personasResaltadas` son las personas
 // elegidas: sus tareas y subtareas se resaltan, y las tarjetas con subtareas
-// suyas se despliegan.
+// suyas se despliegan. Con `busqueda` (el texto del buscador), las subtareas
+// cuyo nombre coincide se marcan y sus tarjetas se despliegan.
 // La tarea o subtarea en foco (la tienda del foco) lleva borde violeta e
 // insignia "En foco"; su tarjeta sube a lo alto de la columna y, si el foco es
 // una subtarea, se despliega.
@@ -76,6 +78,7 @@ const props = defineProps<{
   grupos: GrupoEstados[]
   cargandoGrupos?: boolean
   personasResaltadas?: string[]
+  busqueda?: string
 }>()
 const idGrupo = defineModel<number | null>('idGrupo', { required: true })
 const emit = defineEmits<{
@@ -568,6 +571,12 @@ function subtareaResaltada(subtarea: Subtarea): boolean {
   return estaResaltada([subtarea.asignado])
 }
 
+// Subtareas cuyo nombre coincide con el buscador: se marcan igual que las de
+// las personas filtradas.
+function subtareaCoincide(subtarea: Subtarea): boolean {
+  return coincideBusqueda(subtarea.nombre, props.busqueda ?? '')
+}
+
 // --- Tarea en foco -------------------------------------------------------------
 // Violeta, para no confundirse con el ámbar del filtro de personas.
 const CLASES_FOCO =
@@ -595,15 +604,25 @@ function clasesAccionesDiscretas(tarea: Tarea): string {
 
 function clasesSubtarea(subtarea: Subtarea): string {
   if (tiendaFoco.esSubtareaEnFoco(subtarea.id)) return CLASES_FOCO
-  return subtareaResaltada(subtarea) ? CLASES_RESALTADA : 'bg-card'
+  return subtareaResaltada(subtarea) || subtareaCoincide(subtarea) ? CLASES_RESALTADA : 'bg-card'
 }
 
-// Las tarjetas desplegadas por el filtro o por tener la subtarea en foco se
+// Las tarjetas desplegadas por el filtro, por la búsqueda o por tener la subtarea en foco se
 // pliegan cuando dejan de estarlo; las que se desplegaron a mano se quedan como
-// estaban. También se pueden plegar a mano.
+// estaban. También se pueden plegar a mano. La búsqueda solo despliega la
+// tarjeta cuando la tarea aparece gracias a una subtarea (su nombre no
+// coincide): si no, una palabra común desplegaría todas.
+function despliegaPorBusqueda(tarea: Tarea): boolean {
+  return (
+    !coincideBusqueda(tarea.nombre, props.busqueda ?? '') && tarea.subtareas.some(subtareaCoincide)
+  )
+}
+
 const idsDesplegadasSolas = computed(() => {
   const ids = new Set(
-    props.tareas.filter((tarea) => tarea.subtareas.some(subtareaResaltada)).map((t) => t.id),
+    props.tareas
+      .filter((tarea) => tarea.subtareas.some(subtareaResaltada) || despliegaPorBusqueda(tarea))
+      .map((t) => t.id),
   )
   const foco = tiendaFoco.foco
   if (foco && foco.subtarea_id !== null) ids.add(foco.tarea_id)
@@ -1322,6 +1341,7 @@ function terminarArrastre(): void {
                           <div
                             data-subtarea
                             :data-resaltada="subtareaResaltada(subtarea) ? '' : undefined"
+                            :data-coincide-busqueda="subtareaCoincide(subtarea) ? '' : undefined"
                             :data-en-foco="
                               tiendaFoco.esSubtareaEnFoco(subtarea.id) ? 'true' : undefined
                             "
@@ -1343,6 +1363,9 @@ function terminarArrastre(): void {
                               }}</span
                               ><span v-if="subtareaResaltada(subtarea)" class="sr-only">{{
                                 ' (Asignada a la persona filtrada)'
+                              }}</span
+                              ><span v-if="subtareaCoincide(subtarea)" class="sr-only">{{
+                                ' (Coincide con la búsqueda)'
                               }}</span>
                             </button>
                             <NombreRelacionado
@@ -1354,6 +1377,14 @@ function terminarArrastre(): void {
                               <AvatarPersona :nombre="subtarea.asignado" />
                             </NombreRelacionado>
                             <InsigniaFoco v-if="tiendaFoco.esSubtareaEnFoco(subtarea.id)" />
+                            <BotonSiguientes
+                              :tarea-id="tarea.id"
+                              :subtarea-id="subtarea.id"
+                              :nombre="subtarea.nombre"
+                              :completada="tarea.completada || subtarea.resuelta"
+                              compacto
+                              class="-my-1"
+                            />
                             <BotonFoco
                               :tarea-id="tarea.id"
                               :subtarea-id="subtarea.id"

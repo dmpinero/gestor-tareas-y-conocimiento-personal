@@ -1,4 +1,4 @@
-import type { EntradaHistorialFoco, Foco } from '@/api/tipos'
+import type { EntradaHistorialFoco, Foco, TareaSiguiente } from '@/api/tipos'
 
 const MS_POR_MINUTO = 60_000
 
@@ -28,14 +28,25 @@ export function textoFoco(foco: Foco): string {
     : `${foco.tarea_nombre} › ${foco.subtarea_nombre}`
 }
 
+/** `Tarea › Subtarea`, o solo la tarea si no hay subtarea. */
+export function textoTareaYSubtarea(tareaNombre: string, subtareaNombre: string | null): string {
+  return subtareaNombre === null ? tareaNombre : `${tareaNombre} › ${subtareaNombre}`
+}
+
 /** Nombre de una entrada del historial: la tarea, o `Tarea › Subtarea` (también
  * si la subtarea se borró, con su último nombre). */
 export function textoEntradaHistorial(
   entrada: Pick<EntradaHistorialFoco, 'tarea_nombre' | 'subtarea_nombre'>,
 ): string {
-  return entrada.subtarea_nombre === null
-    ? entrada.tarea_nombre
-    : `${entrada.tarea_nombre} › ${entrada.subtarea_nombre}`
+  return textoTareaYSubtarea(entrada.tarea_nombre, entrada.subtarea_nombre)
+}
+
+/** Nombre de una entrada de siguientes o de sugerencias: la tarea, o
+ * `Tarea › Subtarea`. */
+export function textoEntradaSiguiente(
+  entrada: Pick<TareaSiguiente, 'tarea_nombre' | 'subtarea_nombre'>,
+): string {
+  return textoTareaYSubtarea(entrada.tarea_nombre, entrada.subtarea_nombre)
 }
 
 // --- Días locales (`YYYY-MM-DD`) del historial -----------------------------------

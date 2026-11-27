@@ -7,6 +7,7 @@ import { defineComponent, h } from 'vue'
 import { clienteApi } from '@/api/cliente'
 import type { Subtarea, Tarea } from '@/api/tipos'
 import { useTiendaFoco } from '@/stores/foco'
+import { useTiendaSiguientes } from '@/stores/siguientes'
 import { useTiendaTareas } from '@/stores/tareas'
 import EditorComentario from '../EditorComentario.vue'
 import SubtareasTarea from '../SubtareasTarea.vue'
@@ -97,15 +98,25 @@ const PERSONAS = [
 // Pinta el componente con la tarea que tenga el almacén, como hará el detalle:
 // así se comprueba que la respuesta de la API llega a la vista.
 const ANFITRION = defineComponent({
-  setup() {
+  props: { subtareaDestacadaId: { type: Number, default: null } },
+  setup(props) {
     const tienda = useTiendaTareas()
-    return () => (tienda.tareas[0] ? h(SubtareasTarea, { tarea: tienda.tareas[0] }) : null)
+    return () =>
+      tienda.tareas[0]
+        ? h(SubtareasTarea, {
+            tarea: tienda.tareas[0],
+            subtareaDestacadaId: props.subtareaDestacadaId,
+          })
+        : null
   },
 })
 
 let contenedor: VueWrapper | null = null
 
-async function montar(tarea: Tarea = TAREA): Promise<VueWrapper> {
+async function montar(
+  tarea: Tarea = TAREA,
+  subtareaDestacadaId: number | null = null,
+): Promise<VueWrapper> {
   vi.mocked(clienteApi.obtener).mockImplementation((ruta) => {
     if (ruta === '/personas') return Promise.resolve(PERSONAS)
     if (ruta === '/etiquetas') return Promise.resolve([])
@@ -117,7 +128,10 @@ async function montar(tarea: Tarea = TAREA): Promise<VueWrapper> {
   const tienda = useTiendaTareas()
   await tienda.cargar()
   await tienda.cargarCatalogos()
-  contenedor = mount(ANFITRION, { attachTo: document.body })
+  contenedor = mount(ANFITRION, {
+    attachTo: document.body,
+    props: { subtareaDestacadaId: subtareaDestacadaId ?? undefined },
+  })
   await flushPromises()
   return contenedor
 }
@@ -1083,6 +1097,37 @@ describe('SubtareasTarea', () => {
       const nombre = campo(envoltorio, 'Nuevo nombre de la subtarea Redactar índice')
       expect(nombre.value).toBe('Otro nombre')
       expect(document.activeElement).toBe(nombre)
+    })
+  })
+
+  describe('subtareas en siguientes', () => {
+    it('resalta como «Siguiente» la subtarea que está en la cola de siguientes', async () => {
+      useTiendaSiguientes().cola = [
+        {
+          tarea_id: 1,
+          tarea_nombre: 'Escribir informe',
+          subtarea_id: 22,
+          subtarea_nombre: 'Enviar borrador',
+        },
+        { tarea_id: 1, tarea_nombre: 'Escribir informe', subtarea_id: null, subtarea_nombre: null },
+      ]
+      const envoltorio = await montar()
+
+      const resaltadas = envoltorio.findAll('[data-siguiente="true"]')
+      expect(resaltadas).toHaveLength(1)
+      expect(resaltadas[0]!.text()).toContain('Enviar borrador')
+      expect(resaltadas[0]!.get('[data-insignia-siguiente]').text()).toBe('Siguiente')
+    })
+
+    it('la subtarea destacada al abrir el detalle se resalta y se desplaza a la vista', async () => {
+      const desplazar = vi.fn()
+      Element.prototype.scrollIntoView = desplazar
+      const envoltorio = await montar(TAREA, 20)
+
+      const destacadas = envoltorio.findAll('[data-siguiente="true"]')
+      expect(destacadas).toHaveLength(1)
+      expect(destacadas[0]!.text()).toContain('Redactar índice')
+      expect(desplazar).toHaveBeenCalledTimes(1)
     })
   })
 

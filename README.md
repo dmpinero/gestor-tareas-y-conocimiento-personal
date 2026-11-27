@@ -419,8 +419,17 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
     de Sugerencias.
   - "Buscar tareas" (Inicio) y "Buscar y añadir tareas" (desplegable
     «Siguientes» de la barra superior) abren un buscador para añadir varias a
-    **A continuación** o a **Sugerencias**, en el orden en que se marcan. Una
-    tarea está como mucho en una de las dos listas: añadirla a una la mueve.
+    **A continuación** o a **Sugerencias**, en el orden en que se marcan; ofrece
+    también las subtareas pendientes («Tarea › Subtarea»), que se ponen en foco
+    como subtarea. Cada subtarea (en la búsqueda de Mi trabajo, en el tablero y
+    en el detalle) tiene también su propio «Añadir a siguientes». Cada tarea o subtarea está como mucho en una de las dos
+    listas: añadirla a una la mueve. Poner en foco una subtarea la saca de las
+    listas junto con su tarea.
+  - Una subtarea en las listas se muestra por su nombre, con su tarea debajo
+    («Subtarea de: Tarea»). Su enlace abre el detalle de la tarea
+    (`/tareas?tarea=<id>&subtarea=<id>`) con la subtarea resaltada y desplazada
+    a la vista; en el detalle, toda subtarea que está en A continuación lleva
+    la insignia «Siguiente».
   - El desplegable «Siguientes» enseña las 3 primeras de la cola (también se
     reordenan arrastrando) y "Pasar a la siguiente: X", que la pone en foco.
     Poner en foco una tarea la saca de las listas, borrarla también, y las

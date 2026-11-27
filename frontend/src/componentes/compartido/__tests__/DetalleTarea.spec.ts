@@ -895,7 +895,7 @@ describe('DetalleTarea', () => {
 
     it('"Añadir a siguientes" del pie la añade a la cola; en una completada no aparece', async () => {
       vi.mocked(clienteApi.crear).mockResolvedValueOnce([
-        { tarea_id: 2, tarea_nombre: 'Leer artículo' },
+        { tarea_id: 2, tarea_nombre: 'Leer artículo', subtarea_id: null, subtarea_nombre: null },
       ])
       await montar(TAREA_SIN_TIPO)
 

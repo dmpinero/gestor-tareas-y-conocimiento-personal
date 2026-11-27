@@ -30,6 +30,7 @@ import {
   TIPOS_TAREA,
   etiquetaTipoTarea,
   type DatosTarea,
+  type Subtarea,
   type Oportunidad,
   type Tarea,
   type TipoTarea,
@@ -47,7 +48,7 @@ import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import { useTiendaWorkflows } from '@/stores/workflows'
 import { useTiendaTareas } from '@/stores/tareas'
-import { useBusquedaTabla } from '@/composables/useBusquedaTabla'
+import { coincideBusqueda, useBusquedaTabla } from '@/composables/useBusquedaTabla'
 import {
   compararConNulosAlFinal,
   compararNumero,
@@ -70,6 +71,7 @@ import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import InsigniaHibernada from '@/componentes/compartido/InsigniaHibernada.vue'
+import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
 import MenuAccionesTarea from '@/componentes/compartido/MenuAccionesTarea.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import ModalTareasRelacionadas from '@/componentes/compartido/ModalTareasRelacionadas.vue'
@@ -131,6 +133,13 @@ const tareaEnDetalle = computed<Tarea | null>(
   () => tienda.tareas.find((tarea) => tarea.id === idEnDetalle.value) ?? null,
 )
 
+// Subtarea que el detalle destaca (`&subtarea=<id>`, desde una entrada de
+// subtarea en «A continuación»); se olvida al cerrar el detalle.
+const subtareaDestacadaEnDetalle = ref<number | null>(null)
+watch(idEnDetalle, (id) => {
+  if (id === null) subtareaDestacadaEnDetalle.value = null
+})
+
 // `/tareas?tarea=<id>` (p. ej. desde la píldora de la tarea en foco) abre el
 // detalle de esa tarea en cuanto está cargada y quita el parámetro de la URL,
 // para que volver a pulsar la píldora lo abra de nuevo. Un valor que no es un
@@ -141,8 +150,13 @@ watch(
     if (typeof valor !== 'string' || !/^\d+$/.test(valor)) return
     const id = Number(valor)
     if (!tienda.tareas.some((tarea) => tarea.id === id)) return
+    const subtarea = ruta.query.subtarea
+    subtareaDestacadaEnDetalle.value =
+      typeof subtarea === 'string' && /^\d+$/.test(subtarea) ? Number(subtarea) : null
     idEnDetalle.value = id
-    const resto = Object.entries(ruta.query).filter(([clave]) => clave !== 'tarea')
+    const resto = Object.entries(ruta.query).filter(
+      ([clave]) => clave !== 'tarea' && clave !== 'subtarea',
+    )
     void enrutador.replace({ query: Object.fromEntries(resto) })
   },
   { immediate: true },
@@ -575,6 +589,12 @@ const { busqueda, filasFiltradas } = useBusquedaTabla(tareasConFiltros, (tarea) 
   tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : null,
   ...tarea.subtareas.flatMap((subtarea) => [subtarea.nombre, subtarea.asignado]),
 ])
+
+// Subtareas cuyo nombre coincide con el buscador: la lista las muestra bajo
+// el nombre de su tarea («Subtarea: …») y el tablero las marca y despliega.
+function subtareasCoincidentes(tarea: Tarea): Subtarea[] {
+  return tarea.subtareas.filter((subtarea) => coincideBusqueda(subtarea.nombre, busqueda.value))
+}
 
 function limpiarFiltros(): void {
   busqueda.value = ''
@@ -1423,6 +1443,26 @@ async function guardar(): Promise<void> {
         <div class="min-w-0 flex-1">
           <span data-nombre-tarea class="block break-words">{{ tarea.nombre }}</span>
           <span
+            v-for="subtarea in subtareasCoincidentes(tarea)"
+            :key="subtarea.id"
+            class="flex items-center gap-1"
+          >
+            <span
+              data-subtarea-coincidente
+              class="text-muted-foreground min-w-0 text-xs break-words"
+              >Subtarea: {{ subtarea.nombre }}</span
+            >
+            <!-- La subtarea, no la tarea: «Añadir a siguientes» de esta línea. -->
+            <BotonSiguientes
+              :tarea-id="tarea.id"
+              :subtarea-id="subtarea.id"
+              :nombre="subtarea.nombre"
+              :completada="tarea.completada || subtarea.resuelta"
+              compacto
+              class="size-6 shrink-0"
+            />
+          </span>
+          <span
             v-if="tiendaFoco.esTareaEnFoco(tarea.id) || estaHibernada(tarea)"
             data-insignias-tarea
             class="mt-1 flex flex-wrap gap-1"
@@ -1941,6 +1981,7 @@ async function guardar(): Promise<void> {
       :grupos="tiendaGrupos.grupos"
       :cargando-grupos="tiendaGrupos.cargando"
       :personas-resaltadas="personasResaltadas"
+      :busqueda="busqueda"
       @ver-detalle="(id) => (idEnDetalle = id)"
       @anadir-tarea="abrirAltaEnEstado"
     />
@@ -2126,6 +2167,7 @@ async function guardar(): Promise<void> {
 
     <DetalleTarea
       :tarea="tareaEnDetalle"
+      :subtarea-destacada-id="subtareaDestacadaEnDetalle"
       :error="tienda.error"
       :editando="editandoEnDetalle"
       :hay-cambios="editandoEnDetalle && formularioCambiado"

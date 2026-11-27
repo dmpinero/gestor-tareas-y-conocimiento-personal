@@ -10,9 +10,11 @@ import { useTiendaSiguientes } from '@/stores/siguientes'
 // si ya está, pasa a "Quitar de siguientes". Como `BotonFoco`: `compacto` lo
 // deja en solo icono y, con `nombre`, el nombre accesible lo añade entre
 // paréntesis. En una tarea completada no se muestra (la cola no las enseña).
+// Con `subtareaId` añade y quita esa subtarea, no la tarea entera.
 // Los fallos quedan en el `error` de la tienda de siguientes.
 const props = defineProps<{
   tareaId: number
+  subtareaId?: number | null
   nombre?: string
   compacto?: boolean
   completada?: boolean
@@ -20,7 +22,8 @@ const props = defineProps<{
 
 const tiendaSiguientes = useTiendaSiguientes()
 
-const enCola = computed(() => tiendaSiguientes.estaEnCola(props.tareaId))
+const subtarea = computed(() => props.subtareaId ?? null)
+const enCola = computed(() => tiendaSiguientes.estaEnCola(props.tareaId, subtarea.value))
 const etiqueta = computed(() => (enCola.value ? 'Quitar de siguientes' : 'Añadir a siguientes'))
 const clases = computed(() =>
   cn(
@@ -37,8 +40,8 @@ const nombreAccesible = computed(() =>
 )
 
 function alternar(): void {
-  if (enCola.value) void tiendaSiguientes.quitar(props.tareaId)
-  else void tiendaSiguientes.anadir(props.tareaId)
+  if (enCola.value) void tiendaSiguientes.quitar(props.tareaId, subtarea.value)
+  else void tiendaSiguientes.anadir(props.tareaId, subtarea.value)
 }
 </script>
 

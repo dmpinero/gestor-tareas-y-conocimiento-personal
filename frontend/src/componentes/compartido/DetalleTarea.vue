@@ -68,6 +68,8 @@ import {
 // emitir `cerrar`.
 const props = defineProps<{
   tarea: Tarea | null
+  /** Subtarea a destacar en la lista de subtareas (ver SubtareasTarea). */
+  subtareaDestacadaId?: number | null
   error?: string | null
   editando?: boolean
   hayCambios?: boolean
@@ -490,7 +492,11 @@ async function alHibernar(conComentario: boolean): Promise<void> {
           </section>
 
           <div v-if="tareaMostrada" data-testid="seccion-subtareas" :class="CLASE_TARJETA">
-            <SubtareasTarea :key="tareaMostrada.id" :tarea="tareaMostrada" />
+            <SubtareasTarea
+              :key="tareaMostrada.id"
+              :tarea="tareaMostrada"
+              :subtarea-destacada-id="props.subtareaDestacadaId ?? null"
+            />
           </div>
 
           <div v-if="tareaMostrada" data-testid="seccion-vinculadas" :class="CLASE_TARJETA">

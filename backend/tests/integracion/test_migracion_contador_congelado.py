@@ -15,7 +15,7 @@ from tests.integracion.tablas import vaciar_tablas
 _RAIZ = Path(__file__).resolve().parents[2]
 _ANTERIOR = "c5e1b8f4a2d7"
 # La última revisión, a la que llega "head" (la de los subestados, posterior a esta).
-_ULTIMA = "e9c3a7f1b5d2"
+_ULTIMA = "a3d8f5c2e7b9"
 
 
 def _alembic() -> Config:
