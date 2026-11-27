@@ -143,6 +143,18 @@ describe('TableroTareas: subtareas que coinciden con la búsqueda', () => {
     expect(subtareasCoincidentes()).toEqual(['Llamar'])
   })
 
+  it('si el nombre de la tarea también coincide, no la despliega sola (sí marca sus subtareas al abrirla)', async () => {
+    await montar('ajena')
+    const boton = () => document.body.querySelector('button[aria-label="1 subtareas de Ajena"]')!
+    expect(boton().getAttribute('aria-expanded')).toBe('false')
+    expect(subtareasVisibles()).toEqual([])
+
+    // Con una búsqueda que está en la tarea y en su subtarea, tampoco.
+    busqueda.value = 'a'
+    await flushPromises()
+    expect(boton().getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('sin búsqueda no despliega ni marca nada; al vaciarla pliega lo desplegado por ella', async () => {
     await montar('')
     expect(subtareasVisibles()).toEqual([])

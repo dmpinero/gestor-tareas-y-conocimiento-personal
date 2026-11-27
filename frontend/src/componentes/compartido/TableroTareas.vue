@@ -609,11 +609,19 @@ function clasesSubtarea(subtarea: Subtarea): string {
 
 // Las tarjetas desplegadas por el filtro, por la búsqueda o por tener la subtarea en foco se
 // pliegan cuando dejan de estarlo; las que se desplegaron a mano se quedan como
-// estaban. También se pueden plegar a mano.
+// estaban. También se pueden plegar a mano. La búsqueda solo despliega la
+// tarjeta cuando la tarea aparece gracias a una subtarea (su nombre no
+// coincide): si no, una palabra común desplegaría todas.
+function despliegaPorBusqueda(tarea: Tarea): boolean {
+  return (
+    !coincideBusqueda(tarea.nombre, props.busqueda ?? '') && tarea.subtareas.some(subtareaCoincide)
+  )
+}
+
 const idsDesplegadasSolas = computed(() => {
   const ids = new Set(
     props.tareas
-      .filter((tarea) => tarea.subtareas.some((s) => subtareaResaltada(s) || subtareaCoincide(s)))
+      .filter((tarea) => tarea.subtareas.some(subtareaResaltada) || despliegaPorBusqueda(tarea))
       .map((t) => t.id),
   )
   const foco = tiendaFoco.foco
