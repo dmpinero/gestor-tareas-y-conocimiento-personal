@@ -194,6 +194,21 @@ describe('VistaConocimiento', () => {
     expect(enlace.attributes('rel')).toBe('noopener noreferrer')
   })
 
+  it('una fuente con una URL que no es http(s) se muestra sin enlace', async () => {
+    const vista = await montar()
+    vi.mocked(api.preguntar).mockImplementation(async (_m, o) => {
+      o.onFuentes([{ ...FUENTE, url: 'javascript:alert(1)' }])
+      o.onTexto('Respuesta')
+    })
+    await vista.find('textarea').setValue('Hola')
+    await boton(vista, 'Enviar').trigger('click')
+    await flushPromises()
+
+    const fuentes = vista.get('[data-testid="fuentes-respuesta"]')
+    expect(fuentes.find('a').exists()).toBe(false)
+    expect(fuentes.text()).toContain('Recetas')
+  })
+
   it('el Markdown de la respuesta se pinta saneado', async () => {
     const vista = await montar()
     vi.mocked(api.preguntar).mockImplementation(async (_m, o) => {

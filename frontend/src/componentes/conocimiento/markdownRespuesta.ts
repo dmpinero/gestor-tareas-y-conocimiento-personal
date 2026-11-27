@@ -40,11 +40,46 @@ function cargarRenderizador(): Promise<Renderizador> {
   return cargando
 }
 
+// Lista de permitidas (no de prohibidas): solo formato de texto. Nada que cargue
+// recursos externos (img, video, audio, picture/source, svg…) ni formularios:
+// una nota de Notion con instrucciones podría hacer que Claude los escriba.
+const ETIQUETAS_PERMITIDAS = [
+  'p',
+  'br',
+  'hr',
+  'strong',
+  'b',
+  'em',
+  'i',
+  'del',
+  's',
+  'code',
+  'pre',
+  'blockquote',
+  'ul',
+  'ol',
+  'li',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'a',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
+]
+const ATRIBUTOS_PERMITIDOS = ['href', 'target', 'rel', 'colspan', 'rowspan']
+
 /** Markdown de una respuesta → HTML saneado, listo para `v-html`. */
 export async function htmlRespuesta(markdown: string): Promise<string> {
   const { marked, purificador } = await cargarRenderizador()
   return purificador.sanitize(marked.parse(markdown) as string, {
-    FORBID_TAGS: ['style', 'img', 'form', 'input', 'button', 'iframe'],
-    FORBID_ATTR: ['style'],
+    ALLOWED_TAGS: ETIQUETAS_PERMITIDAS,
+    ALLOWED_ATTR: ATRIBUTOS_PERMITIDOS,
   })
 }

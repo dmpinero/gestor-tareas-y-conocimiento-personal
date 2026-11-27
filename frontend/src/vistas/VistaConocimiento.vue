@@ -74,6 +74,11 @@ watch(
 onMounted(() => {
   void tienda.cargarEstado()
 })
+
+// Las fuentes solo se enlazan si su URL es http(s) (las de Notion lo son).
+function esUrlWeb(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
 </script>
 
 <template>
@@ -183,7 +188,9 @@ onMounted(() => {
               >
                 Fuentes:
                 <template v-for="(fuente, i) in mensaje.fuentes" :key="fuente.pagina_id">
+                  <span v-if="!esUrlWeb(fuente.url)">{{ fuente.titulo }}</span>
                   <a
+                    v-else
                     :href="fuente.url"
                     target="_blank"
                     rel="noopener noreferrer"
