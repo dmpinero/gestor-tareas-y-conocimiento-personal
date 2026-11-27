@@ -27,11 +27,18 @@ const FOCO_TAREA: Foco = {
 }
 
 const COLA: TareaSiguiente[] = [
-  { tarea_id: 1, tarea_nombre: 'Informe' },
-  { tarea_id: 2, tarea_nombre: 'Llamar' },
-  { tarea_id: 3, tarea_nombre: 'Revisar oferta' },
-  { tarea_id: 4, tarea_nombre: 'Cuarta' },
+  { tarea_id: 1, tarea_nombre: 'Informe', subtarea_id: null, subtarea_nombre: null },
+  { tarea_id: 2, tarea_nombre: 'Llamar', subtarea_id: null, subtarea_nombre: null },
+  { tarea_id: 3, tarea_nombre: 'Revisar oferta', subtarea_id: null, subtarea_nombre: null },
+  { tarea_id: 4, tarea_nombre: 'Cuarta', subtarea_id: null, subtarea_nombre: null },
 ]
+
+const SUB_DE_INFORME: TareaSiguiente = {
+  tarea_id: 1,
+  tarea_nombre: 'Informe',
+  subtarea_id: 10,
+  subtarea_nombre: 'Redactar',
+}
 
 const FOCO_SUBTAREA: Foco = {
   ...FOCO_TAREA,
@@ -221,7 +228,10 @@ describe('IndicadorFoco', () => {
     await arrastrar(filas[1]!, filas[0]!)
 
     expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', {
-      ids: [COLA[1]!.tarea_id, COLA[0]!.tarea_id, ...COLA.slice(2).map((e) => e.tarea_id)],
+      entradas: [COLA[1]!, COLA[0]!, ...COLA.slice(2)].map((e) => ({
+        tarea_id: e.tarea_id,
+        subtarea_id: null,
+      })),
     })
     const nombres = [...contenido.querySelectorAll('[data-nombre-siguiente]')].map((n) =>
       n.textContent?.trim(),
@@ -267,5 +277,50 @@ describe('IndicadorFoco', () => {
     expect(clienteApi.actualizar).toHaveBeenCalledWith('/foco', { tarea_id: 1, subtarea_id: null })
     expect(useTiendaFoco().foco?.tarea_nombre).toBe('Informe')
     expect(useTiendaSiguientes().cola.map((t) => t.tarea_id)).toEqual([2, 3, 4])
+  })
+
+  it('con una subtarea en la cola la muestra como «Tarea › Subtarea» y «Pasar a la siguiente» la pone en foco', async () => {
+    const SUB: TareaSiguiente = {
+      tarea_id: 7,
+      tarea_nombre: 'Migración portal',
+      subtarea_id: 70,
+      subtarea_nombre: 'Probar login',
+    }
+    vi.mocked(clienteApi.actualizar).mockResolvedValue(FOCO_SUBTAREA)
+    const wrapper = await montar(null, [SUB, COLA[0]!, SUB_DE_INFORME])
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+
+    const contenido = document.body.querySelector('[data-slot="popover-content"]')!
+    const nombres = [...contenido.querySelectorAll('[data-nombre-siguiente]')].map((n) =>
+      n.textContent?.trim(),
+    )
+    expect(nombres).toEqual(['Migración portal › Probar login', 'Informe', 'Informe › Redactar'])
+    expect(contenido.querySelector('[data-pasar-siguiente]')?.textContent?.trim()).toBe(
+      'Pasar a la siguiente: Migración portal › Probar login',
+    )
+
+    vi.mocked(clienteApi.obtener).mockResolvedValue([COLA[0]!])
+    contenido.querySelector<HTMLButtonElement>('[data-pasar-siguiente]')!.click()
+    await flushPromises()
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/foco', { tarea_id: 7, subtarea_id: 70 })
+  })
+
+  it('arrastrar una subtarea en el desplegable envía su entrada', async () => {
+    const cola = [COLA[0]!, SUB_DE_INFORME]
+    vi.mocked(clienteApi.actualizar).mockResolvedValue([SUB_DE_INFORME, COLA[0]!])
+    const wrapper = await montar(FOCO_TAREA, cola)
+    await wrapper.get('[data-siguientes]').trigger('click')
+    await flushPromises()
+    const filas = [...document.body.querySelectorAll('[data-siguiente]')]
+
+    await arrastrar(filas[1]!, filas[0]!)
+
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', {
+      entradas: [
+        { tarea_id: 1, subtarea_id: 10 },
+        { tarea_id: 1, subtarea_id: null },
+      ],
+    })
   })
 })

@@ -18,9 +18,45 @@ vi.mock('@/api/cliente', async (original) => ({
   },
 }))
 
-const A: TareaSiguiente = { tarea_id: 1, tarea_nombre: 'A' }
-const B: TareaSiguiente = { tarea_id: 2, tarea_nombre: 'B' }
-const C: TareaSiguiente = { tarea_id: 3, tarea_nombre: 'C' }
+const A: TareaSiguiente = {
+  tarea_id: 1,
+  tarea_nombre: 'A',
+  subtarea_id: null,
+  subtarea_nombre: null,
+}
+const B: TareaSiguiente = {
+  tarea_id: 2,
+  tarea_nombre: 'B',
+  subtarea_id: null,
+  subtarea_nombre: null,
+}
+const C: TareaSiguiente = {
+  tarea_id: 3,
+  tarea_nombre: 'C',
+  subtarea_id: null,
+  subtarea_nombre: null,
+}
+
+// Subtarea 10 de la tarea 1 y subtarea 20 de la tarea 2.
+const A10: TareaSiguiente = {
+  tarea_id: 1,
+  tarea_nombre: 'A',
+  subtarea_id: 10,
+  subtarea_nombre: 'a1',
+}
+const B20: TareaSiguiente = {
+  tarea_id: 2,
+  tarea_nombre: 'B',
+  subtarea_id: 20,
+  subtarea_nombre: 'b1',
+}
+const clave = (e: TareaSiguiente) => ({ tarea_id: e.tarea_id, subtarea_id: e.subtarea_id })
+const TODAS = [A, B, C, A10, B20]
+// Respuesta de PUT /siguientes: las entradas pedidas, en su orden.
+const responderOrden = async (_ruta: unknown, cuerpo: unknown) =>
+  (cuerpo as { entradas: ReturnType<typeof clave>[] }).entradas.map((e) =>
+    TODAS.find((t) => t.tarea_id === e.tarea_id && t.subtarea_id === e.subtarea_id)!,
+  )
 
 const FOCO: Foco = {
   tarea_id: 1,
@@ -109,28 +145,32 @@ describe('useTiendaSiguientes', () => {
     expect(tienda.error).toBe('Tarea completada')
   })
 
-  it('reordenar envía PUT /siguientes con los ids', async () => {
+  it('reordenar envía PUT /siguientes con las entradas', async () => {
     vi.mocked(clienteApi.actualizar).mockResolvedValue([B, A])
     const tienda = useTiendaSiguientes()
     tienda.cola = [A, B]
 
-    expect(await tienda.reordenar([2, 1])).toBe(true)
+    expect(await tienda.reordenar([clave(B), clave(A)])).toBe(true)
 
-    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { ids: [2, 1] })
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', {
+      entradas: [clave(B), clave(A)],
+    })
     expect(tienda.cola).toEqual([B, A])
   })
 
   it('subir y bajar intercambian con la vecina; en los extremos no piden nada', async () => {
-    vi.mocked(clienteApi.actualizar).mockImplementation(async (_ruta, cuerpo) =>
-      (cuerpo as { ids: number[] }).ids.map((id) => [A, B, C].find((t) => t.tarea_id === id)!),
-    )
+    vi.mocked(clienteApi.actualizar).mockImplementation(responderOrden)
     const tienda = useTiendaSiguientes()
     tienda.cola = [A, B, C]
 
     await tienda.subir(2)
-    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', { ids: [2, 1, 3] })
+    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+      entradas: [clave(B), clave(A), clave(C)],
+    })
     await tienda.bajar(2)
-    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', { ids: [1, 2, 3] })
+    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+      entradas: [clave(A), clave(B), clave(C)],
+    })
 
     vi.mocked(clienteApi.actualizar).mockClear()
     expect(await tienda.subir(1)).toBe(true)
@@ -139,17 +179,19 @@ describe('useTiendaSiguientes', () => {
   })
 
   it('moverA lleva la tarea a otra posición con PUT /siguientes; a la misma no pide nada', async () => {
-    vi.mocked(clienteApi.actualizar).mockImplementation(async (_ruta, cuerpo) =>
-      (cuerpo as { ids: number[] }).ids.map((id) => [A, B, C].find((t) => t.tarea_id === id)!),
-    )
+    vi.mocked(clienteApi.actualizar).mockImplementation(responderOrden)
     const tienda = useTiendaSiguientes()
     tienda.cola = [A, B, C]
 
     expect(await tienda.moverA(3, 0)).toBe(true)
-    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', { ids: [3, 1, 2] })
+    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+      entradas: [clave(C), clave(A), clave(B)],
+    })
     expect(tienda.cola).toEqual([C, A, B])
     await tienda.moverA(3, 2)
-    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', { ids: [1, 2, 3] })
+    expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+      entradas: [clave(A), clave(B), clave(C)],
+    })
 
     vi.mocked(clienteApi.actualizar).mockClear()
     expect(await tienda.moverA(2, 1)).toBe(true)
@@ -414,6 +456,191 @@ describe('useTiendaSiguientes', () => {
 
       await vi.waitFor(() => expect(tienda.elegidas).toEqual([C]))
       expect(tienda.cola).toEqual([A])
+    })
+  })
+
+  describe('entradas de subtareas', () => {
+    it('anadir con subtarea envía su subtarea_id; estaEnCola distingue tarea y subtarea', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValue([A, A10])
+      const tienda = useTiendaSiguientes()
+      tienda.cola = [A]
+      tienda.elegidas = [B, A10]
+
+      expect(await tienda.anadir(1, 10)).toBe(true)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', { tarea_id: 1, subtarea_id: 10 })
+      expect(tienda.cola).toEqual([A, A10])
+      expect(tienda.elegidas).toEqual([B])
+      expect(tienda.estaEnCola(1, 10)).toBe(true)
+      expect(tienda.estaEnCola(1)).toBe(true)
+      expect(tienda.estaEnCola(2, 20)).toBe(false)
+    })
+
+    it('anadir una subtarea no saca de las elegidas la tarea entera', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValue([A10])
+      const tienda = useTiendaSiguientes()
+      tienda.elegidas = [A]
+
+      await tienda.anadir(1, 10)
+
+      expect(tienda.elegidas).toEqual([A])
+      expect(tienda.estaElegida(1)).toBe(true)
+      expect(tienda.estaElegida(1, 10)).toBe(false)
+    })
+
+    it('anadirVarias y anadirElegidas aceptan entradas de subtareas, en orden', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValueOnce([A10]).mockResolvedValueOnce([A10, C])
+      const tienda = useTiendaSiguientes()
+
+      expect(await tienda.anadirVarias([clave(A10), 3])).toBe(true)
+      expect(vi.mocked(clienteApi.crear).mock.calls).toEqual([
+        ['/siguientes', { tarea_id: 1, subtarea_id: 10 }],
+        ['/siguientes', { tarea_id: 3 }],
+      ])
+
+      vi.mocked(clienteApi.crear).mockReset().mockResolvedValue([B20])
+      tienda.cola = [A10, B20]
+      expect(await tienda.anadirElegidas([clave(B20)])).toBe(true)
+      expect(clienteApi.crear).toHaveBeenCalledWith('/sugerencias', {
+        tarea_id: 2,
+        subtarea_id: 20,
+      })
+      expect(tienda.elegidas).toEqual([B20])
+      expect(tienda.cola).toEqual([A10])
+    })
+
+    it('anadirElegida con subtarea la saca solo a ella de la cola', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValue([A10])
+      const tienda = useTiendaSiguientes()
+      tienda.cola = [A, A10]
+
+      expect(await tienda.anadirElegida(1, 10)).toBe(true)
+
+      expect(clienteApi.crear).toHaveBeenCalledWith('/sugerencias', {
+        tarea_id: 1,
+        subtarea_id: 10,
+      })
+      expect(tienda.cola).toEqual([A])
+    })
+
+    it('quitar y quitarElegida con subtarea envían ?subtarea_id', async () => {
+      vi.mocked(clienteApi.eliminar).mockResolvedValue([A])
+      const tienda = useTiendaSiguientes()
+
+      await tienda.quitar(1, 10)
+      expect(clienteApi.eliminar).toHaveBeenLastCalledWith('/siguientes/1?subtarea_id=10')
+      await tienda.quitarElegida(2, 20)
+      expect(clienteApi.eliminar).toHaveBeenLastCalledWith('/sugerencias/2?subtarea_id=20')
+    })
+
+    it('subir, bajar y moverA mueven la entrada de la subtarea y envían entradas', async () => {
+      vi.mocked(clienteApi.actualizar).mockImplementation(responderOrden)
+      const tienda = useTiendaSiguientes()
+      tienda.cola = [A, A10, B]
+
+      await tienda.subir(1, 10)
+      expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+        entradas: [clave(A10), clave(A), clave(B)],
+      })
+      await tienda.bajar(1, 10)
+      expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+        entradas: [clave(A), clave(A10), clave(B)],
+      })
+      await tienda.moverA(1, 2, 10)
+      expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+        entradas: [clave(A), clave(B), clave(A10)],
+      })
+      expect(tienda.cola).toEqual([A, B, A10])
+    })
+
+    it('pasarALaSiguiente con una subtarea primera pone en foco la subtarea', async () => {
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({
+        ...FOCO,
+        subtarea_id: 10,
+        subtarea_nombre: 'a1',
+      })
+      vi.mocked(clienteApi.obtener).mockResolvedValue([B])
+      const tienda = useTiendaSiguientes()
+      tienda.cola = [A10, B]
+
+      expect(await tienda.pasarALaSiguiente()).toBe(true)
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith('/foco', { tarea_id: 1, subtarea_id: 10 })
+    })
+
+    it('poner en foco una subtarea saca su entrada y la de su tarea; una tarea, solo la suya', async () => {
+      const tienda = useTiendaSiguientes()
+      tienda.cola = [A, A10, B, B20]
+      tienda.elegidas = [A10, A, C]
+
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...FOCO, subtarea_id: 10 })
+      await useTiendaFoco().fijar(1, 10)
+      expect(tienda.cola).toEqual([B, B20])
+      expect(tienda.elegidas).toEqual([C])
+
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({ ...FOCO, tarea_id: 2 })
+      await useTiendaFoco().fijar(2)
+      expect(tienda.cola).toEqual([B20])
+    })
+
+    it('resolver una subtarea la oculta; volver a dejarla pendiente recarga las listas', async () => {
+      const tiendaTareas = useTiendaTareas()
+      const subtarea = { id: 10, nombre: 'a1', asignado: null, prioridad: null, comentarios: 0 }
+      tiendaTareas.tareas = [
+        {
+          id: 1,
+          completada: false,
+          subtareas: [{ ...subtarea, resuelta: false }],
+        } as unknown as Tarea,
+      ]
+      const tienda = useTiendaSiguientes()
+      tienda.cola = [A, A10]
+      tienda.elegidas = [A10]
+
+      vi.mocked(clienteApi.parchear).mockResolvedValue({
+        id: 1,
+        completada: false,
+        subtareas: [{ ...subtarea, resuelta: true }],
+      } as unknown as Tarea)
+      await tiendaTareas.alternarSubtarea(1, 10)
+      expect(tienda.cola).toEqual([A])
+      expect(tienda.elegidas).toEqual([])
+
+      vi.mocked(clienteApi.obtener).mockImplementation(async (ruta) =>
+        ruta === '/sugerencias' ? [A10] : [A],
+      )
+      vi.mocked(clienteApi.parchear).mockResolvedValue({
+        id: 1,
+        completada: false,
+        subtareas: [{ ...subtarea, resuelta: false }],
+      } as unknown as Tarea)
+      await tiendaTareas.alternarSubtarea(1, 10)
+      await vi.waitFor(() => expect(tienda.elegidas).toEqual([A10]))
+      expect(clienteApi.obtener).toHaveBeenCalledWith('/siguientes')
+    })
+
+    it('borrar una subtarea quita sus entradas; borrar o completar la tarea, todas las suyas', async () => {
+      const tiendaTareas = useTiendaTareas()
+      tiendaTareas.tareas = [
+        { id: 1, completada: false, subtareas: [] } as unknown as Tarea,
+        { id: 2, completada: false, subtareas: [] } as unknown as Tarea,
+      ]
+      const tienda = useTiendaSiguientes()
+      tienda.cola = [A, A10, B20]
+      tienda.elegidas = [B, B20]
+
+      vi.mocked(clienteApi.eliminar).mockResolvedValue({ id: 2, subtareas: [] } as unknown as Tarea)
+      await tiendaTareas.eliminarSubtarea(2, 20)
+      expect(tienda.cola).toEqual([A, A10])
+      expect(tienda.elegidas).toEqual([B])
+
+      vi.mocked(clienteApi.eliminar).mockResolvedValue(undefined)
+      await tiendaTareas.eliminarTarea(2)
+      expect(tienda.elegidas).toEqual([])
+
+      vi.mocked(clienteApi.parchear).mockResolvedValue({ id: 1, completada: true } as Tarea)
+      await tiendaTareas.alternarCompletada(1)
+      expect(tienda.cola).toEqual([])
     })
   })
 })

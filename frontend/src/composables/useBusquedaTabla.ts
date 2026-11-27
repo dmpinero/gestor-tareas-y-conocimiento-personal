@@ -5,6 +5,13 @@ export function normalizarTextoBusqueda(texto: string): string {
   return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 }
 
+/** `true` si `texto` contiene la `busqueda` (sin espacios alrededor) sin
+ * distinguir mayúsculas ni acentos. Con la búsqueda vacía, `false`. */
+export function coincideBusqueda(texto: string, busqueda: string): boolean {
+  const termino = normalizarTextoBusqueda(busqueda.trim())
+  return termino !== '' && normalizarTextoBusqueda(texto).includes(termino)
+}
+
 // La búsqueda no distingue mayúsculas ni acentos, ni en el término ni en el texto.
 export function useBusquedaTabla<T>(
   filas: Ref<T[]>,

@@ -191,7 +191,7 @@ describe('VistaTareas: tarea en foco', () => {
 
   it('el menú de la fila ofrece "Añadir a siguientes" y la añade a la cola', async () => {
     vi.mocked(clienteApi.crear).mockResolvedValue([
-      { tarea_id: 1, tarea_nombre: 'Escribir informe' },
+      { tarea_id: 1, tarea_nombre: 'Escribir informe', subtarea_id: null, subtarea_nombre: null },
     ])
     const envoltorio = await montar('/tareas')
 

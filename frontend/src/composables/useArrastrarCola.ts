@@ -6,7 +6,7 @@ import { useTiendaSiguientes } from '@/stores/siguientes'
  * Reordenar la cola de siguientes arrastrando sus filas con el ratón (arrastre
  * nativo, como los estados de un grupo). `eventos(indice)` se pone en cada fila
  * (con `draggable="true"`); `destino(indice)` dice si se pinta la línea de
- * destino antes o después de la fila (donde quedará la tarea al soltarla) y
+ * destino antes o después de la fila (donde quedará la entrada al soltarla) y
  * `arrastrada(indice)` si es la fila que se arrastra. Al soltar guarda el nuevo
  * orden con `moverA` de la tienda.
  */
@@ -26,7 +26,11 @@ export function useArrastrarCola() {
         origen.value = indice
         if (evento.dataTransfer) {
           evento.dataTransfer.effectAllowed = 'move'
-          evento.dataTransfer.setData('text/plain', String(tienda.cola[indice]?.tarea_id ?? ''))
+          const entrada = tienda.cola[indice]
+          evento.dataTransfer.setData(
+            'text/plain',
+            entrada ? `${entrada.tarea_id}-${entrada.subtarea_id ?? ''}` : '',
+          )
         }
       },
       dragover(evento: DragEvent) {
@@ -42,8 +46,8 @@ export function useArrastrarCola() {
         evento.preventDefault()
         const desde = origen.value
         terminar()
-        const tarea = desde === null ? undefined : tienda.cola[desde]
-        if (tarea) void tienda.moverA(tarea.tarea_id, indice)
+        const entrada = desde === null ? undefined : tienda.cola[desde]
+        if (entrada) void tienda.moverA(entrada.tarea_id, indice, entrada.subtarea_id)
       },
       dragend: terminar,
     }

@@ -2552,9 +2552,12 @@ describe('VistaTareas', () => {
         '24/12/2026',
       ]) {
         await escribir(entrada(envoltorio, 'filtro-buscar'), termino)
+        // Si coincide una subtarea, la celda del nombre la añade en su línea.
         expect({ termino, nombres: nombresEnTabla(envoltorio) }).toEqual({
           termino,
-          nombres: ['Tarea completa'],
+          nombres: [
+            termino === 'maqueta' ? 'Tarea completaSubtarea: Preparar maqueta' : 'Tarea completa',
+          ],
         })
       }
     })

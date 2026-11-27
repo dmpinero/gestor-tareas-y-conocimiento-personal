@@ -17,7 +17,12 @@ vi.mock('@/api/cliente', async (original) => ({
   },
 }))
 
-const INFORME: TareaSiguiente = { tarea_id: 1, tarea_nombre: 'Informe' }
+const INFORME: TareaSiguiente = {
+  tarea_id: 1,
+  tarea_nombre: 'Informe',
+  subtarea_id: null,
+  subtarea_nombre: null,
+}
 
 function montar(props: {
   tareaId: number

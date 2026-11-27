@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { clienteApi } from '@/api/cliente'
 import type { Foco, Tarea, TareaSiguiente } from '@/api/tipos'
 import { useTiendaFoco } from '@/stores/foco'
+import { useTiendaSiguientes } from '@/stores/siguientes'
 import PanelSiguientes from '../PanelSiguientes.vue'
 
 vi.mock('@/api/cliente', async (original) => ({
@@ -50,7 +51,15 @@ const TAREAS = [
   tarea(4, 'Hecha', { completada: true }),
 ]
 
-const sig = (t: Tarea): TareaSiguiente => ({ tarea_id: t.id, tarea_nombre: t.nombre })
+const sig = (t: Tarea): TareaSiguiente => ({
+  tarea_id: t.id,
+  tarea_nombre: t.nombre,
+  subtarea_id: null,
+  subtarea_nombre: null,
+})
+
+// Cuerpo de PUT /siguientes con tareas enteras, en este orden.
+const entradas = (...ids: number[]) => ids.map((id) => ({ tarea_id: id, subtarea_id: null }))
 
 let envoltorio: VueWrapper | null = null
 let router: Router
@@ -187,7 +196,7 @@ describe('PanelSiguientes', () => {
     await wrapper.get('button[aria-label="Subir Llamar"]').trigger('click')
     await flushPromises()
 
-    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { ids: [2, 1] })
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { entradas: entradas(2, 1) })
     expect(filas(wrapper)).toEqual(['Llamar', 'Informe'])
   })
 
@@ -200,7 +209,9 @@ describe('PanelSiguientes', () => {
 
     await arrastrar(filasCola[2]!.element, filasCola[0]!.element)
 
-    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { ids: [3, 1, 2] })
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', {
+      entradas: entradas(3, 1, 2),
+    })
     expect(filas(wrapper)).toEqual(['Revisar oferta', 'Informe', 'Llamar'])
   })
 
@@ -230,7 +241,7 @@ describe('PanelSiguientes', () => {
     await wrapper.get('button[aria-label="Bajar Informe"]').trigger('click')
     await flushPromises()
 
-    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { ids: [2, 1] })
+    expect(clienteApi.actualizar).toHaveBeenCalledWith('/siguientes', { entradas: entradas(2, 1) })
   })
 
   it('la ✕ de una fila la pasa a las sugerencias elegidas con POST /sugerencias', async () => {
@@ -397,5 +408,116 @@ describe('PanelSiguientes', () => {
 
     expect(wrapper.get('[role="alert"]').text()).toBe('caído')
     expect(filas(wrapper)).toEqual(['Informe'])
+  })
+
+  describe('entradas de subtareas', () => {
+    const SUB: TareaSiguiente = {
+      tarea_id: 3,
+      tarea_nombre: 'Revisar oferta',
+      subtarea_id: 30,
+      subtarea_nombre: 'Leer anexo',
+    }
+    const CON_PRIORIDAD = [
+      ...TAREAS.slice(0, 2),
+      { ...TAREAS[2]!, prioridad: 1 },
+      ...TAREAS.slice(3),
+    ]
+
+    it('la cola muestra «Tarea › Subtarea» con el contador y la prioridad de la tarea dueña', async () => {
+      const wrapper = await montar([sig(TAREAS[0]!), SUB], CON_PRIORIDAD)
+
+      expect(filas(wrapper)).toEqual(['Informe', 'Revisar oferta › Leer anexo'])
+      const fila = wrapper.findAll('[data-fila-siguiente]')[1]!
+      expect(fila.attributes('data-subtarea-id')).toBe('30')
+      expect(fila.get('[data-prioridad-sugerencia]').text()).toBe('Prioridad 1')
+      expect(fila.get('a').attributes('href')).toBe('/tareas?tarea=3')
+    })
+
+    it('«Trabajar en esta» de una subtarea la pone en foco', async () => {
+      vi.mocked(clienteApi.actualizar).mockResolvedValue({
+        tarea_id: 3,
+        tarea_nombre: 'Revisar oferta',
+        subtarea_id: 30,
+        subtarea_nombre: 'Leer anexo',
+        desde: '2026-11-27T10:00:00',
+      })
+      const wrapper = await montar([SUB])
+
+      await wrapper
+        .get('button[aria-label="Trabajar en esta (Revisar oferta › Leer anexo)"]')
+        .trigger('click')
+      await flushPromises()
+
+      expect(clienteApi.actualizar).toHaveBeenCalledWith('/foco', { tarea_id: 3, subtarea_id: 30 })
+      expect(filas(wrapper)).toEqual([])
+    })
+
+    it('subir, la ✕ y arrastrar una subtarea envían su entrada', async () => {
+      const cola = [sig(TAREAS[0]!), SUB]
+      vi.mocked(clienteApi.actualizar).mockResolvedValue([SUB, cola[0]!])
+      vi.mocked(clienteApi.crear).mockResolvedValue([SUB])
+      const wrapper = await montar(cola)
+
+      await wrapper.get('button[aria-label="Subir Revisar oferta › Leer anexo"]').trigger('click')
+      await flushPromises()
+      expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+        entradas: [
+          { tarea_id: 3, subtarea_id: 30 },
+          { tarea_id: 1, subtarea_id: null },
+        ],
+      })
+
+      const filasCola = wrapper.findAll('[data-fila-siguiente]')
+      vi.mocked(clienteApi.actualizar).mockResolvedValue(cola)
+      await arrastrar(filasCola[0]!.element, filasCola[1]!.element)
+      expect(clienteApi.actualizar).toHaveBeenLastCalledWith('/siguientes', {
+        entradas: [
+          { tarea_id: 1, subtarea_id: null },
+          { tarea_id: 3, subtarea_id: 30 },
+        ],
+      })
+
+      await wrapper
+        .get('button[aria-label="Pasar Revisar oferta › Leer anexo a sugerencias"]')
+        .trigger('click')
+      await flushPromises()
+      expect(clienteApi.crear).toHaveBeenCalledWith('/sugerencias', {
+        tarea_id: 3,
+        subtarea_id: 30,
+      })
+      expect(filas(wrapper)).toEqual(['Informe'])
+    })
+
+    it('una subtarea elegida se muestra como «Tarea › Subtarea»; se añade a la cola o se quita con su subtarea_id', async () => {
+      vi.mocked(clienteApi.crear).mockResolvedValue([SUB])
+      vi.mocked(clienteApi.eliminar).mockResolvedValue([])
+      const wrapper = await montar([], TAREAS, null, [SUB])
+
+      const elegida = wrapper.get('[data-sugerencia-elegida]')
+      expect(elegida.get('a').text()).toBe('Revisar oferta › Leer anexo')
+      expect(elegida.attributes('data-subtarea-id')).toBe('30')
+
+      await elegida
+        .get('button[aria-label="Quitar Revisar oferta › Leer anexo de sugerencias"]')
+        .trigger('click')
+      await flushPromises()
+      expect(clienteApi.eliminar).toHaveBeenCalledWith('/sugerencias/3?subtarea_id=30')
+
+      useTiendaSiguientes().elegidas = [SUB]
+      await flushPromises()
+      await wrapper
+        .get('[data-sugerencia-elegida]')
+        .get('button[aria-label="Añadir a siguientes (Revisar oferta › Leer anexo)"]')
+        .trigger('click')
+      await flushPromises()
+      expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', { tarea_id: 3, subtarea_id: 30 })
+      expect(filas(wrapper)).toEqual(['Revisar oferta › Leer anexo'])
+    })
+
+    it('una subtarea en la cola no saca a su tarea de las sugerencias automáticas', async () => {
+      const wrapper = await montar([SUB])
+
+      expect(sugerencias(wrapper)).toContain('Revisar oferta')
+    })
   })
 })

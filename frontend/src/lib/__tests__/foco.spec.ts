@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { TareaSiguiente } from '@/api/tipos'
 import {
   desplazarDia,
   fechaLocal,
@@ -9,6 +10,7 @@ import {
   limitesDiaLocal,
   normalizarFechaLocal,
   textoEntradaHistorial,
+  textoEntradaSiguiente,
   textoFoco,
 } from '@/lib/foco'
 
@@ -117,5 +119,23 @@ describe('textoEntradaHistorial', () => {
 
   it('con subtarea, aunque se borrara, muestra Tarea › Subtarea', () => {
     expect(textoEntradaHistorial({ ...base, subtarea_nombre: 'Login' })).toBe('Portal › Login')
+  })
+})
+
+describe('textoEntradaSiguiente', () => {
+  const base: TareaSiguiente = {
+    tarea_id: 1,
+    tarea_nombre: 'Portal',
+    subtarea_id: null,
+    subtarea_nombre: null,
+  }
+
+  it('una tarea entera muestra la tarea', () => {
+    expect(textoEntradaSiguiente(base)).toBe('Portal')
+  })
+
+  it('una subtarea muestra Tarea › Subtarea', () => {
+    const subtarea: TareaSiguiente = { ...base, subtarea_id: 5, subtarea_nombre: 'Login' }
+    expect(textoEntradaSiguiente(subtarea)).toBe('Portal › Login')
   })
 })

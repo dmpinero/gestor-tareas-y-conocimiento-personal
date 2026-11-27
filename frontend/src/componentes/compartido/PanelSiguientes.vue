@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronUp, GripVertical, Search, X } from '@lucide/vue'
+import { ChevronDown, ChevronUp, GripVertical, ListPlus, Search, X } from '@lucide/vue'
 import { createReusableTemplate, useMediaQuery } from '@vueuse/core'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -11,13 +11,14 @@ import SelectorTareasSiguientes from '@/componentes/compartido/SelectorTareasSig
 import VencimientoCorto from '@/componentes/compartido/VencimientoCorto.vue'
 import { Button } from '@/componentes/ui/button'
 import { useArrastrarCola } from '@/composables/useArrastrarCola'
-import type { Tarea } from '@/api/tipos'
+import type { Tarea, TareaSiguiente } from '@/api/tipos'
 import {
   BORDE_PRIORIDAD,
   CLASE_PILDORA,
   PILDORA_PRIORIDAD,
   clavePrioridad,
 } from '@/lib/coloresTarea'
+import { textoEntradaSiguiente } from '@/lib/foco'
 import { estaHibernada, instanteCongelado } from '@/lib/hibernacion'
 import { sugerenciasSiguientes } from '@/lib/sugerenciasSiguientes'
 import { useTiendaFoco } from '@/stores/foco'
@@ -26,7 +27,9 @@ import { useTiendaTareas } from '@/stores/tareas'
 
 // Inicio: "A continuación" y "Sugerencias", con tarjetas como las del
 // tablero (borde con el color de la prioridad, píldora de prioridad, fecha y
-// cuenta atrás). Panel "A continuación": la cola de siguientes, en orden, con
+// cuenta atrás). Cada entrada es una tarea o una subtarea suya, mostrada como
+// «Tarea › Subtarea» con los datos de la tarea dueña; «Trabajar en esta» pone
+// en foco la subtarea. Panel "A continuación": la cola de siguientes, en orden, con
 // "Trabajar en esta", subir, bajar y una ✕ que la pasa a las sugerencias
 // elegidas. "Sugerencias": primero las elegidas por el usuario, en orden y con
 // una ✕ para quitarlas; después las calculadas con las tareas cargadas (ver
@@ -42,7 +45,10 @@ const tiendaFoco = useTiendaFoco()
 const sugerencias = computed(() =>
   sugerenciasSiguientes(
     tiendaTareas.tareas,
-    [...tiendaSiguientes.cola, ...tiendaSiguientes.elegidas].map((entrada) => entrada.tarea_id),
+    // Solo las tareas enteras: una subtarea en una lista no saca a su tarea.
+    [...tiendaSiguientes.cola, ...tiendaSiguientes.elegidas]
+      .filter((entrada) => entrada.subtarea_id === null)
+      .map((entrada) => entrada.tarea_id),
     tiendaFoco.foco?.tarea_id ?? null,
   ),
 )
@@ -63,6 +69,11 @@ const tareaPorId = computed(() => new Map(tiendaTareas.tareas.map((t) => [t.id, 
 // En pantallas estrechas «Añadir a siguientes» queda en solo icono, para que
 // quepa el nombre.
 const ancha = useMediaQuery('(min-width: 640px)')
+
+// Clave de una entrada en las listas (tarea entera o subtarea).
+function claveEntrada(entrada: TareaSiguiente): string {
+  return `${entrada.tarea_id}-${entrada.subtarea_id ?? ''}`
+}
 
 function enlace(tareaId: number) {
   return { path: '/tareas', query: { tarea: String(tareaId) } }
@@ -161,8 +172,9 @@ onMounted(() => {
       <ol v-else class="grid min-w-0 grid-cols-1 gap-2">
         <li
           v-for="(entrada, indice) in tiendaSiguientes.cola"
-          :key="entrada.tarea_id"
+          :key="claveEntrada(entrada)"
           data-fila-siguiente
+          :data-subtarea-id="entrada.subtarea_id ?? undefined"
           draggable="true"
           :data-destino="arrastre.destino(indice)"
           :data-arrastrada="arrastre.arrastrada(indice) || undefined"
@@ -185,7 +197,7 @@ onMounted(() => {
           <!-- En pantallas estrechas los botones bajan a una segunda línea. -->
           <div class="min-w-0 flex-1 max-sm:basis-[calc(100%-2.5rem)]">
             <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE" draggable="false">{{
-              entrada.tarea_nombre
+              textoEntradaSiguiente(entrada)
             }}</RouterLink>
             <usarDatos
               v-if="tareaPorId.get(entrada.tarea_id)"
@@ -193,16 +205,21 @@ onMounted(() => {
             />
           </div>
           <span class="flex shrink-0 items-center max-sm:ml-auto">
-            <BotonFoco :tarea-id="entrada.tarea_id" :nombre="entrada.tarea_nombre" compacto />
+            <BotonFoco
+              :tarea-id="entrada.tarea_id"
+              :subtarea-id="entrada.subtarea_id"
+              :nombre="textoEntradaSiguiente(entrada)"
+              compacto
+            />
             <Button
               type="button"
               variant="ghost"
               size="icon"
               class="text-muted-foreground size-8"
-              :aria-label="`Subir ${entrada.tarea_nombre}`"
+              :aria-label="`Subir ${textoEntradaSiguiente(entrada)}`"
               title="Subir"
               :disabled="indice === 0"
-              @click="tiendaSiguientes.subir(entrada.tarea_id)"
+              @click="tiendaSiguientes.subir(entrada.tarea_id, entrada.subtarea_id)"
             >
               <ChevronUp aria-hidden="true" />
             </Button>
@@ -211,10 +228,10 @@ onMounted(() => {
               variant="ghost"
               size="icon"
               class="text-muted-foreground size-8"
-              :aria-label="`Bajar ${entrada.tarea_nombre}`"
+              :aria-label="`Bajar ${textoEntradaSiguiente(entrada)}`"
               title="Bajar"
               :disabled="indice === tiendaSiguientes.cola.length - 1"
-              @click="tiendaSiguientes.bajar(entrada.tarea_id)"
+              @click="tiendaSiguientes.bajar(entrada.tarea_id, entrada.subtarea_id)"
             >
               <ChevronDown aria-hidden="true" />
             </Button>
@@ -223,9 +240,9 @@ onMounted(() => {
               variant="ghost"
               size="icon"
               class="text-muted-foreground size-8"
-              :aria-label="`Pasar ${entrada.tarea_nombre} a sugerencias`"
+              :aria-label="`Pasar ${textoEntradaSiguiente(entrada)} a sugerencias`"
               title="Pasar a sugerencias"
-              @click="tiendaSiguientes.anadirElegida(entrada.tarea_id)"
+              @click="tiendaSiguientes.anadirElegida(entrada.tarea_id, entrada.subtarea_id)"
             >
               <X aria-hidden="true" />
             </Button>
@@ -258,15 +275,16 @@ onMounted(() => {
       <ul v-else class="grid min-w-0 grid-cols-1 gap-2">
         <li
           v-for="entrada in tiendaSiguientes.elegidas"
-          :key="`elegida-${entrada.tarea_id}`"
+          :key="`elegida-${claveEntrada(entrada)}`"
           data-sugerencia
           data-sugerencia-elegida
+          :data-subtarea-id="entrada.subtarea_id ?? undefined"
           :class="[claseTarjeta(tareaPorId.get(entrada.tarea_id)), 'flex items-center gap-2']"
         >
           <div class="min-w-0 flex-1">
             <span class="flex min-w-0 items-center gap-2">
               <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE">{{
-                entrada.tarea_nombre
+                textoEntradaSiguiente(entrada)
               }}</RouterLink>
               <span data-pildora-elegida :class="[CLASE_PILDORA_ELEGIDA, 'shrink-0']"
                 >Elegida por ti</span
@@ -279,18 +297,35 @@ onMounted(() => {
           </div>
           <span class="flex shrink-0 items-center">
             <BotonSiguientes
+              v-if="entrada.subtarea_id === null"
               :tarea-id="entrada.tarea_id"
               :nombre="entrada.tarea_nombre"
               :compacto="!ancha"
             />
+            <!-- Una subtarea elegida no está en la cola (una entrada está en una
+                 sola lista): solo se puede añadir. Mismo aspecto que BotonSiguientes. -->
+            <Button
+              v-else
+              type="button"
+              :variant="ancha ? 'outline' : 'ghost'"
+              :size="ancha ? 'default' : 'icon'"
+              data-boton-siguientes
+              :class="ancha ? undefined : 'text-muted-foreground size-8'"
+              :aria-label="`Añadir a siguientes (${textoEntradaSiguiente(entrada)})`"
+              title="Añadir a siguientes"
+              @click="tiendaSiguientes.anadir(entrada.tarea_id, entrada.subtarea_id)"
+            >
+              <ListPlus aria-hidden="true" />
+              <template v-if="ancha">Añadir a siguientes</template>
+            </Button>
             <Button
               type="button"
               variant="ghost"
               size="icon"
               class="text-muted-foreground size-8"
-              :aria-label="`Quitar ${entrada.tarea_nombre} de sugerencias`"
+              :aria-label="`Quitar ${textoEntradaSiguiente(entrada)} de sugerencias`"
               title="Quitar de sugerencias"
-              @click="tiendaSiguientes.quitarElegida(entrada.tarea_id)"
+              @click="tiendaSiguientes.quitarElegida(entrada.tarea_id, entrada.subtarea_id)"
             >
               <X aria-hidden="true" />
             </Button>

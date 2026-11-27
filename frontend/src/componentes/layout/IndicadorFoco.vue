@@ -6,14 +6,14 @@ import { RouterLink, useRouter } from 'vue-router'
 import SelectorTareasSiguientes from '@/componentes/compartido/SelectorTareasSiguientes.vue'
 import { Popover, PopoverContent, PopoverTrigger } from '@/componentes/ui/popover'
 import { useArrastrarCola } from '@/composables/useArrastrarCola'
-import { formatearTiempoFoco, textoFoco } from '@/lib/foco'
+import { formatearTiempoFoco, textoEntradaSiguiente, textoFoco } from '@/lib/foco'
 import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaSiguientes } from '@/stores/siguientes'
 
 // Píldora de la barra superior con la tarea (o `Tarea › Subtarea`) en la que se
 // está trabajando y desde hace cuánto. Pulsarla abre la tarea; el ✕ deja de
 // trabajar en ella. Con la cola de siguientes no vacía, al lado, el desplegable
-// "Siguientes" con las 3 primeras y "Pasar a la siguiente: X" (también sin
+// "Siguientes" con las 3 primeras (tareas o `Tarea › Subtarea`) y "Pasar a la siguiente: X" (también sin
 // foco). Sin foco ni cola no se muestra. El foco y la cola se cargan al
 // montarla, que es al arrancar la aplicación.
 const INTERVALO_MS = 60_000
@@ -118,8 +118,9 @@ onUnmounted(() => {
         <ol class="text-sm">
           <li
             v-for="(entrada, indice) in primeras"
-            :key="entrada.tarea_id"
+            :key="`${entrada.tarea_id}-${entrada.subtarea_id ?? ''}`"
             data-siguiente
+            :data-subtarea-id="entrada.subtarea_id ?? undefined"
             draggable="true"
             :data-destino="arrastre.destino(indice)"
             :class="[
@@ -142,7 +143,9 @@ onUnmounted(() => {
                 title="Arrastra para reordenar"
                 ><GripVertical class="size-3.5 shrink-0" />{{ indice + 1 }}.</span
               >
-              <span data-nombre-siguiente class="truncate">{{ entrada.tarea_nombre }}</span>
+              <span data-nombre-siguiente class="truncate">{{
+                textoEntradaSiguiente(entrada)
+              }}</span>
             </RouterLink>
           </li>
         </ol>
@@ -153,7 +156,7 @@ onUnmounted(() => {
           @click="pasarALaSiguiente"
         >
           <SkipForward aria-hidden="true" />
-          <span class="truncate">Pasar a la siguiente: {{ siguiente.tarea_nombre }}</span>
+          <span class="truncate">Pasar a la siguiente: {{ textoEntradaSiguiente(siguiente) }}</span>
         </button>
         <button
           type="button"

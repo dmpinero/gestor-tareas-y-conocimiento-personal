@@ -286,16 +286,28 @@ export interface Foco {
   desde: string
 }
 
-/** Una tarea de la cola de siguientes ("A continuación"), con su nombre
- * actual. `GET /siguientes` la devuelve en el orden de la cola y sin las
- * tareas completadas (siguen en la cola: si se reabren, vuelven a su sitio).
- * `POST /siguientes` (`{ tarea_id }`) la añade al final, `PUT /siguientes`
- * (`{ ids }`) reordena la cola visible y `DELETE /siguientes/{tarea_id}` la
- * quita; todas devuelven la cola completa. Poner una tarea (o una subtarea
- * suya) en foco o borrarla la saca de la cola. */
+/** Una entrada de la cola de siguientes ("A continuación") o de las
+ * sugerencias elegidas: una tarea entera (`subtarea_id` `null`) o una subtarea
+ * suya, con sus nombres actuales. Se identifica por (`tarea_id`,
+ * `subtarea_id`). `GET /siguientes` la devuelve en el orden de la cola y sin
+ * las tareas completadas ni las subtareas resueltas (siguen en la cola: si
+ * vuelven a estar pendientes, vuelven a su sitio). `POST /siguientes`
+ * (`{ tarea_id, subtarea_id? }`) la añade al final, `PUT /siguientes`
+ * (`{ entradas }`) reordena la cola visible y `DELETE /siguientes/{tarea_id}`
+ * (con `?subtarea_id=` para una subtarea) la quita; todas devuelven la cola
+ * completa. Poner en foco una subtarea saca su entrada y la de su tarea; una
+ * tarea entera, solo la de la tarea. Borrarlas las saca. */
 export interface TareaSiguiente {
   tarea_id: number
   tarea_nombre: string
+  subtarea_id: number | null
+  subtarea_nombre: string | null
+}
+
+/** Lo que identifica una entrada de siguientes o de sugerencias elegidas. */
+export interface ClaveEntradaSiguiente {
+  tarea_id: number
+  subtarea_id: number | null
 }
 
 /** Cuerpo de `PUT /foco`. */

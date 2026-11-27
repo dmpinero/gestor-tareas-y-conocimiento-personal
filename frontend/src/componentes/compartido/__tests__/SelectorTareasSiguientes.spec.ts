@@ -56,7 +56,12 @@ const TAREAS = [
   tarea(5, 'Revisar presupuesto'),
   tarea(6, 'Elegida antes'),
 ]
-const sig = (t: Tarea): TareaSiguiente => ({ tarea_id: t.id, tarea_nombre: t.nombre })
+const sig = (t: Tarea): TareaSiguiente => ({
+  tarea_id: t.id,
+  tarea_nombre: t.nombre,
+  subtarea_id: null,
+  subtarea_nombre: null,
+})
 
 let envoltorio: VueWrapper | null = null
 const abierto = ref(false)
@@ -238,5 +243,99 @@ describe('SelectorTareasSiguientes', () => {
 
     expect(clienteApi.obtener).toHaveBeenCalledWith('/tareas')
     expect(nombresCasillas()).toHaveLength(5)
+  })
+})
+
+describe('SelectorTareasSiguientes: subtareas', () => {
+  const sub = (id: number, nombre: string, resuelta = false) => ({
+    id,
+    nombre,
+    asignado: null,
+    prioridad: null,
+    resuelta,
+    comentarios: 0,
+  })
+  const ALTAS = tarea(7, 'Altas de personal', {
+    subtareas: [sub(70, 'Buscar persona fuera de KMM'), sub(71, 'Firmada', true)],
+  })
+  const HECHA = tarea(8, 'Cerrada', { completada: true, subtareas: [sub(80, 'Oculta')] })
+  const CON_SUBTAREAS = [...TAREAS, ALTAS, HECHA]
+
+  it('ofrece las subtareas no resueltas de tareas no completadas como «Tarea › Subtarea»', async () => {
+    await montar(CON_SUBTAREAS)
+
+    expect(nombresCasillas()).toEqual([
+      'Altas de personal',
+      'Altas de personal › Buscar persona fuera de KMM',
+      'Diseño de pantallas',
+      'Elegida antes',
+      'En la cola',
+      'Revisar presupuesto',
+      'Revisión técnica',
+    ])
+  })
+
+  it('la búsqueda encuentra por el nombre de la subtarea o de su tarea', async () => {
+    await montar(CON_SUBTAREAS)
+
+    await buscar('kmm')
+    expect(nombresCasillas()).toEqual(['Altas de personal › Buscar persona fuera de KMM'])
+    await buscar('ALTAS')
+    expect(nombresCasillas()).toEqual([
+      'Altas de personal',
+      'Altas de personal › Buscar persona fuera de KMM',
+    ])
+  })
+
+  it('«A continuación (n)» y «Sugerencias (n)» añaden la subtarea con su subtarea_id, en el orden marcado', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValue([])
+    await montar(CON_SUBTAREAS)
+
+    await marcar('Altas de personal › Buscar persona fuera de KMM')
+    await marcar('Revisión técnica')
+    botonPorTexto('A continuación (2)').click()
+    await flushPromises()
+
+    expect(vi.mocked(clienteApi.crear).mock.calls).toEqual([
+      ['/siguientes', { tarea_id: 7, subtarea_id: 70 }],
+      ['/siguientes', { tarea_id: 3 }],
+    ])
+
+    vi.mocked(clienteApi.crear).mockClear()
+    abierto.value = false
+    await flushPromises()
+    abierto.value = true
+    await flushPromises()
+    await marcar('Altas de personal › Buscar persona fuera de KMM')
+    botonPorTexto('Sugerencias (1)').click()
+    await flushPromises()
+    expect(clienteApi.crear).toHaveBeenCalledWith('/sugerencias', { tarea_id: 7, subtarea_id: 70 })
+  })
+
+  it('una subtarea que ya está en una lista lleva su nota y no cuenta para esa acción', async () => {
+    await montar(CON_SUBTAREAS)
+    useTiendaSiguientes().cola = [
+      { tarea_id: 7, tarea_nombre: 'Altas de personal', subtarea_id: 70, subtarea_nombre: 'x' },
+    ]
+    await flushPromises()
+
+    const fila = casillas()
+      .find((c) => c.closest('label')?.textContent?.includes('Buscar persona'))!
+      .closest('label')!
+    expect(fila.querySelector('[data-nota-eleccion]')?.textContent?.trim()).toBe(
+      'En A continuación',
+    )
+    const tarea = casillas()
+      .find(
+        (c) =>
+          c.closest('label')?.querySelector('[data-nombre-eleccion]')?.textContent?.trim() ===
+          'Altas de personal',
+      )!
+      .closest('label')!
+    expect(tarea.querySelector('[data-nota-eleccion]')).toBeNull()
+
+    await marcar('Altas de personal › Buscar persona fuera de KMM')
+    expect(botonPorTexto('A continuación').disabled).toBe(true)
+    expect(botonPorTexto('Sugerencias (1)').disabled).toBe(false)
   })
 })

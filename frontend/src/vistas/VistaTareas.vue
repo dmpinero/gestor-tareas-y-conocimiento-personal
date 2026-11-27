@@ -30,6 +30,7 @@ import {
   TIPOS_TAREA,
   etiquetaTipoTarea,
   type DatosTarea,
+  type Subtarea,
   type Oportunidad,
   type Tarea,
   type TipoTarea,
@@ -47,7 +48,7 @@ import { useTiendaFoco } from '@/stores/foco'
 import { useTiendaGruposEstados } from '@/stores/gruposEstados'
 import { useTiendaWorkflows } from '@/stores/workflows'
 import { useTiendaTareas } from '@/stores/tareas'
-import { useBusquedaTabla } from '@/composables/useBusquedaTabla'
+import { coincideBusqueda, useBusquedaTabla } from '@/composables/useBusquedaTabla'
 import {
   compararConNulosAlFinal,
   compararNumero,
@@ -575,6 +576,12 @@ const { busqueda, filasFiltradas } = useBusquedaTabla(tareasConFiltros, (tarea) 
   tarea.fecha_vencimiento ? formatearFechaHora(tarea.fecha_vencimiento) : null,
   ...tarea.subtareas.flatMap((subtarea) => [subtarea.nombre, subtarea.asignado]),
 ])
+
+// Subtareas cuyo nombre coincide con el buscador: la lista las muestra bajo
+// el nombre de su tarea («Subtarea: …») y el tablero las marca y despliega.
+function subtareasCoincidentes(tarea: Tarea): Subtarea[] {
+  return tarea.subtareas.filter((subtarea) => coincideBusqueda(subtarea.nombre, busqueda.value))
+}
 
 function limpiarFiltros(): void {
   busqueda.value = ''
@@ -1423,6 +1430,13 @@ async function guardar(): Promise<void> {
         <div class="min-w-0 flex-1">
           <span data-nombre-tarea class="block break-words">{{ tarea.nombre }}</span>
           <span
+            v-for="subtarea in subtareasCoincidentes(tarea)"
+            :key="subtarea.id"
+            data-subtarea-coincidente
+            class="text-muted-foreground block text-xs break-words"
+            >Subtarea: {{ subtarea.nombre }}</span
+          >
+          <span
             v-if="tiendaFoco.esTareaEnFoco(tarea.id) || estaHibernada(tarea)"
             data-insignias-tarea
             class="mt-1 flex flex-wrap gap-1"
@@ -1941,6 +1955,7 @@ async function guardar(): Promise<void> {
       :grupos="tiendaGrupos.grupos"
       :cargando-grupos="tiendaGrupos.cargando"
       :personas-resaltadas="personasResaltadas"
+      :busqueda="busqueda"
       @ver-detalle="(id) => (idEnDetalle = id)"
       @anadir-tarea="abrirAltaEnEstado"
     />
