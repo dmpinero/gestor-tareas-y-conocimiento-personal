@@ -279,7 +279,7 @@ describe('IndicadorFoco', () => {
     expect(useTiendaSiguientes().cola.map((t) => t.tarea_id)).toEqual([2, 3, 4])
   })
 
-  it('con una subtarea en la cola la muestra como «Tarea › Subtarea» y «Pasar a la siguiente» la pone en foco', async () => {
+  it('con una subtarea en la cola la muestra por su nombre (con su tarea detrás), enlaza a ella y «Pasar a la siguiente» la pone en foco', async () => {
     const SUB: TareaSiguiente = {
       tarea_id: 7,
       tarea_nombre: 'Migración portal',
@@ -293,9 +293,17 @@ describe('IndicadorFoco', () => {
 
     const contenido = document.body.querySelector('[data-slot="popover-content"]')!
     const nombres = [...contenido.querySelectorAll('[data-nombre-siguiente]')].map((n) =>
-      n.textContent?.trim(),
+      n.textContent?.replace(/\s+/g, ' ').trim(),
     )
-    expect(nombres).toEqual(['Migración portal › Probar login', 'Informe', 'Informe › Redactar'])
+    expect(nombres).toEqual(['Probar login · Migración portal', 'Informe', 'Redactar · Informe'])
+    const enlaces = [...contenido.querySelectorAll('[data-siguiente] a')].map((a) =>
+      a.getAttribute('href'),
+    )
+    expect(enlaces).toEqual([
+      '/tareas?tarea=7&subtarea=70',
+      '/tareas?tarea=1',
+      `/tareas?tarea=1&subtarea=${SUB_DE_INFORME.subtarea_id}`,
+    ])
     expect(contenido.querySelector('[data-pasar-siguiente]')?.textContent?.trim()).toBe(
       'Pasar a la siguiente: Migración portal › Probar login',
     )

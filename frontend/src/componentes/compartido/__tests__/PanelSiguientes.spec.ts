@@ -423,14 +423,30 @@ describe('PanelSiguientes', () => {
       ...TAREAS.slice(3),
     ]
 
-    it('la cola muestra «Tarea › Subtarea» con el contador y la prioridad de la tarea dueña', async () => {
+    it('la cola muestra la subtarea, su tarea dueña debajo y el contador y la prioridad de esta', async () => {
       const wrapper = await montar([sig(TAREAS[0]!), SUB], CON_PRIORIDAD)
 
-      expect(filas(wrapper)).toEqual(['Informe', 'Revisar oferta › Leer anexo'])
+      expect(filas(wrapper)).toEqual(['Informe', 'Leer anexo'])
       const fila = wrapper.findAll('[data-fila-siguiente]')[1]!
       expect(fila.attributes('data-subtarea-id')).toBe('30')
+      expect(fila.get('[data-tarea-padre]').text()).toBe('Subtarea de: Revisar oferta')
+      expect(wrapper.findAll('[data-fila-siguiente]')[0]!.find('[data-tarea-padre]').exists()).toBe(
+        false,
+      )
       expect(fila.get('[data-prioridad-sugerencia]').text()).toBe('Prioridad 1')
-      expect(fila.get('a').attributes('href')).toBe('/tareas?tarea=3')
+      expect(fila.get('a').attributes('href')).toBe('/tareas?tarea=3&subtarea=30')
+      expect(wrapper.findAll('[data-fila-siguiente]')[0]!.get('a').attributes('href')).toBe(
+        '/tareas?tarea=1',
+      )
+    })
+
+    it('una subtarea elegida en sugerencias también se muestra por su nombre', async () => {
+      const wrapper = await montar([], TAREAS, null, [SUB])
+
+      const elegida = wrapper.get('[data-sugerencia-elegida]')
+      expect(elegida.get('a').text()).toBe('Leer anexo')
+      expect(elegida.get('a').attributes('href')).toBe('/tareas?tarea=3&subtarea=30')
+      expect(elegida.get('[data-tarea-padre]').text()).toBe('Subtarea de: Revisar oferta')
     })
 
     it('«Trabajar en esta» de una subtarea la pone en foco', async () => {
@@ -488,13 +504,13 @@ describe('PanelSiguientes', () => {
       expect(filas(wrapper)).toEqual(['Informe'])
     })
 
-    it('una subtarea elegida se muestra como «Tarea › Subtarea»; se añade a la cola o se quita con su subtarea_id', async () => {
+    it('una subtarea elegida se muestra por su nombre; se añade a la cola o se quita con su subtarea_id', async () => {
       vi.mocked(clienteApi.crear).mockResolvedValue([SUB])
       vi.mocked(clienteApi.eliminar).mockResolvedValue([])
       const wrapper = await montar([], TAREAS, null, [SUB])
 
       const elegida = wrapper.get('[data-sugerencia-elegida]')
-      expect(elegida.get('a').text()).toBe('Revisar oferta › Leer anexo')
+      expect(elegida.get('a').text()).toBe('Leer anexo')
       expect(elegida.attributes('data-subtarea-id')).toBe('30')
 
       await elegida
@@ -511,7 +527,7 @@ describe('PanelSiguientes', () => {
         .trigger('click')
       await flushPromises()
       expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', { tarea_id: 3, subtarea_id: 30 })
-      expect(filas(wrapper)).toEqual(['Revisar oferta › Leer anexo'])
+      expect(filas(wrapper)).toEqual(['Leer anexo'])
     })
 
     it('una subtarea en la cola no saca a su tarea de las sugerencias automáticas', async () => {

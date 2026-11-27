@@ -75,8 +75,18 @@ function claveEntrada(entrada: TareaSiguiente): string {
   return `${entrada.tarea_id}-${entrada.subtarea_id ?? ''}`
 }
 
-function enlace(tareaId: number) {
-  return { path: '/tareas', query: { tarea: String(tareaId) } }
+// Enlace al detalle de la tarea; si la entrada es una subtarea, el detalle la
+// destaca (`subtarea=<id>`).
+function enlace(entrada: TareaSiguiente) {
+  const query: Record<string, string> = { tarea: String(entrada.tarea_id) }
+  if (entrada.subtarea_id !== null) query.subtarea = String(entrada.subtarea_id)
+  return { path: '/tareas', query }
+}
+
+// Nombre visible de una entrada: el de la subtarea si lo es (la tarea dueña va
+// debajo, en «Subtarea de: …»), para que un nombre largo de la tarea no la tape.
+function nombreEntrada(entrada: TareaSiguiente): string {
+  return entrada.subtarea_nombre ?? entrada.tarea_nombre
 }
 
 // Tarjeta de una tarea: la del tablero, con el borde izquierdo del color de su
@@ -196,9 +206,15 @@ onMounted(() => {
           >
           <!-- En pantallas estrechas los botones bajan a una segunda línea. -->
           <div class="min-w-0 flex-1 max-sm:basis-[calc(100%-2.5rem)]">
-            <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE" draggable="false">{{
-              textoEntradaSiguiente(entrada)
+            <RouterLink :to="enlace(entrada)" :class="CLASE_ENLACE" draggable="false">{{
+              nombreEntrada(entrada)
             }}</RouterLink>
+            <span
+              v-if="entrada.subtarea_id !== null"
+              data-tarea-padre
+              class="text-muted-foreground block truncate text-xs"
+              >Subtarea de: {{ entrada.tarea_nombre }}</span
+            >
             <usarDatos
               v-if="tareaPorId.get(entrada.tarea_id)"
               :tarea="tareaPorId.get(entrada.tarea_id)!"
@@ -283,13 +299,19 @@ onMounted(() => {
         >
           <div class="min-w-0 flex-1">
             <span class="flex min-w-0 items-center gap-2">
-              <RouterLink :to="enlace(entrada.tarea_id)" :class="CLASE_ENLACE">{{
-                textoEntradaSiguiente(entrada)
+              <RouterLink :to="enlace(entrada)" :class="CLASE_ENLACE">{{
+                nombreEntrada(entrada)
               }}</RouterLink>
               <span data-pildora-elegida :class="[CLASE_PILDORA_ELEGIDA, 'shrink-0']"
                 >Elegida por ti</span
               >
             </span>
+            <span
+              v-if="entrada.subtarea_id !== null"
+              data-tarea-padre
+              class="text-muted-foreground block truncate text-xs"
+              >Subtarea de: {{ entrada.tarea_nombre }}</span
+            >
             <usarDatos
               v-if="tareaPorId.get(entrada.tarea_id)"
               :tarea="tareaPorId.get(entrada.tarea_id)!"
@@ -338,7 +360,11 @@ onMounted(() => {
           :class="[claseTarjeta(tarea), 'flex items-center gap-2']"
         >
           <div class="min-w-0 flex-1">
-            <RouterLink :to="enlace(tarea.id)" :class="CLASE_ENLACE">{{ tarea.nombre }}</RouterLink>
+            <RouterLink
+              :to="{ path: '/tareas', query: { tarea: String(tarea.id) } }"
+              :class="CLASE_ENLACE"
+              >{{ tarea.nombre }}</RouterLink
+            >
             <usarDatos :tarea="tarea" />
           </div>
           <BotonSiguientes

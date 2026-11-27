@@ -133,6 +133,13 @@ const tareaEnDetalle = computed<Tarea | null>(
   () => tienda.tareas.find((tarea) => tarea.id === idEnDetalle.value) ?? null,
 )
 
+// Subtarea que el detalle destaca (`&subtarea=<id>`, desde una entrada de
+// subtarea en «A continuación»); se olvida al cerrar el detalle.
+const subtareaDestacadaEnDetalle = ref<number | null>(null)
+watch(idEnDetalle, (id) => {
+  if (id === null) subtareaDestacadaEnDetalle.value = null
+})
+
 // `/tareas?tarea=<id>` (p. ej. desde la píldora de la tarea en foco) abre el
 // detalle de esa tarea en cuanto está cargada y quita el parámetro de la URL,
 // para que volver a pulsar la píldora lo abra de nuevo. Un valor que no es un
@@ -143,8 +150,13 @@ watch(
     if (typeof valor !== 'string' || !/^\d+$/.test(valor)) return
     const id = Number(valor)
     if (!tienda.tareas.some((tarea) => tarea.id === id)) return
+    const subtarea = ruta.query.subtarea
+    subtareaDestacadaEnDetalle.value =
+      typeof subtarea === 'string' && /^\d+$/.test(subtarea) ? Number(subtarea) : null
     idEnDetalle.value = id
-    const resto = Object.entries(ruta.query).filter(([clave]) => clave !== 'tarea')
+    const resto = Object.entries(ruta.query).filter(
+      ([clave]) => clave !== 'tarea' && clave !== 'subtarea',
+    )
     void enrutador.replace({ query: Object.fromEntries(resto) })
   },
   { immediate: true },
@@ -2155,6 +2167,7 @@ async function guardar(): Promise<void> {
 
     <DetalleTarea
       :tarea="tareaEnDetalle"
+      :subtarea-destacada-id="subtareaDestacadaEnDetalle"
       :error="tienda.error"
       :editando="editandoEnDetalle"
       :hay-cambios="editandoEnDetalle && formularioCambiado"

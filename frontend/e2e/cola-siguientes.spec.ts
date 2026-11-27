@@ -276,12 +276,25 @@ test('una subtarea se encuentra en Mi trabajo, se añade a la cola y se pone en 
     await dialogo.getByRole('button', { name: 'A continuación (1)' }).click()
     await expect(dialogo).toBeHidden()
     const fila2 = panel(page).locator(`[data-fila-siguiente][data-subtarea-id="${idSubtarea}"]`)
-    await expect(fila2).toContainText(`${tarea} › ${subtarea}`)
+    // La fila muestra la subtarea (no la tarea padre) y su tarea debajo.
+    await expect(fila2.getByRole('link')).toHaveText(subtarea)
+    await expect(fila2.locator('[data-tarea-padre]')).toHaveText(`Subtarea de: ${tarea}`)
     const cola = (await (await request.get('/api/v1/siguientes')).json()) as {
       tarea_id: number
       subtarea_id: number | null
     }[]
     expect(cola).toEqual([expect.objectContaining({ tarea_id: id, subtarea_id: idSubtarea })])
+
+    // Su enlace abre el detalle de la tarea con la subtarea resaltada como «Siguiente».
+    await fila2.getByRole('link').click()
+    const detalle = page.getByRole('dialog', { name: tarea })
+    const resaltada = detalle.locator('[data-siguiente="true"]')
+    await expect(resaltada).toHaveCount(1)
+    await expect(resaltada).toContainText(subtarea)
+    await expect(resaltada.locator('[data-insignia-siguiente]')).toHaveText('Siguiente')
+    await page.keyboard.press('Escape')
+    await expect(detalle).toBeHidden()
+    await page.goto('/')
 
     // «Pasar a la siguiente» pone en foco la subtarea y la saca de la cola.
     await page.locator('[data-siguientes]').click()

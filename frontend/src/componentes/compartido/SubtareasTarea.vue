@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Circle, CircleCheck, MessageSquare, Pencil, Plus, Trash } from '@lucide/vue'
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
-import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, useTemplateRef } from 'vue'
 
 import type { DatosEdicionSubtarea, DatosSubtarea, Subtarea, Tarea } from '@/api/tipos'
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
@@ -27,6 +27,7 @@ import {
 } from '@/lib/subtareas'
 import { registrarBorrador } from '@/composables/useConfirmarDescarte'
 import { useTiendaFoco } from '@/stores/foco'
+import { useTiendaSiguientes } from '@/stores/siguientes'
 import { useTiendaTareas } from '@/stores/tareas'
 
 // Subtareas de una tarea: listado, alta en línea, edición en línea (con
@@ -34,17 +35,42 @@ import { useTiendaTareas } from '@/stores/tareas'
 // de comentarios por subtarea. Lee y escribe a través del almacén de tareas; la tarea actualizada
 // llega de vuelta por `tarea` (el almacén la reemplaza con la respuesta). Los
 // fallos de la API quedan en `tienda.error`, que muestra el detalle.
-const props = defineProps<{ tarea: Tarea }>()
+// `subtareaDestacadaId`: la subtarea por la que se abrió el detalle (p. ej. desde
+// una entrada de subtarea en «A continuación»); se resalta y se desplaza a la vista.
+const props = defineProps<{ tarea: Tarea; subtareaDestacadaId?: number | null }>()
 
 const tienda = useTiendaTareas()
 const tiendaFoco = useTiendaFoco()
+const tiendaSiguientes = useTiendaSiguientes()
 
-// La subtarea en foco lleva borde violeta e insignia "En foco".
+// Una subtarea es «Siguiente» si está en la cola de siguientes o es la
+// destacada al abrir el detalle.
+function esSiguiente(subtarea: Subtarea): boolean {
+  return (
+    subtarea.id === props.subtareaDestacadaId ||
+    tiendaSiguientes.estaEnCola(props.tarea.id, subtarea.id)
+  )
+}
+
+// La subtarea en foco lleva borde violeta e insignia "En foco"; una siguiente
+// (si no está en foco), borde azul e insignia "Siguiente".
 function claseFoco(subtarea: Subtarea): string {
-  return tiendaFoco.esSubtareaEnFoco(subtarea.id)
-    ? 'outline-2 -outline-offset-2 outline-violet-500 dark:outline-violet-400'
+  if (tiendaFoco.esSubtareaEnFoco(subtarea.id)) {
+    return 'outline-2 -outline-offset-2 outline-violet-500 dark:outline-violet-400'
+  }
+  return esSiguiente(subtarea)
+    ? 'outline-2 -outline-offset-2 outline-sky-500 bg-sky-50 dark:bg-sky-950/40 dark:outline-sky-400'
     : ''
 }
+
+onMounted(() => {
+  if (props.subtareaDestacadaId == null) return
+  void nextTick(() =>
+    document
+      .querySelector(`[data-subtarea-destacada="${props.subtareaDestacadaId}"]`)
+      ?.scrollIntoView?.({ block: 'center' }),
+  )
+})
 
 const MAX_PERSONA = 100
 const VACIO = '—'
@@ -582,6 +608,10 @@ registrarBorrador(() => {
         :key="subtarea.id"
         data-testid="tarjeta-subtarea"
         :data-en-foco="tiendaFoco.esSubtareaEnFoco(subtarea.id) ? 'true' : undefined"
+        :data-siguiente="esSiguiente(subtarea) ? 'true' : undefined"
+        :data-subtarea-destacada="
+          subtarea.id === props.subtareaDestacadaId ? subtarea.id : undefined
+        "
         :class="['min-w-0 rounded-md border p-3', claseFoco(subtarea)]"
       >
         <plantillaEdicion.reuse v-if="idEditando === subtarea.id" :subtarea="subtarea" />
@@ -595,6 +625,12 @@ registrarBorrador(() => {
               >{{ subtarea.nombre }}</span
             >
             <InsigniaFoco v-if="tiendaFoco.esSubtareaEnFoco(subtarea.id)" />
+            <span
+              v-if="esSiguiente(subtarea)"
+              data-insignia-siguiente
+              class="inline-flex shrink-0 items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-200"
+              >Siguiente</span
+            >
           </div>
           <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
             <dt class="text-muted-foreground">Persona asignada</dt>
@@ -640,6 +676,10 @@ registrarBorrador(() => {
         <template v-for="subtarea in props.tarea.subtareas" :key="subtarea.id">
           <TableRow
             :data-en-foco="tiendaFoco.esSubtareaEnFoco(subtarea.id) ? 'true' : undefined"
+            :data-siguiente="esSiguiente(subtarea) ? 'true' : undefined"
+            :data-subtarea-destacada="
+              subtarea.id === props.subtareaDestacadaId ? subtarea.id : undefined
+            "
             :class="claseFoco(subtarea)"
           >
             <TableCell v-if="idEditando === subtarea.id" colspan="4" class="whitespace-normal">
@@ -653,6 +693,12 @@ registrarBorrador(() => {
                     subtarea.nombre
                   }}</span>
                   <InsigniaFoco v-if="tiendaFoco.esSubtareaEnFoco(subtarea.id)" />
+                  <span
+                    v-if="esSiguiente(subtarea)"
+                    data-insignia-siguiente
+                    class="inline-flex shrink-0 items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-200"
+                    >Siguiente</span
+                  >
                 </div>
               </TableCell>
               <TableCell class="whitespace-normal">

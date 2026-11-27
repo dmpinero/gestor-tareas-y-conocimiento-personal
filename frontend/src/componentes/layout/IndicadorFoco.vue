@@ -133,7 +133,13 @@ onUnmounted(() => {
           >
             <RouterLink
               draggable="false"
-              :to="{ path: '/tareas', query: { tarea: String(entrada.tarea_id) } }"
+              :to="{
+                path: '/tareas',
+                query:
+                  entrada.subtarea_id === null
+                    ? { tarea: String(entrada.tarea_id) }
+                    : { tarea: String(entrada.tarea_id), subtarea: String(entrada.subtarea_id) },
+              }"
               class="hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring/50 flex gap-2 rounded-sm px-2 py-1.5 outline-none focus-visible:ring-[3px]"
               @click="desplegableAbierto = false"
             >
@@ -143,9 +149,12 @@ onUnmounted(() => {
                 title="Arrastra para reordenar"
                 ><GripVertical class="size-3.5 shrink-0" />{{ indice + 1 }}.</span
               >
-              <span data-nombre-siguiente class="truncate">{{
-                textoEntradaSiguiente(entrada)
-              }}</span>
+              <span data-nombre-siguiente class="min-w-0 truncate"
+                >{{ entrada.subtarea_nombre ?? entrada.tarea_nombre
+                }}<span v-if="entrada.subtarea_id !== null" class="text-muted-foreground">
+                  · {{ entrada.tarea_nombre }}</span
+                ></span
+              >
             </RouterLink>
           </li>
         </ol>
