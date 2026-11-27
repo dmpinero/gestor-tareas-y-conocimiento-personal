@@ -14,7 +14,8 @@ from gestor_tareas.dominio.conocimiento.errores import NotionNoDisponibleError
 from gestor_tareas.infraestructura.notion.cliente_notion import ClienteNotion
 
 _RESPUESTAS = Path(__file__).parent / "respuestas_notion"
-_TOKEN = "ntn_secreto_de_prueba_123"
+# Token de mentira: no se parece a uno real para que el detector de secretos no lo marque.
+_TOKEN = "token-falso-de-prueba"
 
 
 def _json(nombre: str) -> dict:
