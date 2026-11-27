@@ -128,7 +128,10 @@ async function montar(
   const tienda = useTiendaTareas()
   await tienda.cargar()
   await tienda.cargarCatalogos()
-  contenedor = mount(ANFITRION, { attachTo: document.body, props: { subtareaDestacadaId } })
+  contenedor = mount(ANFITRION, {
+    attachTo: document.body,
+    props: { subtareaDestacadaId: subtareaDestacadaId ?? undefined },
+  })
   await flushPromises()
   return contenedor
 }
