@@ -510,25 +510,40 @@ _LISTAS_SIGUIENTES = ", ".join(f"'{lista.value}'" for lista in Lista)
 
 
 class ColaSiguientesModelo(Base):
-    """Las dos listas de tareas para después del foco: la cola de siguientes y las
-    sugerencias elegidas (``lista``, un valor de ``Lista``). Cada tarea está como
-    mucho una vez y en una sola lista (la clave es ``tarea_id``); cada lista se
-    ordena por ``posicion`` (y ``tarea_id`` a igual posición).
+    """Las dos listas de entradas para después del foco: la cola de siguientes y las
+    sugerencias elegidas (``lista``, un valor de ``Lista``). Cada entrada es una tarea
+    entera (``subtarea_id`` NULL) o una subtarea suya; cada una está como mucho una
+    vez y en una sola lista: la columna generada ``subtarea_clave``
+    (``COALESCE(subtarea_id, 0)``) hace que el índice único sobre ``(tarea_id,
+    subtarea_clave)`` también valga para las tareas enteras. Cada lista se ordena por
+    ``posicion`` (e ``id`` a igual posición). La aplicación comprueba que la subtarea
+    es de la tarea. ``subtarea_clave`` es virtual (no guardada): MySQL no admite el
+    borrado en cascada de ``subtarea_id`` si una columna generada guardada depende de
+    ella.
 
-    Las completadas se conservan en su sitio (la aplicación no las muestra), para
-    que al reabrirlas vuelvan a él. Borrar la tarea borra su fila (ON DELETE
-    CASCADE); fijar el foco en ella también la borra.
+    Las de tareas completadas o subtareas resueltas se conservan en su sitio (la
+    aplicación no las muestra), para que al reabrirlas vuelvan a él. Borrar la tarea
+    o la subtarea borra sus filas (ON DELETE CASCADE); fijar el foco también las
+    borra.
     """
 
     __tablename__ = "cola_siguientes"
     __table_args__ = (
         CheckConstraint(f"lista IN ({_LISTAS_SIGUIENTES})", name="ck_cola_siguientes_lista_valida"),
+        UniqueConstraint("tarea_id", "subtarea_clave", name="uq_cola_siguientes_entrada"),
     )
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tarea_id: Mapped[int] = mapped_column(
         ForeignKey("tareas.id", name="fk_cola_siguientes_tarea", ondelete="CASCADE"),
-        primary_key=True,
-        autoincrement=False,
+        nullable=False,
+    )
+    subtarea_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subtareas.id", name="fk_cola_siguientes_subtarea", ondelete="CASCADE"),
+        nullable=True,
+    )
+    subtarea_clave: Mapped[int] = mapped_column(
+        Integer, Computed("COALESCE(subtarea_id, 0)", persisted=False), nullable=False
     )
     lista: Mapped[str] = mapped_column(String(20), nullable=False)
     posicion: Mapped[int] = mapped_column(Integer, nullable=False)

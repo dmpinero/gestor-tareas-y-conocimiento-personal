@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, literal, select, update
+from sqlalchemy import delete, func, literal, or_, select, update
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -92,10 +92,17 @@ class RepositorioFocoSqlAlchemy:
             # el periodo en curso que cierra es siempre el último.
             self._cerrar_en_curso(desde)
             self._abrir_periodo(id_tarea, id_subtarea, desde)
-            # La tarea en foco (o la de la subtarea) sale de su lista (la cola de
-            # siguientes o las sugerencias elegidas).
+            # La entrada de la tarea entera sale de su lista (la cola de siguientes o
+            # las sugerencias elegidas) y, si el foco es una subtarea, también la de
+            # la subtarea; las de otras subtareas de la tarea se quedan.
             self._sesion.execute(
-                delete(ColaSiguientesModelo).where(ColaSiguientesModelo.tarea_id == id_tarea)
+                delete(ColaSiguientesModelo).where(
+                    ColaSiguientesModelo.tarea_id == id_tarea,
+                    or_(
+                        ColaSiguientesModelo.subtarea_id.is_(None),
+                        ColaSiguientesModelo.subtarea_id == id_subtarea,
+                    ),
+                )
             )
             foco = self.obtener()
             self._sesion.commit()

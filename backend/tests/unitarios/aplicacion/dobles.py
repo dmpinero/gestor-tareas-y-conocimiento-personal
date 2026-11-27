@@ -13,7 +13,7 @@ from gestor_tareas.dominio.excepciones import EntidadNoEncontradaError
 from gestor_tareas.dominio.foco.entidades import Foco, PeriodoDeFoco
 from gestor_tareas.dominio.grupo_estados.entidades import EstadoGrupo, GrupoEstados
 from gestor_tareas.dominio.persona.entidades import Persona
-from gestor_tareas.dominio.siguientes.entidades import Lista, TareaSiguiente
+from gestor_tareas.dominio.siguientes.entidades import ClaveDeEntrada, Lista, TareaSiguiente
 from gestor_tareas.dominio.siguientes.reglas import (
     EntradaDeLaCola,
     comprobar_que_se_puede_anadir,
@@ -462,71 +462,111 @@ class RepositorioPersonasFalso(_RepositorioCatalogoFalso[Persona]):
 
 
 class RepositorioSiguientesFalso:
-    """Doble de RepositorioSiguientes en memoria: cada lista son ids de tareas del
-    repositorio de tareas, con las mismas reglas que el real (una tarea en una sola
-    lista, las completadas no se ven y las borradas desaparecen)."""
+    """Doble de RepositorioSiguientes en memoria: cada lista son claves de entradas
+    (tareas enteras o subtareas) del repositorio de tareas, con las mismas reglas que
+    el real (una entrada en una sola lista, las de tareas completadas o subtareas
+    resueltas no se ven y las de tareas o subtareas borradas desaparecen)."""
 
     def __init__(self, tareas: RepositorioTareasFalso) -> None:
         self._tareas = tareas
-        self.listas: dict[Lista, list[int]] = {lista: [] for lista in Lista}
+        self.listas: dict[Lista, list[ClaveDeEntrada]] = {lista: [] for lista in Lista}
 
     @property
     def ids(self) -> list[int]:
-        """Los ids guardados en la cola de siguientes, en su orden."""
-        return self.listas[Lista.SIGUIENTES]
+        """Los ids de las tareas de las entradas de la cola de siguientes, en su
+        orden."""
+        return [c.tarea_id for c in self.listas[Lista.SIGUIENTES]]
 
-    def _existentes(self, lista: Lista) -> list[Tarea]:
-        """Las tareas de la lista en su orden; las borradas salen de ella."""
-        tareas = [self._tareas.obtener_por_id(i) for i in self.listas[lista]]
-        existentes = [t for t in tareas if t is not None and t.id is not None]
-        self.listas[lista] = [t.id for t in existentes if t.id is not None]
-        return existentes
+    def _existentes(self, lista: Lista) -> list[tuple[Tarea, Subtarea | None]]:
+        """Las entradas de la lista en su orden, con su tarea y su subtarea; las de
+        tareas o subtareas borradas salen de ella."""
+        existentes = []
+        for clave in self.listas[lista]:
+            tarea = self._tareas.obtener_por_id(clave.tarea_id)
+            if tarea is None:
+                continue
+            subtarea = next((s for s in tarea.subtareas if s.id == clave.subtarea_id), None)
+            if clave.subtarea_id is not None and subtarea is None:
+                continue
+            existentes.append((clave, tarea, subtarea))
+        self.listas[lista] = [c for c, _, _ in existentes]
+        return [(t, s) for _, t, s in existentes]
+
+    @staticmethod
+    def _oculta(tarea: Tarea, subtarea: Subtarea | None) -> bool:
+        return tarea.completada or (subtarea is not None and subtarea.resuelta)
 
     def _entradas(self, lista: Lista) -> list[EntradaDeLaCola]:
         return [
-            EntradaDeLaCola(tarea_id=t.id, completada=t.completada)
-            for t in self._existentes(lista)
+            EntradaDeLaCola(
+                tarea_id=t.id,
+                completada=self._oculta(t, s),
+                subtarea_id=s.id if s is not None else None,
+            )
+            for t, s in self._existentes(lista)
             if t.id is not None
         ]
 
     def listar(self, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
         return [
-            TareaSiguiente(tarea_id=t.id, tarea_nombre=t.nombre)
-            for t in self._existentes(lista)
-            if t.id is not None and not t.completada
+            TareaSiguiente(
+                tarea_id=t.id,
+                tarea_nombre=t.nombre,
+                subtarea_id=s.id if s is not None else None,
+                subtarea_nombre=s.nombre if s is not None else None,
+            )
+            for t, s in self._existentes(lista)
+            if t.id is not None and not self._oculta(t, s)
         ]
 
-    def anadir(self, id_tarea: int, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
+    def anadir(
+        self, id_tarea: int, lista: Lista = Lista.SIGUIENTES, id_subtarea: int | None = None
+    ) -> list[TareaSiguiente]:
         tarea = self._tareas.obtener_por_id(id_tarea)
         if tarea is None:
             raise EntidadNoEncontradaError(f"No existe la tarea con id {id_tarea}")
-        comprobar_que_se_puede_anadir(tarea.completada)
-        if id_tarea not in self.listas[lista]:
-            self.sacar_de_todas(id_tarea)
-            self.listas[lista].append(id_tarea)
+        subtarea = next((s for s in tarea.subtareas if s.id == id_subtarea), None)
+        if id_subtarea is not None and subtarea is None:
+            raise EntidadNoEncontradaError(
+                f"No existe la subtarea con id {id_subtarea} en la tarea con id {id_tarea}"
+            )
+        comprobar_que_se_puede_anadir(
+            tarea.completada, subtarea.resuelta if subtarea is not None else False
+        )
+        clave = ClaveDeEntrada(id_tarea, id_subtarea)
+        if clave not in self.listas[lista]:
+            for otra in Lista:
+                self.listas[otra] = [c for c in self.listas[otra] if c != clave]
+            self.listas[lista].append(clave)
         return self.listar(lista)
 
     def reordenar(
-        self, ids: Sequence[int], lista: Lista = Lista.SIGUIENTES
+        self, claves: Sequence[ClaveDeEntrada], lista: Lista = Lista.SIGUIENTES
     ) -> list[TareaSiguiente]:
-        self.listas[lista] = nuevo_orden_de_la_cola(self._entradas(lista), ids)
+        self.listas[lista] = nuevo_orden_de_la_cola(self._entradas(lista), claves)
         return self.listar(lista)
 
-    def quitar(self, id_tarea: int, lista: Lista = Lista.SIGUIENTES) -> list[TareaSiguiente]:
-        self.listas[lista] = [i for i in self.listas[lista] if i != id_tarea]
+    def quitar(
+        self, id_tarea: int, lista: Lista = Lista.SIGUIENTES, id_subtarea: int | None = None
+    ) -> list[TareaSiguiente]:
+        clave = ClaveDeEntrada(id_tarea, id_subtarea)
+        self.listas[lista] = [c for c in self.listas[lista] if c != clave]
         return self.listar(lista)
 
-    def sacar_de_todas(self, id_tarea: int) -> None:
-        """Saca la tarea de la lista en la que esté, como al fijar el foco."""
+    def sacar_de_todas(self, id_tarea: int, id_subtarea: int | None = None) -> None:
+        """Como al fijar el foco: saca la entrada de la tarea entera de la lista en la
+        que esté y, si se da ``id_subtarea``, también la de esa subtarea."""
+        quitar = {ClaveDeEntrada(id_tarea), ClaveDeEntrada(id_tarea, id_subtarea)}
         for lista in Lista:
-            self.listas[lista] = [i for i in self.listas[lista] if i != id_tarea]
+            self.listas[lista] = [c for c in self.listas[lista] if c not in quitar]
 
 
 class RepositorioFocoFalso:
     """Doble de RepositorioFoco en memoria: guarda como mucho un foco y lee los
     nombres de la tarea y la subtarea del repositorio de tareas, como el real. Si se
-    le dan las listas de siguientes, al fijar el foco saca la tarea de la suya, como
-    el real."""
+    le dan las listas de siguientes, al fijar el foco saca de ellas la entrada de la
+    tarea entera y, si el foco es una subtarea, también la de esa subtarea, como el
+    real."""
 
     def __init__(
         self,
@@ -562,7 +602,7 @@ class RepositorioFocoFalso:
         self._fila = (id_tarea, id_subtarea, desde)
         self.veces_fijado += 1
         if self._siguientes is not None:
-            self._siguientes.sacar_de_todas(id_tarea)
+            self._siguientes.sacar_de_todas(id_tarea, id_subtarea)
         foco = self.obtener()
         assert foco is not None
         # Como el real: cierra el periodo en curso y abre otro con los nombres.

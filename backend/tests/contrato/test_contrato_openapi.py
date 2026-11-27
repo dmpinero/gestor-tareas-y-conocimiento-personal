@@ -115,20 +115,22 @@ def _reordenar_los_pasos_que_existen(case: schemathesis.Case) -> None:
 
 
 def _reordenar_la_cola_que_existe(case: schemathesis.Case) -> None:
-    """JSON Schema no puede exigir que `ids` sea justo la cola visible guardada (si
-    no, 422). En los casos que el contrato da por válidos se envía la cola actual en
-    orden inverso, para seguir probando la respuesta 200; los inválidos se envían tal
-    cual."""
+    """JSON Schema no puede exigir que `entradas` sea justo la cola visible guardada
+    (si no, 422). En los casos que el contrato da por válidos se envía la cola actual
+    en orden inverso, para seguir probando la respuesta 200; los inválidos se envían
+    tal cual."""
     if not (
         case.method == "PUT" and case.path == "/api/v1/siguientes" and _es_positivo_con_cuerpo(case)
     ):
         return
     sesion = FabricaSesiones()
     try:
-        ids = [t.tarea_id for t in RepositorioSiguientesSqlAlchemy(sesion).listar()]
+        cola = RepositorioSiguientesSqlAlchemy(sesion).listar()
     finally:
         sesion.close()
-    case.body["ids"] = ids[::-1]
+    case.body["entradas"] = [
+        {"tarea_id": t.tarea_id, "subtarea_id": t.subtarea_id} for t in cola[::-1]
+    ]
 
 
 def _es_positivo_con_cuerpo(case: schemathesis.Case) -> bool:
