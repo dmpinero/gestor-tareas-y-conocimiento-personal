@@ -130,6 +130,23 @@ describe('VistaTareas: el buscador encuentra subtareas', () => {
     ])
   })
 
+  it('cada subtarea que coincide tiene su «Añadir a siguientes», que añade la subtarea y no la tarea', async () => {
+    vi.mocked(clienteApi.crear).mockResolvedValue([])
+    await montar()
+    await buscar('persona fuera de kmm')
+
+    const boton = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="Añadir a siguientes (Buscar persona fuera de KMM)"]',
+    )!
+    boton.click()
+    await flushPromises()
+
+    expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', {
+      tarea_id: expect.any(Number),
+      subtarea_id: expect.any(Number),
+    })
+  })
+
   it('sin búsqueda, o si solo coincide la tarea, no muestra líneas de subtareas', async () => {
     await montar()
     expect(filas().every((fila) => fila.subtareas.length === 0)).toBe(true)

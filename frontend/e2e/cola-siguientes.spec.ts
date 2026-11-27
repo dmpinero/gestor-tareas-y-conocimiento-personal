@@ -255,6 +255,17 @@ test('una subtarea se encuentra en Mi trabajo, se añade a la cola y se pone en 
     const fila = page.locator('tr[data-fila-tarea]', { hasText: tarea })
     await expect(fila).toBeVisible()
     await expect(fila.locator('[data-subtarea-coincidente]')).toContainText(`Subtarea: ${subtarea}`)
+    // Desde la línea de la subtarea se añade la subtarea, no su tarea.
+    await fila.getByRole('button', { name: `Añadir a siguientes (${subtarea})` }).click()
+    await expect(
+      fila.getByRole('button', { name: `Quitar de siguientes (${subtarea})` }),
+    ).toBeVisible()
+    const desdeLista = (await (await request.get('/api/v1/siguientes')).json()) as {
+      tarea_id: number
+      subtarea_id: number | null
+    }[]
+    expect(desdeLista).toEqual([expect.objectContaining({ tarea_id: id, subtarea_id: idSubtarea })])
+    await request.delete(`/api/v1/siguientes/${id}?subtarea_id=${idSubtarea}`)
 
     // Siguientes: el buscador ofrece la subtarea como «Tarea › Subtarea».
     await page.goto('/')

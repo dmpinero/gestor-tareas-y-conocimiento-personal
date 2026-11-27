@@ -421,7 +421,8 @@ y [docs/CicloDesarrollo.md](docs/CicloDesarrollo.md).
     «Siguientes» de la barra superior) abren un buscador para añadir varias a
     **A continuación** o a **Sugerencias**, en el orden en que se marcan; ofrece
     también las subtareas pendientes («Tarea › Subtarea»), que se ponen en foco
-    como subtarea. Cada tarea o subtarea está como mucho en una de las dos
+    como subtarea. Cada subtarea (en la búsqueda de Mi trabajo, en el tablero y
+    en el detalle) tiene también su propio «Añadir a siguientes». Cada tarea o subtarea está como mucho en una de las dos
     listas: añadirla a una la mueve. Poner en foco una subtarea la saca de las
     listas junto con su tarea.
   - El desplegable «Siguientes» enseña las 3 primeras de la cola (también se

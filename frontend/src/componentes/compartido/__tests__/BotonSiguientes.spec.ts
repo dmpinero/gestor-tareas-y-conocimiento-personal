@@ -26,6 +26,7 @@ const INFORME: TareaSiguiente = {
 
 function montar(props: {
   tareaId: number
+  subtareaId?: number | null
   nombre?: string
   compacto?: boolean
   completada?: boolean
@@ -63,6 +64,31 @@ describe('BotonSiguientes', () => {
 
     expect(clienteApi.eliminar).toHaveBeenCalledWith('/siguientes/1')
     expect(wrapper.text()).toBe('Añadir a siguientes')
+  })
+
+  it('con subtareaId añade y quita esa subtarea, no la tarea entera', async () => {
+    const subtarea: TareaSiguiente = {
+      tarea_id: 1,
+      tarea_nombre: 'Informe',
+      subtarea_id: 10,
+      subtarea_nombre: 'Buscar persona',
+    }
+    vi.mocked(clienteApi.crear).mockResolvedValue([subtarea])
+    vi.mocked(clienteApi.eliminar).mockResolvedValue([])
+    const wrapper = montar({ tareaId: 1, subtareaId: 10, nombre: 'Buscar persona', compacto: true })
+    // La tarea entera en la cola no cuenta como la subtarea.
+    useTiendaSiguientes().cola = [INFORME]
+    await flushPromises()
+    expect(wrapper.attributes('aria-label')).toBe('Añadir a siguientes (Buscar persona)')
+
+    await wrapper.trigger('click')
+    await flushPromises()
+    expect(clienteApi.crear).toHaveBeenCalledWith('/siguientes', { tarea_id: 1, subtarea_id: 10 })
+    expect(wrapper.attributes('aria-label')).toBe('Quitar de siguientes (Buscar persona)')
+
+    await wrapper.trigger('click')
+    await flushPromises()
+    expect(clienteApi.eliminar).toHaveBeenCalledWith('/siguientes/1?subtarea_id=10')
   })
 
   it('con nombre lo añade al nombre accesible; compacto queda en solo icono', () => {

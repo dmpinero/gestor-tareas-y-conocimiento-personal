@@ -71,6 +71,7 @@ import FiltroMultiple from '@/componentes/compartido/FiltroMultiple.vue'
 import FormularioTarea from '@/componentes/compartido/FormularioTarea.vue'
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import InsigniaHibernada from '@/componentes/compartido/InsigniaHibernada.vue'
+import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
 import MenuAccionesTarea from '@/componentes/compartido/MenuAccionesTarea.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
 import ModalTareasRelacionadas from '@/componentes/compartido/ModalTareasRelacionadas.vue'
@@ -1432,10 +1433,23 @@ async function guardar(): Promise<void> {
           <span
             v-for="subtarea in subtareasCoincidentes(tarea)"
             :key="subtarea.id"
-            data-subtarea-coincidente
-            class="text-muted-foreground block text-xs break-words"
-            >Subtarea: {{ subtarea.nombre }}</span
+            class="flex items-center gap-1"
           >
+            <span
+              data-subtarea-coincidente
+              class="text-muted-foreground min-w-0 text-xs break-words"
+              >Subtarea: {{ subtarea.nombre }}</span
+            >
+            <!-- La subtarea, no la tarea: «Añadir a siguientes» de esta línea. -->
+            <BotonSiguientes
+              :tarea-id="tarea.id"
+              :subtarea-id="subtarea.id"
+              :nombre="subtarea.nombre"
+              :completada="tarea.completada || subtarea.resuelta"
+              compacto
+              class="size-6 shrink-0"
+            />
+          </span>
           <span
             v-if="tiendaFoco.esTareaEnFoco(tarea.id) || estaHibernada(tarea)"
             data-insignias-tarea

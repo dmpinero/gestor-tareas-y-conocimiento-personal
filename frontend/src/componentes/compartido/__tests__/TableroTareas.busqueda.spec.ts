@@ -136,6 +136,16 @@ describe('TableroTareas: subtareas que coinciden con la búsqueda', () => {
     ).toBe('true')
   })
 
+  it('cada subtarea del tablero tiene su «Añadir a siguientes»', async () => {
+    await montar('persona fuera de kmm')
+    const subtarea = document.body.querySelector('[data-subtarea][data-coincide-busqueda]')!
+    expect(
+      subtarea.querySelector(
+        'button[aria-label="Añadir a siguientes (Buscar persona fuera de KMM)"]',
+      ),
+    ).not.toBeNull()
+  })
+
   it('marca solo las subtareas que coinciden dentro de una tarjeta desplegada', async () => {
     await montar('llamar')
 

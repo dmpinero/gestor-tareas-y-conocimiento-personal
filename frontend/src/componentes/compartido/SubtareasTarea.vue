@@ -5,6 +5,7 @@ import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
 
 import type { DatosEdicionSubtarea, DatosSubtarea, Subtarea, Tarea } from '@/api/tipos'
 import BotonFoco from '@/componentes/compartido/BotonFoco.vue'
+import BotonSiguientes from '@/componentes/compartido/BotonSiguientes.vue'
 import ComentariosTarea from '@/componentes/compartido/ComentariosTarea.vue'
 import InsigniaFoco from '@/componentes/compartido/InsigniaFoco.vue'
 import NombreRelacionado from '@/componentes/compartido/NombreRelacionado.vue'
@@ -385,6 +386,13 @@ registrarBorrador(() => {
           :tarea-id="props.tarea.id"
           :subtarea-id="subtarea.id"
           :nombre="subtarea.nombre"
+          compacto
+        />
+        <BotonSiguientes
+          :tarea-id="props.tarea.id"
+          :subtarea-id="subtarea.id"
+          :nombre="subtarea.nombre"
+          :completada="props.tarea.completada || subtarea.resuelta"
           compacto
         />
         <Button

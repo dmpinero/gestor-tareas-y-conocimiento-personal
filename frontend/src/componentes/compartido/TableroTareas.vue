@@ -1377,6 +1377,14 @@ function terminarArrastre(): void {
                               <AvatarPersona :nombre="subtarea.asignado" />
                             </NombreRelacionado>
                             <InsigniaFoco v-if="tiendaFoco.esSubtareaEnFoco(subtarea.id)" />
+                            <BotonSiguientes
+                              :tarea-id="tarea.id"
+                              :subtarea-id="subtarea.id"
+                              :nombre="subtarea.nombre"
+                              :completada="tarea.completada || subtarea.resuelta"
+                              compacto
+                              class="-my-1"
+                            />
                             <BotonFoco
                               :tarea-id="tarea.id"
                               :subtarea-id="subtarea.id"
